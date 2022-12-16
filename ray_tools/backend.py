@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import docker
 import docker.errors
+import docker.types
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
@@ -61,6 +61,7 @@ class RayBackendDockerRAYX(RayBackend):
             volumes={self.ray_workdir: {'bind': self._rayx_workdir, 'mode': 'rw'}},
             detach=True,
             auto_remove=True,
+            # device_requests=[docker.types.DeviceRequest(device_ids=["0", "1"], capabilities=[['gpu']])]
         )
 
     def kill(self):
