@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
+from collections import OrderedDict
 from typing import Tuple, Union, List, Any
 
 import numpy as np
+from raypyng.xmltools import XmlElement
 
 from .utils import RandomGenerator
 
@@ -12,6 +14,10 @@ class RayParameter(metaclass=ABCMeta):
 
     @abstractmethod
     def get_value(self) -> Any:
+        """
+        Important: This method should have a deterministic output (calling it twice should return the same value)
+        :return:
+        """
         pass
 
     @abstractmethod
@@ -20,6 +26,30 @@ class RayParameter(metaclass=ABCMeta):
 
     def __repr__(self) -> str:
         return self.__class__.__name__ + ': ' + str(self.get_value())
+
+
+class RayParameterContainer(OrderedDict[str, RayParameter]):
+
+    def __setitem__(self, k: Union[str, XmlElement], v: RayParameter) -> None:
+        # TODO: check if string format is correct
+        if isinstance(k, XmlElement):
+            k = self._element_to_key(k)
+        super().__setitem__(k, v)
+
+    def __getitem__(self, k: Union[str, XmlElement]) -> RayParameter:
+        if isinstance(k, XmlElement):
+            k = self._element_to_key(k)
+        return super().__getitem__(k)
+
+    def clone(self) -> RayParameterContainer:
+        dict_copy = self.copy()
+        for key, param in self.items():
+            dict_copy[key] = param.clone()
+        return dict_copy
+
+    @staticmethod
+    def _element_to_key(element: XmlElement) -> str:
+        return '.'.join(element.get_full_path().split('.')[2:])
 
 
 class ConstantParameter(RayParameter):

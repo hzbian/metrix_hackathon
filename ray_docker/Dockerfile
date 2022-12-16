@@ -1,0 +1,24 @@
+FROM fedora:37
+
+RUN dnf update -y; dnf clean all
+RUN dnf install -y cmake git gcc gdb vulkan vulkan-tools vulkan-validation-layers hdf5-devel ninja-build gcc-c++ vulkan-loader-devel glslc python3-devel; dnf clean all
+
+RUN dnf install -y python3.10-devel python3-numpy
+RUN pip install virtualenv
+RUN virtualenv --python="/usr/bin/python3.10" "/venv/"
+ENV PATH="/venv/bin:$PATH"
+
+RUN git clone --recurse-submodules https://github.com/hz-b/RAY-X.git
+RUN cd RAY-X && git checkout 60007e41405e79fedd2f5249b14dd43bfd9328ad && cd ..
+
+RUN dnf install -y python3-pip
+RUN pip install -U numpy
+
+RUN cd RAY-X && sh compile.sh
+RUN cd RAY-X/build/bin/debug
+
+RUN mkdir -p /RAY-X-workdir
+
+RUN dnf install -y mc
+
+ENTRYPOINT ["tail", "-f", "/dev/null"]

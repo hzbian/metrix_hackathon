@@ -1,11 +1,10 @@
 from itertools import product
 
-from .engine import RayParameterDict
-from .parameter import GridParameter
+from .parameter import GridParameter, RayParameterContainer
 
 
-def build_parameter_grid(param_dict: RayParameterDict):
-    param_list = list(param_dict.items())
+def build_parameter_grid(param_container: RayParameterContainer):
+    param_list = list(param_container.items())
     param_list_expanded = []
     for param in param_list:
         if isinstance(param[1], GridParameter):
@@ -13,4 +12,4 @@ def build_parameter_grid(param_dict: RayParameterDict):
         else:
             param_list_expanded.append([param])
 
-    return [RayParameterDict(list(param_list)) for param_list in product(*param_list_expanded)]
+    return [RayParameterContainer(list(param_list)) for param_list in product(*param_list_expanded)]
