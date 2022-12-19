@@ -20,7 +20,6 @@ class RayEngine:
                  rml_basefile: str,
                  ray_backend: RayBackend,
                  workdir: str = 'ray_workdir',
-                 transform: RayTransform = None,
                  num_workers: int = 1,
                  as_generator: bool = False,
                  ) -> None:
@@ -28,7 +27,6 @@ class RayEngine:
         self.rml_basefile = rml_basefile
         self.ray_backend = ray_backend
         self.workdir = os.path.abspath(workdir)
-        self.transform = transform
         self.num_workers = num_workers
         self.as_generator = as_generator
 
@@ -36,14 +34,15 @@ class RayEngine:
         self.template = self._raypyng_rml.beamline
 
     def run(self,
-            params: Union[RayParameterContainer, Iterable[RayParameterContainer]]
+            params: Union[RayParameterContainer, Iterable[RayParameterContainer]],
+            transform: RayTransform = None,
             ) -> Union[Dict, Iterable[Dict], List[Dict]]:
         os.makedirs(self.workdir, exist_ok=True)
 
         if isinstance(params, RayParameterContainer):
             params = [params]
 
-        _iter = ((str(run_id), run_params) for run_id, run_params in enumerate(params))
+        _iter = ((str(run_id), run_params, transform) for run_id, run_params in enumerate(params))
         if not self.as_generator:
             # TODO: Is use of threading safe?
             worker = Parallel(n_jobs=self.num_workers, verbose=False, backend='threading')
@@ -53,7 +52,11 @@ class RayEngine:
         else:
             return (self._run_func(*item) for item in _iter)
 
-    def _run_func(self, run_id: str, param_container: RayParameterContainer) -> Dict:
+    def _run_func(self,
+                  run_id: str,
+                  param_container: RayParameterContainer,
+                  transform: RayTransform = None,
+                  ) -> Dict:
         # TODO: what other info should be returned?
         result = {'param_container': param_container.clone(), 'ray_output': None}
 
@@ -70,8 +73,8 @@ class RayEngine:
 
         os.remove(rml_workfile)
 
-        if self.transform is not None:
-            result['ray_output'] = list(map(self.transform, result['ray_output']))
+        if transform is not None:
+            result['ray_output'] = list(map(transform, result['ray_output']))
         return result
 
     def _key_to_element(self, key: str, template: XmlElement = None) -> XmlElement:

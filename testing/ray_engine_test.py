@@ -14,11 +14,7 @@ engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml
                                                     ray_workdir='../ray_workdir',
                                                     verbose=True),
                    num_workers=-1,
-                   as_generator=False,
-                   transform=compose(  # Histogram(n_bins=256, lim=1.0),
-                       Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))
-                   )
-                   )
+                   as_generator=False)
 
 param_func = lambda: RayParameterContainer([
     (engine.template.U41_318eV.numberRays, ConstantParameter(value=1e4)),
@@ -59,7 +55,9 @@ param_func = lambda: RayParameterContainer([
 ])
 
 params = [param_func() for _ in range(10)]
-result = engine.run(params)
+result = engine.run(params, transform=compose(  # Histogram(n_bins=256, lim=1.0),
+                       Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))
+                   ))
 
 import matplotlib.pyplot as plt
 
