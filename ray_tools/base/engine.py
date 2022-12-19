@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, Union, Dict
+from typing import Iterable, Union, Dict, List
 
 from joblib import Parallel, delayed
 
@@ -14,6 +14,7 @@ from .transform import RayTransform
 
 
 class RayEngine:
+    # TODO: introduce id field?
 
     def __init__(self,
                  rml_basefile: str,
@@ -34,7 +35,9 @@ class RayEngine:
         self._raypyng_rml = RMLFile(self.rml_basefile)
         self.template = self._raypyng_rml.beamline
 
-    def run(self, params: Union[RayParameterContainer, Iterable[RayParameterContainer]]) -> Union[Dict, Iterable[Dict]]:
+    def run(self,
+            params: Union[RayParameterContainer, Iterable[RayParameterContainer]]
+            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
         os.makedirs(self.workdir, exist_ok=True)
 
         if isinstance(params, RayParameterContainer):
@@ -68,7 +71,7 @@ class RayEngine:
         os.remove(rml_workfile)
 
         if self.transform is not None:
-            result['ray_output'] = self.transform(result['ray_output'])
+            result['ray_output'] = list(map(self.transform, result['ray_output']))
         return result
 
     def _key_to_element(self, key: str, template: XmlElement = None) -> XmlElement:

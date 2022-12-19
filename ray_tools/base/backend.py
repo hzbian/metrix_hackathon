@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from typing import List
+
 import docker
 import docker.errors
 import docker.types
@@ -15,6 +17,8 @@ import pandas as pd
 
 @dataclass
 class RayOutput:
+    name: str
+
     x_loc: np.ndarray
     y_loc: np.ndarray
     z_loc: np.ndarray
@@ -26,7 +30,7 @@ class RayOutput:
 class RayBackend(metaclass=ABCMeta):
 
     @abstractmethod
-    def run(self, rml_filename: str) -> RayOutput:
+    def run(self, rml_filename: str) -> List[RayOutput]:
         pass
 
 
@@ -36,11 +40,13 @@ class RayBackendDockerRAYX(RayBackend):
                  docker_image: str,
                  ray_workdir: str,
                  docker_container_name: str = None,
+                 gpu_ids: List[str] = None,
                  verbose=True) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
         self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + '_backend'
+        self.gpu_ids = gpu_ids
         self.verbose = verbose
 
         self._rayx_workdir = '/RAY-X-workdir'
@@ -55,13 +61,18 @@ class RayBackendDockerRAYX(RayBackend):
         except docker.errors.NotFound:
             pass
 
+        if self.gpu_ids:
+            _devices = [docker.types.DeviceRequest(device_ids=self.gpu_ids, capabilities=[['gpu']])]
+        else:
+            _devices = []
+
         self.docker_container = self.client.containers.run(
             self.docker_image,
             name=self.docker_container_name,
             volumes={self.ray_workdir: {'bind': self._rayx_workdir, 'mode': 'rw'}},
             detach=True,
             auto_remove=True,
-            # device_requests=[docker.types.DeviceRequest(device_ids=["0", "1"], capabilities=[['gpu']])]
+            device_requests=_devices,
         )
 
     def kill(self):
@@ -74,7 +85,7 @@ class RayBackendDockerRAYX(RayBackend):
     def __del__(self):
         self.kill()
 
-    def run(self, rml_workfile: str) -> RayOutput:
+    def run(self, rml_workfile: str) -> List[RayOutput]:
         docker_rml_workfile = os.path.join(self._rayx_workdir, os.path.basename(rml_workfile))
         self.docker_container.exec_run(
             cmd=f"{self._rayx_path} -x -i {docker_rml_workfile}",
@@ -99,11 +110,8 @@ class RayBackendDockerRAYX(RayBackend):
 
         os.remove(ray_output_file)
 
-        # TODO: replace by transform
-        raw_output_abs = raw_output.abs()
-        raw_output = raw_output[(raw_output_abs['Xloc']) < 1 & (raw_output_abs['Yloc'] < 1)]
-
-        ray_output = RayOutput(x_loc=raw_output['Xloc'].to_numpy(),
+        ray_output = RayOutput(name='ImagePlane',
+                               x_loc=raw_output['Xloc'].to_numpy(),
                                y_loc=raw_output['Yloc'].to_numpy(),
                                z_loc=raw_output['Zloc'].to_numpy(),
                                x_dir=raw_output['Xdir'].to_numpy(),
@@ -113,4 +121,4 @@ class RayBackendDockerRAYX(RayBackend):
         if self.verbose:
             print(f'Ray output from {os.path.basename(rml_workfile)} successfully generated')
 
-        return ray_output
+        return [ray_output]
