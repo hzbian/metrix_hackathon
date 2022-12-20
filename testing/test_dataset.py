@@ -2,7 +2,7 @@ import sys
 
 sys.path.insert(0, '../')
 
-from ray_tools.simulation.torch_data_tools import RandomDatasetGenerator, build_random_param_container
+from ray_tools.simulation.torch_data_tools import RandomDatasetGenerator, build_param_container_sampler
 from ray_tools.base.parameter_builder import build_parameter_grid
 from ray_tools.base.backend import RayBackendDockerRAYX
 from ray_tools.base.parameter import RandomParameter, GridParameter, RayParameterContainer
@@ -46,12 +46,12 @@ param_container_func = lambda: RayParameterContainer([
     ('E2.translationZerror', RandomParameter(value_lims=(-1, 1))),
 ])
 
-random_param_container = build_random_param_container(
+param_container_sampler = build_param_container_sampler(
     param_container_func=lambda: build_parameter_grid(param_container_func()),
-    ids=['1e2', '1e3', '1e4'],
-    transforms=3 * [RayTransformCompose(Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)),
-                                        # ToDict(),
-                                        Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)))]
+    idx_sub=['1e2', '1e3', '1e4'],
+    transform=3 * [RayTransformCompose(Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)),
+                                       # ToDict(),
+                                       Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)))]
 )
 
 generator = RandomDatasetGenerator(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
@@ -60,9 +60,9 @@ generator = RandomDatasetGenerator(rml_basefile='../rml_src/METRIX_U41_G1_H1_318
                                                                     ray_workdir='../ray_workdir',
                                                                     verbose=True),
                                    num_workers=50,
-                                   random_param_container=random_param_container,  # TODO: Call it sampler
+                                   param_container_sampler=param_container_sampler,
                                    h5_datadir='../datasets/metrix_simulation',
                                    h5_basename='data_raw',
                                    h5_max_size=1000)
 
-p = generator.generate(h5_idx=0)
+generator.generate(h5_idx=0)

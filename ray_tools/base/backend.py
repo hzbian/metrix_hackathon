@@ -25,7 +25,7 @@ class RayOutput:
     y_dir: np.ndarray
     z_dir: np.ndarray
 
-    # TODO: save energy
+    energy: np.ndarray
 
 
 class RayBackend(metaclass=ABCMeta):
@@ -118,7 +118,8 @@ class RayBackendDockerRAYX(RayBackend):
                                z_loc=raw_output['Zloc'].to_numpy(),
                                x_dir=raw_output['Xdir'].to_numpy(),
                                y_dir=raw_output['Ydir'].to_numpy(),
-                               z_dir=raw_output['Zdir'].to_numpy())
+                               z_dir=raw_output['Zdir'].to_numpy(),
+                               energy=raw_output['Energy'].to_numpy())
 
         if self.verbose:
             print(f'Ray output from {os.path.basename(rml_workfile)} successfully generated')

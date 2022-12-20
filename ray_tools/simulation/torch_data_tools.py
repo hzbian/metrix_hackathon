@@ -1,5 +1,4 @@
 import os
-from itertools import compress
 from typing import Callable, List, Dict
 
 import h5py
@@ -17,7 +16,7 @@ class RandomDatasetGenerator:
                  rml_basefile: str,
                  ray_workdir: str,
                  ray_backend: RayBackend,
-                 random_param_container: Callable[..., Dict],
+                 param_container_sampler: Callable[..., Dict],
                  h5_datadir: str,
                  h5_basename: str = 'raw',
                  h5_max_size: int = 1000,
@@ -26,7 +25,7 @@ class RandomDatasetGenerator:
         self.rml_basefile = rml_basefile
         self.ray_workdir = ray_workdir
         self.ray_backend = ray_backend
-        self.random_param_container = random_param_container
+        self.param_container_sampler = param_container_sampler
         self.h5_basename = h5_basename
         self.h5_max_size = h5_max_size
         self.h5_datadir = h5_datadir
@@ -47,49 +46,47 @@ class RandomDatasetGenerator:
 
         idx_abs = 0
         while idx_abs < self.h5_max_size:
-            params = dict(ids_sample=[], param_containers=[], ids=[], transforms=[])
+            params = dict(idx_sample=[], param_container=[], idx_sub=[], transform=[])
             for idx_sample in range(idx_abs, min(idx_abs + batch_size, self.h5_max_size)):
-                params_cur = self.random_param_container()
-                params['ids_sample'] += len(params_cur['ids']) * [idx_sample]
-                params['param_containers'] += params_cur['param_containers']
-                params['ids'] += params_cur['ids']
-                params['transforms'] += params_cur['transforms']
+                params_cur = self.param_container_sampler()
+                params['idx_sample'] += len(params_cur['idx_sub']) * [idx_sample]
+                params['param_container'] += params_cur['param_container']
+                params['idx_sub'] += params_cur['idx_sub']
+                params['transform'] += params_cur['transform']
 
-            ray_results = list(self._ray_engine.run(param_containers=params['param_containers'],
-                                                    transforms=params['transforms']))
+            ray_results = list(self._ray_engine.run(param_containers=params['param_container'],
+                                                    transforms=params['transform']))
             idx_abs += batch_size
 
             params_len = len(ray_results)
             for idx in range(params_len):
-                id_sample = params['ids_sample'][idx]
-                id_ = params['ids'][idx]
-                param_container: RayParameterContainer = params['param_containers'][idx]
-                ray_outputs = ray_results[idx]['ray_output']
+                idx_sample = params['idx_sample'][idx]
+                idx_sub = params['idx_sub'][idx]
+                sample_grp = h5_file.create_group(f'/{idx_sample}/{idx_sub}')
 
-                sample_grp = h5_file.create_group(f'/{id_sample}/{id_}')
                 param_container_grp = sample_grp.create_group('params')
-                dict_to_h5(param_container_grp, param_container.to_value_dict())
+                dict_to_h5(param_container_grp, ray_results[idx]['param_container_dict'])
 
+                ray_outputs = ray_results[idx]['ray_output']
                 for ray_output in ray_outputs:
                     ray_output_name = ray_output['name']
                     ray_output_grp = sample_grp.create_group(f'ray_output/{ray_output_name}')
-                    dict_to_h5(ray_output_grp, ray_output)
+                    dict_to_h5(ray_output_grp, ray_output, compress_numpy=True)
 
-                print(f'Sample {id_sample} / {id_} written')
+                print(f'Sample {idx_sample} / {idx_sub} written to {h5_file.filename}')
 
         h5_file.close()
 
 
-def dict_to_h5(h5_grp: h5py.Group, d: Dict):
+def dict_to_h5(h5_grp: h5py.Group, d: Dict, compress_numpy=False):
     for k, v in d.items():
         if isinstance(v, np.ndarray):
-            h5_grp.create_dataset(name=str(k), data=v, compression='gzip')
+            h5_grp.create_dataset(name=str(k), data=v, compression='gzip' if compress_numpy else None)
         else:
             h5_grp.create_dataset(name=str(k), data=v)
 
 
-
-def build_random_param_container(param_container_func: Callable[..., List[RayParameterContainer]],
-                                 ids: List[str],
-                                 transforms: List[RayTransform]) -> Callable[..., Dict]:
-    return lambda: dict(ids=ids, transforms=transforms, param_containers=param_container_func())
+def build_param_container_sampler(param_container_func: Callable[..., List[RayParameterContainer]],
+                                  idx_sub: List[str],
+                                  transform: List[RayTransform]) -> Callable[..., Dict]:
+    return lambda: dict(idx_sub=idx_sub, transform=transform, param_container=param_container_func())

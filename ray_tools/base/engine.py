@@ -60,8 +60,7 @@ class RayEngine:
                   param_container: RayParameterContainer,
                   transform: RayTransform = None,
                   ) -> Dict:
-        # TODO: Good idea to return param_container?
-        result = {'param_container': param_container.clone(), 'ray_output': None}
+        result = {'param_container_dict': dict(), 'ray_output': None}
 
         raypyng_rml_work = RMLFile(self.rml_basefile)
         template_work = raypyng_rml_work.beamline
@@ -69,6 +68,7 @@ class RayEngine:
             value = param.get_value()
             element = self._key_to_element(key, template=template_work)
             element.cdata = str(value)
+            result['param_container_dict'][key] = value
 
         rml_workfile = os.path.join(self.workdir, run_id + '.rml')
         raypyng_rml_work.write(rml_workfile)

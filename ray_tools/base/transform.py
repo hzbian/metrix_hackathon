@@ -40,7 +40,8 @@ class ToDict(RayTransform):
                    z_loc=ray_output.z_loc,
                    x_dir=ray_output.x_dir,
                    y_dir=ray_output.y_dir,
-                   z_dir=ray_output.z_dir)
+                   z_dir=ray_output.z_dir,
+                   energy=ray_output.energy)
 
         for key in self.ignore:
             del out[key]
@@ -73,6 +74,7 @@ class Crop(RayTransform):
         ray_output.x_dir = ray_output.x_dir[idx]
         ray_output.y_dir = ray_output.y_dir[idx]
         ray_output.z_dir = ray_output.z_dir[idx]
+        ray_output.energy = ray_output.energy[idx]
 
         return ray_output
 
