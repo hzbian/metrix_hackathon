@@ -6,7 +6,7 @@ from ray_tools.base.parameter_builder import build_parameter_grid
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYX
 from ray_tools.base.parameter import ConstantParameter, RandomParameter, GridParameter, RayParameterContainer
-from ray_tools.base.transform import Crop, Histogram, compose
+from ray_tools.base.transform import Crop, Histogram, RayTransformCompose
 
 engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
                    workdir='../ray_workdir',
@@ -55,9 +55,9 @@ param_func = lambda: RayParameterContainer([
 ])
 
 params = [param_func() for _ in range(10)]
-result = engine.run(params, transform=compose(  # Histogram(n_bins=256, lim=1.0),
-                       Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))
-                   ))
+result = engine.run(params, transforms=RayTransformCompose(  # Histogram(n_bins=256, lim=1.0),
+    Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))
+))
 
 import matplotlib.pyplot as plt
 

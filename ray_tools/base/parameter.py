@@ -47,6 +47,12 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
             dict_copy[key] = param.clone()
         return dict_copy
 
+    def to_value_dict(self):
+        value_dict = {}
+        for key, param in self.items():
+            value_dict[key] = param.get_value()
+        return value_dict
+
     @staticmethod
     def _element_to_key(element: XmlElement) -> str:
         return '.'.join(element.get_full_path().split('.')[2:])

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import os
+from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
 from typing import List
 
 import docker
 import docker.errors
 import docker.types
-
-from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
 
 import h5py
 import numpy as np
@@ -26,6 +25,8 @@ class RayOutput:
     y_dir: np.ndarray
     z_dir: np.ndarray
 
+    # TODO: save energy
+
 
 class RayBackend(metaclass=ABCMeta):
 
@@ -35,6 +36,7 @@ class RayBackend(metaclass=ABCMeta):
 
 
 class RayBackendDockerRAYX(RayBackend):
+    # TODO: RAY-X can only generate results for a single image plane
 
     def __init__(self,
                  docker_image: str,

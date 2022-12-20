@@ -14,7 +14,6 @@ from .transform import RayTransform
 
 
 class RayEngine:
-    # TODO: introduce id field?
 
     def __init__(self,
                  rml_basefile: str,
@@ -34,17 +33,21 @@ class RayEngine:
         self.template = self._raypyng_rml.beamline
 
     def run(self,
-            params: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transform: RayTransform = None,
+            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
+            transforms: Union[RayTransform, Iterable[RayTransform]] = None,
             ) -> Union[Dict, Iterable[Dict], List[Dict]]:
         os.makedirs(self.workdir, exist_ok=True)
 
-        if isinstance(params, RayParameterContainer):
-            params = [params]
+        if not isinstance(param_containers, Iterable):
+            param_containers = [param_containers]
 
-        _iter = ((str(run_id), run_params, transform) for run_id, run_params in enumerate(params))
+        if transforms is None or not isinstance(transforms, Iterable):
+            transforms = len(param_containers) * [transforms]
+
+        _iter = ((str(run_id), run_params, transform) for run_id, (run_params, transform) in
+                 enumerate(zip(param_containers, transforms)))
         if not self.as_generator:
-            # TODO: Is use of threading safe?
+            # TODO: Is multiprocessing possible here?
             worker = Parallel(n_jobs=self.num_workers, verbose=False, backend='threading')
             jobs = (delayed(self._run_func)(*item) for item in _iter)
             result = worker(jobs)
@@ -57,7 +60,7 @@ class RayEngine:
                   param_container: RayParameterContainer,
                   transform: RayTransform = None,
                   ) -> Dict:
-        # TODO: what other info should be returned?
+        # TODO: Good idea to return param_container?
         result = {'param_container': param_container.clone(), 'ray_output': None}
 
         raypyng_rml_work = RMLFile(self.rml_basefile)
