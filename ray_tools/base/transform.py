@@ -93,7 +93,8 @@ class Histogram(RayTransform):
     def __call__(self, ray_output: RayOutput) -> Dict:
         histogram = np.histogram2d(ray_output.x_loc, ray_output.y_loc,
                                    bins=(self.n_bins, self.n_bins),
-                                   range=[[self.x_lims[0], self.x_lims[1]], [self.y_lims[0], self.y_lims[1]]])[0]
+                                   range=[[self.x_lims[0], self.x_lims[1]], [self.y_lims[0], self.y_lims[1]]]
+                                   )[0]
         return dict(name=ray_output.name,
                     histogram=histogram,
                     x_lims=self.x_lims,

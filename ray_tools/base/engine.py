@@ -18,16 +18,16 @@ class RayEngine:
     def __init__(self,
                  rml_basefile: str,
                  ray_backend: RayBackend,
-                 workdir: str = 'ray_workdir',
                  num_workers: int = 1,
                  as_generator: bool = False,
+                 verbose: bool = False,
                  ) -> None:
         super().__init__()
         self.rml_basefile = rml_basefile
         self.ray_backend = ray_backend
-        self.workdir = os.path.abspath(workdir)
         self.num_workers = num_workers
         self.as_generator = as_generator
+        self.verbose = verbose
 
         self._raypyng_rml = RMLFile(self.rml_basefile)
         self.template = self._raypyng_rml.beamline
@@ -36,7 +36,6 @@ class RayEngine:
             param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
             transforms: Union[RayTransform, Iterable[RayTransform]] = None,
             ) -> Union[Dict, Iterable[Dict], List[Dict]]:
-        os.makedirs(self.workdir, exist_ok=True)
 
         if not isinstance(param_containers, Iterable):
             param_containers = [param_containers]
@@ -47,8 +46,7 @@ class RayEngine:
         _iter = ((str(run_id), run_params, transform) for run_id, (run_params, transform) in
                  enumerate(zip(param_containers, transforms)))
         if not self.as_generator:
-            # TODO: Is multiprocessing possible here?
-            worker = Parallel(n_jobs=self.num_workers, verbose=False, backend='threading')
+            worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
             jobs = (delayed(self._run_func)(*item) for item in _iter)
             result = worker(jobs)
             return result if len(result) > 1 else result[0]
@@ -70,11 +68,7 @@ class RayEngine:
             element.cdata = str(value)
             result['param_container_dict'][key] = value
 
-        rml_workfile = os.path.join(self.workdir, run_id + '.rml')
-        raypyng_rml_work.write(rml_workfile)
-        result['ray_output'] = self.ray_backend.run(rml_workfile)
-
-        os.remove(rml_workfile)
+        result['ray_output'] = self.ray_backend.run(raypyng_rml_work, run_id=run_id)
 
         if transform is not None:
             result['ray_output'] = list(map(transform, result['ray_output']))

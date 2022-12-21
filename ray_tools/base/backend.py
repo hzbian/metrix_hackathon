@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import string
+import random
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List
@@ -12,6 +14,8 @@ import docker.types
 import h5py
 import numpy as np
 import pandas as pd
+
+from raypyng import RMLFile
 
 
 @dataclass
@@ -31,7 +35,7 @@ class RayOutput:
 class RayBackend(metaclass=ABCMeta):
 
     @abstractmethod
-    def run(self, rml_filename: str) -> List[RayOutput]:
+    def run(self, raypyng_rml: RMLFile, run_id: str = None) -> List[RayOutput]:
         pass
 
 
@@ -87,7 +91,16 @@ class RayBackendDockerRAYX(RayBackend):
     def __del__(self):
         self.kill()
 
-    def run(self, rml_workfile: str) -> List[RayOutput]:
+    def run(self, raypyng_rml: RMLFile, run_id: str = None) -> List[RayOutput]:
+
+        os.makedirs(self.ray_workdir, exist_ok=True)
+
+        if run_id is None:
+            run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
+
+        rml_workfile = os.path.join(self.ray_workdir, run_id + '.rml')
+        raypyng_rml.write(rml_workfile)
+
         docker_rml_workfile = os.path.join(self._rayx_workdir, os.path.basename(rml_workfile))
         self.docker_container.exec_run(
             cmd=f"{self._rayx_path} -x -i {docker_rml_workfile}",
@@ -110,6 +123,7 @@ class RayBackendDockerRAYX(RayBackend):
             # concat once done otherwise, too memory intensive
             raw_output = pd.concat(_dfs, axis=0)
 
+        os.remove(rml_workfile)
         os.remove(ray_output_file)
 
         ray_output = RayOutput(name='ImagePlane',

@@ -5,11 +5,10 @@ sys.path.insert(0, '../')
 from ray_tools.base.parameter_builder import build_parameter_grid
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYX
-from ray_tools.base.parameter import ConstantParameter, RandomParameter, GridParameter, RayParameterContainer
+from ray_tools.base.parameter import NumericalParameter, RandomParameter, GridParameter, RayParameterContainer
 from ray_tools.base.transform import Crop, Histogram, RayTransformCompose
 
 engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
-                   workdir='../ray_workdir',
                    ray_backend=RayBackendDockerRAYX(docker_image='ray-service',
                                                     ray_workdir='../ray_workdir',
                                                     verbose=True),
@@ -17,7 +16,7 @@ engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml
                    as_generator=False)
 
 param_func = lambda: RayParameterContainer([
-    (engine.template.U41_318eV.numberRays, ConstantParameter(value=1e4)),
+    (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e4)),
     (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25))),
     (engine.template.U41_318eV.translationYerror, RandomParameter(value_lims=(-0.25, 0.25))),
     (engine.template.U41_318eV.rotationXerror, RandomParameter(value_lims=(-0.05, 0.05))),
@@ -70,11 +69,11 @@ for idx in range(10):
 
     plt.figure()
     plt.imshow(
-        Histogram(n_bins=1024, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))(result[idx]['ray_output'][0])['histogram'])
+        Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))(result[idx]['ray_output'][0])['histogram'])
     plt.show()
 
 param_container = RayParameterContainer([
-    (engine.template.U41_318eV.numberRays, ConstantParameter(value=1e4)),
+    (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e4)),
     (engine.template.U41_318eV.translationXerror, GridParameter(value=[0.0, 1.0, 2.0])),
     (engine.template.U41_318eV.translationYerror, GridParameter(value=[3.0, 4.0, 5.0])),
     (engine.template.U41_318eV.rotationXerror, RandomParameter(value_lims=(-0.05, 0.05))),

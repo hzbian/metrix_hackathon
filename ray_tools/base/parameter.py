@@ -28,37 +28,7 @@ class RayParameter(metaclass=ABCMeta):
         return self.__class__.__name__ + ': ' + str(self.get_value())
 
 
-class RayParameterContainer(OrderedDict[str, RayParameter]):
-
-    def __setitem__(self, k: Union[str, XmlElement], v: RayParameter) -> None:
-        # TODO: check if string format is correct
-        if isinstance(k, XmlElement):
-            k = self._element_to_key(k)
-        super().__setitem__(k, v)
-
-    def __getitem__(self, k: Union[str, XmlElement]) -> RayParameter:
-        if isinstance(k, XmlElement):
-            k = self._element_to_key(k)
-        return super().__getitem__(k)
-
-    def clone(self) -> RayParameterContainer:
-        dict_copy = self.copy()
-        for key, param in self.items():
-            dict_copy[key] = param.clone()
-        return dict_copy
-
-    def to_value_dict(self):
-        value_dict = {}
-        for key, param in self.items():
-            value_dict[key] = param.get_value()
-        return value_dict
-
-    @staticmethod
-    def _element_to_key(element: XmlElement) -> str:
-        return '.'.join(element.get_full_path().split('.')[2:])
-
-
-class ConstantParameter(RayParameter):
+class NumericalParameter(RayParameter):
 
     def __init__(self, value: float):
         self.value = value
@@ -66,29 +36,14 @@ class ConstantParameter(RayParameter):
     def get_value(self) -> float:
         return self.value
 
-    def clone(self) -> ConstantParameter:
-        return ConstantParameter(value=self.value)
+    def clone(self) -> NumericalParameter:
+        return NumericalParameter(value=self.value)
 
 
-class GridParameter(RayParameter):
-
-    def __init__(self, value: Union[List[float], np.ndarray]):
-        self.value = np.array(value).flatten()
-
-    def get_value(self) -> float:
-        return self.value[0]
-
-    def expand(self) -> List[ConstantParameter]:
-        return [ConstantParameter(value=value) for value in self.value]
-
-    def clone(self) -> GridParameter:
-        return GridParameter(value=self.value)
-
-
-class MutableParameter(RayParameter):
+class MutableParameter(NumericalParameter):
 
     def __init__(self, value: float, value_lims: Tuple[float, float] = None):
-        self.value = value
+        super().__init__(value)
         self.value_lims = value_lims
 
     def get_value(self) -> float:
@@ -112,3 +67,47 @@ class RandomParameter(MutableParameter):
         param = RandomParameter(self.value_lims, rg=self.rg)
         param.value = self.value
         return param
+
+
+class GridParameter(RayParameter):
+
+    def __init__(self, value: Union[List[float], np.ndarray]):
+        self.value = np.array(value).flatten()
+
+    def get_value(self) -> np.ndarray:
+        return self.value
+
+    def expand(self) -> List[NumericalParameter]:
+        return [NumericalParameter(value=value) for value in self.value]
+
+    def clone(self) -> GridParameter:
+        return GridParameter(value=self.value)
+
+
+class RayParameterContainer(OrderedDict[str, RayParameter]):
+
+    def __setitem__(self, k: Union[str, XmlElement], v: RayParameter) -> None:
+        if isinstance(k, XmlElement):
+            k = self._element_to_key(k)
+        super().__setitem__(k, v)
+
+    def __getitem__(self, k: Union[str, XmlElement]) -> RayParameter:
+        if isinstance(k, XmlElement):
+            k = self._element_to_key(k)
+        return super().__getitem__(k)
+
+    def clone(self) -> RayParameterContainer:
+        dict_copy = self.copy()
+        for key, param in self.items():
+            dict_copy[key] = param.clone()
+        return dict_copy
+
+    def to_value_dict(self):
+        value_dict = dict()
+        for key, param in self.items():
+            value_dict[key] = param.get_value()
+        return value_dict
+
+    @staticmethod
+    def _element_to_key(element: XmlElement) -> str:
+        return '.'.join(element.get_full_path().split('.')[2:])
