@@ -5,4 +5,3 @@ if [[ ! -f "$FILE" ]]; then
 fi
 export LD_LIBRARY_PATH=/opt/ray-ui
 /opt/ray-ui/rayui -b
-
