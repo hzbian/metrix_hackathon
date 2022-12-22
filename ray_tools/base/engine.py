@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Iterable, Union, Dict, List
 
 from joblib import Parallel, delayed
@@ -8,15 +7,18 @@ from joblib import Parallel, delayed
 from raypyng import RMLFile
 from raypyng.xmltools import XmlElement
 
+from . import RayTransformType
 from .backend import RayBackend
 from .parameter import RayParameterContainer
 from .transform import RayTransform
+
 
 
 class RayEngine:
 
     def __init__(self,
                  rml_basefile: str,
+                 exported_planes: List[str],
                  ray_backend: RayBackend,
                  num_workers: int = 1,
                  as_generator: bool = False,
@@ -24,6 +26,7 @@ class RayEngine:
                  ) -> None:
         super().__init__()
         self.rml_basefile = rml_basefile
+        self.exported_planes = exported_planes
         self.ray_backend = ray_backend
         self.num_workers = num_workers
         self.as_generator = as_generator
@@ -34,13 +37,13 @@ class RayEngine:
 
     def run(self,
             param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transforms: Union[RayTransform, Iterable[RayTransform]] = None,
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
             ) -> Union[Dict, Iterable[Dict], List[Dict]]:
 
-        if not isinstance(param_containers, Iterable):
+        if isinstance(param_containers, RayParameterContainer):
             param_containers = [param_containers]
 
-        if transforms is None or not isinstance(transforms, Iterable):
+        if transforms is None or isinstance(transforms, (RayTransform, dict)):
             transforms = len(param_containers) * [transforms]
 
         _iter = ((str(run_id), run_params, transform) for run_id, (run_params, transform) in
@@ -56,7 +59,7 @@ class RayEngine:
     def _run_func(self,
                   run_id: str,
                   param_container: RayParameterContainer,
-                  transform: RayTransform = None,
+                  transform: RayTransformType = None,
                   ) -> Dict:
         result = {'param_container_dict': dict(), 'ray_output': None}
 
@@ -68,10 +71,14 @@ class RayEngine:
             element.cdata = str(value)
             result['param_container_dict'][key] = value
 
-        result['ray_output'] = self.ray_backend.run(raypyng_rml_work, run_id=run_id)
+        result['ray_output'] = self.ray_backend.run(raypyng_rml=raypyng_rml_work,
+                                                    run_id=run_id,
+                                                    exported_planes=self.exported_planes)
 
         if transform is not None:
-            result['ray_output'] = list(map(transform, result['ray_output']))
+            for plane in self.exported_planes:
+                t = transform if isinstance(transform, RayTransform) else transform[plane]
+                result['ray_output'][plane] = t(result['ray_output'][plane])
         return result
 
     def _key_to_element(self, key: str, template: XmlElement = None) -> XmlElement:

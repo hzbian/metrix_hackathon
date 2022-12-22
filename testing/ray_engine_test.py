@@ -9,7 +9,8 @@ from ray_tools.base.parameter import NumericalParameter, RandomParameter, GridPa
 from ray_tools.base.transform import Crop, Histogram, RayTransformCompose
 
 engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
-                   ray_backend=RayBackendDockerRAYX(docker_image='ray-service',
+                   exported_planes=['ImagePlane'],
+                   ray_backend=RayBackendDockerRAYX(docker_image='ray-x-service',
                                                     ray_workdir='../ray_workdir',
                                                     verbose=True),
                    num_workers=-1,
@@ -62,14 +63,14 @@ import matplotlib.pyplot as plt
 
 for idx in range(10):
     plt.figure()
-    plt.scatter(result[idx]['ray_output'][0].y_loc, result[idx]['ray_output'][0].x_loc, s=0.001)
+    plt.scatter(result[idx]['ray_output']['ImagePlane'].y_loc, result[idx]['ray_output']['ImagePlane'].x_loc, s=0.001)
     plt.xlim((-1.0, 1.0))
     plt.ylim((-1.0, 1.0))
     plt.show()
 
     plt.figure()
     plt.imshow(
-        Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))(result[idx]['ray_output'][0])['histogram'])
+        Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))(result[idx]['ray_output']['ImagePlane'])['histogram'])
     plt.show()
 
 param_container = RayParameterContainer([

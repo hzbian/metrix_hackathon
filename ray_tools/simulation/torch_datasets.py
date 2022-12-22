@@ -1,9 +1,10 @@
 from typing import List, Callable
 
 import h5py
-import torch
 
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
+
+from .torch_data_tools import h5_to_dict
 
 
 class RandomDataset(Dataset):
@@ -51,19 +52,12 @@ class RandomDataset(Dataset):
         for idx_sub in sample_grp.keys():
             if idx_sub not in self.exclude_idx_sub:
                 data[idx_sub] = {}
-                data[idx_sub]['params'] = {}
-                for key, val in sample_grp[idx_sub]['params'].items():
-                    data[idx_sub]['params'][key] = val[()]
+                data[idx_sub]['params'] = h5_to_dict(sample_grp[idx_sub]['params'])
                 data[idx_sub]['ray_output'] = {}
-                ray_output_grp: h5py.Group = sample_grp[idx_sub]['ray_output']
-                for idx_ray_output in ray_output_grp.keys():
-                    if idx_ray_output not in self.exclude_ray_output:
-                        data[idx_sub]['ray_output'][idx_ray_output] = {}
-                        for key, val in ray_output_grp[idx_ray_output].items():
-                            if h5py.check_string_dtype(val.dtype) is not None:
-                                data[idx_sub]['ray_output'][idx_ray_output][key] = val.asstr()[()]
-                            else:
-                                data[idx_sub]['ray_output'][idx_ray_output][key] = torch.tensor(val[:])
+                ray_output_grp = sample_grp[idx_sub]['ray_output']
+                for ray_output in ray_output_grp.keys():
+                    if ray_output not in self.exclude_ray_output:
+                        data[idx_sub]['ray_output'][ray_output] = h5_to_dict(ray_output_grp[ray_output])
 
         if self.transform is not None:
             data = self.transform(data)
@@ -71,27 +65,3 @@ class RandomDataset(Dataset):
 
     def __len__(self):
         return self._n_samples_total
-
-
-# Important fix to make custom collate_fn work
-# https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
-torch.multiprocessing.set_sharing_strategy('file_system')
-
-from tqdm import tqdm
-import os
-
-h5_path = os.path.join('../../datasets/metrix_simulation')
-
-h5_files = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
-
-dataset = RandomDataset(h5_files=h5_files)
-
-batch_size = 100
-data_loader = DataLoader(dataset,
-                         shuffle=True,
-                         batch_size=batch_size,
-                         num_workers=100)
-
-d = []
-for idx, item in tqdm(enumerate(data_loader)):
-    pass

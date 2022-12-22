@@ -23,12 +23,12 @@ RUN virtualenv --python="/usr/bin/python3.10" "/venv/"
 ENV PATH="/venv/bin:$PATH"
 
 # Build RAY-X
-RUN git clone --recurse-submodules https://github.com/hz-b/RAY-X.git -b development
+RUN mkdir -p /opt/ray-x
+RUN git clone --recurse-submodules https://github.com/hz-b/RAY-X.git -b development /opt/ray-x
 RUN pip install -U numpy
-RUN cd RAY-X && sh compile.sh
-RUN cd RAY-X/build/bin/debug
+RUN cd /opt/ray-x && sh compile.sh
 
 # Create RAY-X workdir
-RUN mkdir -p /RAY-X-workdir
+RUN mkdir -p /opt/ray-x-workdir
 
 ENTRYPOINT ["tail", "-f", "/dev/null"]

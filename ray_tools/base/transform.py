@@ -34,8 +34,7 @@ class ToDict(RayTransform):
         self.ignore = ignore if ignore else []
 
     def __call__(self, ray_output: RayOutput) -> Dict:
-        out = dict(name=ray_output.name,
-                   x_loc=ray_output.x_loc,
+        out = dict(x_loc=ray_output.x_loc,
                    y_loc=ray_output.y_loc,
                    z_loc=ray_output.z_loc,
                    x_dir=ray_output.x_dir,
@@ -95,7 +94,6 @@ class Histogram(RayTransform):
                                    bins=(self.n_bins, self.n_bins),
                                    range=[[self.x_lims[0], self.x_lims[1]], [self.y_lims[0], self.y_lims[1]]]
                                    )[0]
-        return dict(name=ray_output.name,
-                    histogram=histogram,
+        return dict(histogram=histogram,
                     x_lims=self.x_lims,
                     y_lims=self.y_lims)

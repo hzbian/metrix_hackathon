@@ -2,6 +2,7 @@ import sys
 
 sys.path.insert(0, '../')
 
+from ray_tools.base.engine import RayEngine
 from ray_tools.simulation.torch_data_tools import RandomDatasetGenerator
 from ray_tools.base.parameter_builder import build_parameter_grid
 from ray_tools.base.backend import RayBackendDockerRAYX
@@ -49,16 +50,19 @@ param_container_func = lambda: RayParameterContainer([
 param_container_sampler = RandomDatasetGenerator.build_param_container_sampler(
     param_container_func=lambda: build_parameter_grid(param_container_func()),
     idx_sub=['1e4', '1e5'],
-    transform=2 * [RayTransformCompose(Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)),
-                                       # ToDict(),
-                                       Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)))]
+    transform=2 * [{'ImagePlane': RayTransformCompose(Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)),
+                                                      # ToDict(),
+                                                      Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0)))
+                    }]
 )
 
-generator = RandomDatasetGenerator(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
-                                   ray_backend=RayBackendDockerRAYX(docker_image='ray-service',
-                                                                    ray_workdir='../ray_workdir',
-                                                                    verbose=True),
-                                   num_workers=-1,
+generator = RandomDatasetGenerator(ray_engine=RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+                                                        exported_planes=['ImagePlane'],
+                                                        ray_backend=RayBackendDockerRAYX(docker_image='ray-x-service',
+                                                                                         ray_workdir='../ray_workdir',
+                                                                                         verbose=True),
+                                                        num_workers=-1,
+                                                        as_generator=False),
                                    param_container_sampler=param_container_sampler,
                                    h5_datadir='../datasets/metrix_simulation',
                                    h5_basename='data_raw',

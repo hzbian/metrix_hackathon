@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+import time
 import string
 import random
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 
 import docker
 import docker.errors
@@ -20,8 +21,6 @@ from raypyng import RMLFile
 
 @dataclass
 class RayOutput:
-    name: str
-
     x_loc: np.ndarray
     y_loc: np.ndarray
     z_loc: np.ndarray
@@ -35,12 +34,11 @@ class RayOutput:
 class RayBackend(metaclass=ABCMeta):
 
     @abstractmethod
-    def run(self, raypyng_rml: RMLFile, run_id: str = None) -> List[RayOutput]:
+    def run(self, raypyng_rml: RMLFile, exported_planes: List[str], run_id: str = None) -> Dict[str, RayOutput]:
         pass
 
 
 class RayBackendDockerRAYX(RayBackend):
-    # TODO: RAY-X can only generate results for a single image plane
 
     def __init__(self,
                  docker_image: str,
@@ -55,8 +53,8 @@ class RayBackendDockerRAYX(RayBackend):
         self.gpu_ids = gpu_ids
         self.verbose = verbose
 
-        self._rayx_workdir = '/RAY-X-workdir'
-        self._rayx_path = '/RAY-X/build/bin/debug/TerminalApp'
+        self._rayx_workdir = '/opt/ray-x-workdir'
+        self._rayx_path = '/opt/ray-x/build/bin/debug/TerminalApp'
 
         self.client = docker.from_env()
         try:
@@ -91,13 +89,17 @@ class RayBackendDockerRAYX(RayBackend):
     def __del__(self):
         self.kill()
 
-    def run(self, raypyng_rml: RMLFile, run_id: str = None) -> List[RayOutput]:
+    def run(self,
+            raypyng_rml: RMLFile,
+            exported_planes: List[str],  # TODO: RAY-X can only generate results for a single image plane
+            run_id: str = None) -> Dict[str, RayOutput]:
 
         os.makedirs(self.ray_workdir, exist_ok=True)
 
         if run_id is None:
             run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
 
+        time_start = time.time()
         rml_workfile = os.path.join(self.ray_workdir, run_id + '.rml')
         raypyng_rml.write(rml_workfile)
 
@@ -126,16 +128,18 @@ class RayBackendDockerRAYX(RayBackend):
         os.remove(rml_workfile)
         os.remove(ray_output_file)
 
-        ray_output = RayOutput(name='ImagePlane',
-                               x_loc=raw_output['Xloc'].to_numpy(),
-                               y_loc=raw_output['Yloc'].to_numpy(),
-                               z_loc=raw_output['Zloc'].to_numpy(),
-                               x_dir=raw_output['Xdir'].to_numpy(),
-                               y_dir=raw_output['Ydir'].to_numpy(),
-                               z_dir=raw_output['Zdir'].to_numpy(),
-                               energy=raw_output['Energy'].to_numpy())
+        ray_output = {'ImagePlane': RayOutput(x_loc=raw_output['Xloc'].to_numpy(),
+                                              y_loc=raw_output['Yloc'].to_numpy(),
+                                              z_loc=raw_output['Zloc'].to_numpy(),
+                                              x_dir=raw_output['Xdir'].to_numpy(),
+                                              y_dir=raw_output['Ydir'].to_numpy(),
+                                              z_dir=raw_output['Zdir'].to_numpy(),
+                                              energy=raw_output['Energy'].to_numpy())
+                      }
 
+        time_end = time.time()
         if self.verbose:
-            print(f'Ray output from {os.path.basename(rml_workfile)} successfully generated')
+            print(f'Ray output from {os.path.basename(rml_workfile)}' +
+                  ' successfully generated in {:.2f}s'.format(time_end - time_start))
 
-        return [ray_output]
+        return ray_output
