@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from .torch_data_tools import h5_to_dict
 
 
-class RandomDataset(Dataset):
+class RayDataset(Dataset):
     def __init__(self,
                  h5_files: List[str],
                  exclude_idx_sub: List[str] = None,

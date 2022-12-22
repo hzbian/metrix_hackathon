@@ -9,7 +9,7 @@ from ..base.engine import RayEngine
 from ..base.parameter import RayParameterContainer
 
 
-class RandomDatasetGenerator:
+class RandomRayDatasetGenerator:
 
     def __init__(self,
                  ray_engine: RayEngine,
