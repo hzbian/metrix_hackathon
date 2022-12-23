@@ -11,7 +11,7 @@ class RayDataset(Dataset):
     def __init__(self,
                  h5_files: List[str],
                  exclude_idx_sub: List[str] = None,
-                 exclude_ray_output: List[str] = None,  # TODO: Exclude fields?
+                 exclude_ray_output: List[str] = None,  # TODO: Option to exclude fields in ray_output
                  transform: Callable = None):
 
         self.h5_files = h5_files
