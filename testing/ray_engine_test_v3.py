@@ -2,15 +2,31 @@ import sys
 
 sys.path.insert(0, '../')
 
+import numpy as np
+
+import matplotlib.pyplot as plt
+
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
-from ray_tools.base.transform import Crop, Histogram, RayTransformCompose
+from ray_tools.base.transform import Histogram, RayTransformConcat, RayTransformDummy
 from ray_tools.base.utils import RandomGenerator
 
+n_rays = 1e5
+
+exported_planes = ["U41_318eV",
+                   "ASBL",
+                   "M1-Cylinder",
+                   "Spherical Grating",
+                   "Exit Slit",
+                   "E1",
+                   "E2",
+                   "ImagePlane"]
+
 engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
-                   exported_planes=['ImagePlane'],
+                   exported_planes=exported_planes,
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                     docker_container_name='ray-ui-service-test',
                                                      ray_workdir='../ray_workdir',
                                                      verbose=True),
                    num_workers=-1,
@@ -19,7 +35,7 @@ engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml
 rg = RandomGenerator(seed=42)
 
 param_func = lambda: RayParameterContainer([
-    (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e6)),
+    (engine.template.U41_318eV.numberRays, NumericalParameter(value=n_rays)),
     (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=rg)),
     (engine.template.U41_318eV.translationYerror, RandomParameter(value_lims=(-0.25, 0.25), rg=rg)),
     (engine.template.U41_318eV.rotationXerror, RandomParameter(value_lims=(-0.05, 0.05), rg=rg)),
@@ -56,26 +72,34 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-params = [param_func() for _ in range(20)]
-result = engine.run(params, transforms=RayTransformCompose(  # Histogram(n_bins=256, lim=1.0),
-    # Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))
-))
+n_examples = 20
+transform = RayTransformConcat({
+    'hist': Histogram(n_bins=256, x_lims=(-.25, .25), y_lims=(-.25, .25), auto_center=True),
+    'hist2': Histogram(n_bins=1024),
+    'raw': RayTransformDummy(),
+})
 
-import matplotlib.pyplot as plt
+result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
+                    transforms={exported_plane: transform for exported_plane in exported_planes})
 
-for idx in range(20):
-    plt.figure()
-    plt.title(str(idx))
-    plt.scatter(result[idx]['ray_output']['ImagePlane'].y_loc, result[idx]['ray_output']['ImagePlane'].x_loc)
-    # plt.xlim((-1.0, 1.0))
-    # plt.ylim((-1.0, 1.0))
-    plt.show()
+show_examples = [7]  # range(n_examples)
 
-    # plt.figure()
-    # plt.title(str(idx))
-    # plt.imshow(
-    #     Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))(result[idx]['ray_output']['ImagePlane'])[
-    #         'histogram'])
-    # plt.show()
+for idx in show_examples:
+    for exported_plane in exported_planes:
+        plt.figure()
+        plt.title(exported_plane + ' ' + str(idx))
+        plt.scatter(result[idx]['ray_output'][exported_plane]['raw'].x_loc,
+                    result[idx]['ray_output'][exported_plane]['raw'].y_loc,
+                    s=0.01)
+        plt.show()
+
+        plt.figure(figsize=(10, 10))
+        plt.title(exported_plane + ' ' + str(idx))
+        plt.imshow(np.fliplr(result[idx]['ray_output'][exported_plane]['hist']['histogram'].T),
+                   cmap='Greys')
+        print(result[idx]['ray_output'][exported_plane]['hist']['n_rays'],
+              result[idx]['ray_output'][exported_plane]['hist']['x_lims'],
+              result[idx]['ray_output'][exported_plane]['hist']['y_lims'])
+        plt.show()
 
 engine.ray_backend.kill()

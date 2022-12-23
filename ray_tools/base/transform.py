@@ -28,6 +28,21 @@ class RayTransformCompose(RayTransform):
         return self._transform(ray_output)
 
 
+class RayTransformConcat(RayTransform):
+
+    def __init__(self, transforms=Dict[str, List[RayTransform]]):
+        self.transforms = transforms
+
+    def __call__(self, ray_output: RayOutput) -> Dict:
+        return {k: transform(ray_output) for k, transform in self.transforms.items()}
+
+
+class RayTransformDummy(RayTransform):
+
+    def __call__(self, ray_output: RayOutput) -> RayOutput:
+        return ray_output
+
+
 class ToDict(RayTransform):
 
     def __init__(self, ignore: List[str] = None):
@@ -82,18 +97,44 @@ class Histogram(RayTransform):
 
     def __init__(self,
                  n_bins: int,
-                 x_lims: Tuple[float, float],
-                 y_lims: Tuple[float, float]):
+                 x_lims: Tuple[float, float] = None,
+                 y_lims: Tuple[float, float] = None,
+                 auto_center: bool = False):
         self.n_bins = n_bins
-        # TODO: 'auto' option to crop to center of mass
         self.x_lims = x_lims
         self.y_lims = y_lims
+        self.auto_center = auto_center
 
     def __call__(self, ray_output: RayOutput) -> Dict:
-        histogram = np.histogram2d(ray_output.x_loc, ray_output.y_loc,
-                                   bins=(self.n_bins, self.n_bins),
-                                   range=[[self.x_lims[0], self.x_lims[1]], [self.y_lims[0], self.y_lims[1]]]
-                                   )[0]
-        return dict(histogram=histogram,
-                    x_lims=self.x_lims,
-                    y_lims=self.y_lims)
+        # TODO: enable histograms for multiple layers
+        return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
+
+    def compute_histogram(self, x_loc: np.ndarray, y_loc: np.ndarray):
+        out = {'n_rays': x_loc.size}
+        if out['n_rays'] == 0:
+            out['x_lims'] = (0.0, 0.0)
+            out['y_lims'] = (0.0, 0.0)
+            out['histogram'] = np.zeros((self.n_bins, self.n_bins))
+            return out
+
+        if self.x_lims is None:
+            out['histogram'], x_lims, y_lims = np.histogram2d(x_loc, y_loc, bins=(self.n_bins, self.n_bins))
+            out['x_lims'] = (x_lims[0], x_lims[-1])
+            out['y_lims'] = (y_lims[0], y_lims[-1])
+        else:
+            if self.auto_center:
+                x_com = np.sum(x_loc) / x_loc.size
+                y_com = np.sum(y_loc) / y_loc.size
+                x_lims = (self.x_lims[0] + x_com, self.x_lims[1] + x_com)
+                y_lims = (self.y_lims[0] + y_com, self.y_lims[1] + y_com)
+            else:
+                x_lims = self.x_lims
+                y_lims = self.y_lims
+
+            out['x_lims'] = x_lims
+            out['y_lims'] = y_lims
+            out['histogram'] = np.histogram2d(x_loc, y_loc,
+                                              bins=(self.n_bins, self.n_bins),
+                                              range=[[x_lims[0], x_lims[1]], [y_lims[0], y_lims[1]]])[0]
+
+        return out

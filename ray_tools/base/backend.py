@@ -62,7 +62,10 @@ class RayBackendDockerRAYX(RayBackend):
             self.docker_container = self.client.containers.get(self.docker_container_name)
             print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
             self.docker_container.stop()
-            self.docker_container.remove()
+            try:
+                self.docker_container.remove()
+            except docker.errors.APIError:
+                pass
         except docker.errors.NotFound:
             pass
 
@@ -95,12 +98,12 @@ class RayBackendDockerRAYX(RayBackend):
             exported_planes: List[str],  # TODO: RAY-X can only generate results for a single image plane
             run_id: str = None) -> Dict[str, RayOutput]:
 
-        os.makedirs(self.ray_workdir, exist_ok=True)
-
         if run_id is None:
             run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
 
-        time_start = time.time()
+        os.makedirs(self.ray_workdir, exist_ok=True)
+
+        tic = time.perf_counter()
         rml_workfile = os.path.join(self.ray_workdir, run_id + '.rml')
         raypyng_rml.write(rml_workfile)
 
@@ -137,10 +140,10 @@ class RayBackendDockerRAYX(RayBackend):
                                               energy=raw_output['Energy'].to_numpy())
                       }
 
-        time_end = time.time()
+        toc = time.perf_counter()
         if self.verbose:
-            print(f'Ray output from {os.path.basename(rml_workfile)}' +
-                  ' successfully generated in {:.2f}s'.format(time_end - time_start))
+            print(f'Run ID {run_id}: Ray-X output from {os.path.basename(rml_workfile)}' +
+                  f' successfully generated in {toc - tic:.2f}s')
 
         return ray_output
 
@@ -151,11 +154,13 @@ class RayBackendDockerRAYUI(RayBackend):
                  docker_image: str,
                  ray_workdir: str,
                  docker_container_name: str = None,
+                 max_retry: int = 1000,
                  verbose=True) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
         self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + '_backend'
+        self.max_retry = max_retry
         self.verbose = verbose
 
         self._rayui_workdir = '/opt/ray-ui-workdir'
@@ -165,7 +170,10 @@ class RayBackendDockerRAYUI(RayBackend):
             self.docker_container = self.client.containers.get(self.docker_container_name)
             print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
             self.docker_container.stop()
-            self.docker_container.remove()
+            try:
+                self.docker_container.remove()
+            except docker.errors.APIError:
+                pass
         except docker.errors.NotFound:
             pass
 
@@ -197,38 +205,48 @@ class RayBackendDockerRAYUI(RayBackend):
         run_workdir = os.path.join(self.ray_workdir, run_id)
         os.makedirs(run_workdir, exist_ok=True)
 
-        time_start = time.time()
+        tic = time.perf_counter()
         rml_workfile = os.path.join(run_workdir, 'workfile.rml')
         raypyng_rml.write(rml_workfile)
 
         docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile))
         cmd_exported_planes = " ".join("\"" + plane + "\"" for plane in exported_planes)
-        self.docker_container.exec_run(
-            cmd=f"python /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
-        )
+
+        for run in range(self.max_retry + 1):
+            self.docker_container.exec_run(
+                cmd=f"python /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
+            )
+            retry = False
+            for exported_plane in exported_planes:
+                if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')):
+                    retry = True
+            if not retry:
+                break
+            else:
+                print(f"Run {run + 1} failed. Retry ...")
 
         ray_output = {}
         for exported_plane in exported_planes:
             ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')
 
-            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1,
+            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c',
                                      usecols=[exported_plane + '_OX', exported_plane + '_OY', exported_plane + '_OZ',
                                               exported_plane + '_DX', exported_plane + '_DY', exported_plane + '_DZ',
                                               exported_plane + '_EN', exported_plane + '_PL'])
 
-            ray_output[exported_plane] = RayOutput(x_loc=raw_output[exported_plane + '_OX'].to_numpy(),
-                                                   y_loc=raw_output[exported_plane + '_OY'].to_numpy(),
-                                                   z_loc=raw_output[exported_plane + '_OZ'].to_numpy(),
-                                                   x_dir=raw_output[exported_plane + '_DX'].to_numpy(),
-                                                   y_dir=raw_output[exported_plane + '_DY'].to_numpy(),
-                                                   z_dir=raw_output[exported_plane + '_DZ'].to_numpy(),
-                                                   energy=raw_output[exported_plane + '_EN'].to_numpy())
+            ray_output[exported_plane] = RayOutput(x_loc=raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float),
+                                                   y_loc=raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float),
+                                                   z_loc=raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float),
+                                                   x_dir=raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float),
+                                                   y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float),
+                                                   z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float),
+                                                   energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float))
 
         shutil.rmtree(run_workdir)
 
-        time_end = time.time()
+        toc = time.perf_counter()
         if self.verbose:
-            print(f'Run ID {run_id}: Ray output from {os.path.basename(rml_workfile)}' +
-                  ' successfully generated in {:.2f}s'.format(time_end - time_start))
+            print(f'Run ID {run_id}: Ray-UI output from {os.path.basename(rml_workfile)}' +
+                  f' successfully generated in {toc - tic:.2f}s')
 
         return ray_output
