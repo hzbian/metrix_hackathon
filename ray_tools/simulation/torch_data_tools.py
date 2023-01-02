@@ -1,5 +1,6 @@
 import os
 from typing import Callable, List, Dict
+import posixpath as pp
 
 import h5py
 import numpy as np
@@ -84,7 +85,11 @@ def dict_to_h5(h5_grp: h5py.Group, d: Dict, compress_numpy=False):
 
 
 def h5_to_dict(h5_grp: h5py.Group) -> Dict:
+    if isinstance(h5_grp, h5py.Dataset):
+        return {pp.basename(pp.normpath(h5_grp.name)): h5_grp[()]}
+
     d = {}
+
     for k, v in h5_grp.items():
         if isinstance(v, h5py.Group):
             d[k] = h5_to_dict(v)
