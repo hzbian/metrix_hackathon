@@ -10,13 +10,11 @@ from .torch_data_tools import h5_to_dict
 class RayDataset(Dataset):
     def __init__(self,
                  h5_files: List[str],
-                 exclude_idx_sub: List[str] = None,
-                 exclude_ray_output: List[str] = None,  # TODO: Option to exclude fields in ray_output
+                 sub_groups: List[str],
                  transform: Callable = None):
 
         self.h5_files = h5_files
-        self.exclude_idx_sub = exclude_idx_sub if exclude_idx_sub else []
-        self.exclude_ray_output = exclude_ray_output if exclude_ray_output else []
+        self.sub_groups = sub_groups
         # open all h5_files
         self.h5_files_obj = [h5py.File(f, "r", swmr=True, libver='latest') for f in self.h5_files]
 
@@ -48,16 +46,15 @@ class RayDataset(Dataset):
 
         sample_grp: h5py.Group = self.h5_files_obj[idx_h5][idx_sample]
         data = {}
+        for grp in self.sub_groups:
+            grp_split = grp.split(sep='/')
+            sub_dict = data
+            for key in grp_split:
+                if key not in sub_dict:
+                    sub_dict[key] = {}
+                sub_dict = sub_dict[key]
 
-        for idx_sub in sample_grp.keys():
-            if idx_sub not in self.exclude_idx_sub:
-                data[idx_sub] = {}
-                data[idx_sub]['params'] = h5_to_dict(sample_grp[idx_sub]['params'])
-                data[idx_sub]['ray_output'] = {}
-                ray_output_grp = sample_grp[idx_sub]['ray_output']
-                for ray_output in ray_output_grp.keys():
-                    if ray_output not in self.exclude_ray_output:
-                        data[idx_sub]['ray_output'][ray_output] = h5_to_dict(ray_output_grp[ray_output])
+            sub_dict.update(h5_to_dict(sample_grp[grp]))
 
         if self.transform is not None:
             data = self.transform(data)
