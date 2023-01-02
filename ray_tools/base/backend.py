@@ -74,6 +74,7 @@ class RayBackendDockerRAYX(RayBackend):
         else:
             _devices = []
 
+        os.makedirs(self.ray_workdir, exist_ok=True)
         self.docker_container = self.client.containers.run(
             self.docker_image,
             name=self.docker_container_name,
@@ -177,6 +178,7 @@ class RayBackendDockerRAYUI(RayBackend):
         except docker.errors.NotFound:
             pass
 
+        os.makedirs(self.ray_workdir, exist_ok=True)
         self.docker_container = self.client.containers.run(
             self.docker_image,
             name=self.docker_container_name,

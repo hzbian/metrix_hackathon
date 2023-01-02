@@ -1,39 +1,33 @@
 import os
-import sys
 
-sys.path.insert(0, '../../')
-
-from ray_tools.base.engine import RayEngine
-from ray_tools.simulation.torch_data_tools import RandomRayDatasetGenerator
-from ray_tools.base.parameter_builder import build_parameter_grid
-from ray_tools.base.backend import RayBackendDockerRAYUI
+from definitions import ROOT_DIR
 from ray_tools.base.parameter import RandomParameter, GridParameter, RayParameterContainer
-from ray_tools.base.transform import Histogram, RayTransformConcat, ToDict
+from ray_tools.base.transform import Histogram, RayTransformConcat
 
-# -----------------
-
-# TODO: Better paths
-# in __init__.py: PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-# TODO: separate config file
-
-DATASET_NAME = 'ray_enhance'
+DATASET_NAME = 'ray_surrogate'
 H5_MAX_SIZE = 10000
-H5_IDX_RANGE = range(100)
-H5_DATADIR = f'./{DATASET_NAME}'
+H5_IDX_RANGE = range(50)
+H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAME)
 
-RML_BASEFILE = '../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml'
-RAY_WORKDIR = f'../../ray_workdir/{DATASET_NAME}'
+RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
+RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', DATASET_NAME)
 
-N_RAYS = ['1e4', '1e6']
+N_RAYS = ['1e5']
 
-EXPORTED_PLANES = ["ImagePlane"]
+EXPORTED_PLANES = ["U41_318eV",
+                   "ASBL",
+                   "M1-Cylinder",
+                   "Spherical Grating",
+                   "Exit Slit",
+                   "E1",
+                   "E2",
+                   "ImagePlane"]
 
 TRANSFORMS = [
     RayTransformConcat({
         'hist': Histogram(n_bins=1024),
-        'raw': ToDict(),
-    }),
-    Histogram(n_bins=1024)
+        'hist_small': Histogram(n_bins=256),
+    })
 ]
 
 PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
@@ -73,31 +67,3 @@ PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
     ('E2.translationYerror', RandomParameter(value_lims=(-1, 1))),
     ('E2.translationZerror', RandomParameter(value_lims=(-1, 1))),
 ])
-
-# -----------------
-
-os.makedirs(H5_DATADIR, exist_ok=True)
-
-param_container_sampler = RandomRayDatasetGenerator.build_param_container_sampler(
-    param_container_func=lambda: build_parameter_grid(PARAM_CONTAINER_FUNC()),
-    idx_sub=N_RAYS,
-    transform=[{exported_plane: transform for exported_plane in EXPORTED_PLANES} for transform in TRANSFORMS]
-)
-
-generator = RandomRayDatasetGenerator(
-    ray_engine=RayEngine(rml_basefile=RML_BASEFILE,
-                         exported_planes=EXPORTED_PLANES,
-                         ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
-                                                           ray_workdir=RAY_WORKDIR,
-                                                           verbose=True),
-                         num_workers=-1,
-                         as_generator=False),
-    param_container_sampler=param_container_sampler,
-    h5_datadir=H5_DATADIR,
-    h5_basename='data_raw',
-    h5_max_size=H5_MAX_SIZE)
-
-for h5_idx in H5_IDX_RANGE:
-    generator.generate(h5_idx=h5_idx, batch_size=-1)
-
-generator.ray_engine.ray_backend.kill()
