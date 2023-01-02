@@ -106,7 +106,6 @@ class Histogram(RayTransform):
         self.auto_center = auto_center
 
     def __call__(self, ray_output: RayOutput) -> Dict:
-        # TODO: enable histograms for multiple layers
         return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
 
     def compute_histogram(self, x_loc: np.ndarray, y_loc: np.ndarray):
@@ -138,3 +137,30 @@ class Histogram(RayTransform):
                                               range=[[x_lims[0], x_lims[1]], [y_lims[0], y_lims[1]]])[0]
 
         return out
+
+
+class MultiLayer(RayTransform):
+
+    def __init__(self, dist_layers: List[float], copy_directions: bool = True, transform: RayTransform = None):
+        self.dist_layers = dist_layers
+        self.copy_directions = copy_directions
+        self.transform = transform
+
+    def __call__(self, ray_output: RayOutput) -> Dict[str, RayOutput]:
+        xz_dir = ray_output.x_dir / ray_output.z_dir
+        yz_dir = ray_output.y_dir / ray_output.z_dir
+
+        layers = {}
+        for dist in self.dist_layers:
+            x_cur = ray_output.x_loc + xz_dir * dist
+            y_cur = ray_output.y_loc + yz_dir * dist
+            z_cur = ray_output.z_loc + dist
+            layers[str(dist)] = RayOutput(x_loc=x_cur, y_loc=y_cur, z_loc=z_cur,
+                                          x_dir=ray_output.x_dir.copy() if self.copy_directions else ray_output.x_dir,
+                                          y_dir=ray_output.y_dir.copy() if self.copy_directions else ray_output.y_dir,
+                                          z_dir=ray_output.z_dir.copy() if self.copy_directions else ray_output.z_dir,
+                                          energy=ray_output.energy.copy() if self.copy_directions else ray_output.energy)
+        if self.transform:
+            return {key: self.transform(ray_output_) for key, ray_output_ in layers.items()}
+        else:
+            return layers
