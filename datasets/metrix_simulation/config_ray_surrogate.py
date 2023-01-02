@@ -6,6 +6,7 @@ from ray_tools.base.transform import Histogram, RayTransformConcat
 
 DATASET_NAME = 'ray_surrogate'
 H5_MAX_SIZE = 10000
+BATCH_SIZE = 1000
 H5_IDX_RANGE = range(50)
 H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAME)
 

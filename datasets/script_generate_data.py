@@ -8,7 +8,7 @@ from ray_tools.simulation.torch_data_tools import RandomRayDatasetGenerator
 from ray_tools.base.parameter_builder import build_parameter_grid
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-import metrix_simulation.config_ray_enhance as CFG
+import metrix_simulation.config_ray_enhance_v2 as CFG
 
 os.makedirs(CFG.H5_DATADIR, exist_ok=True)
 
@@ -34,7 +34,7 @@ generator = RandomRayDatasetGenerator(
 h5_failed = []
 for h5_idx in CFG.H5_IDX_RANGE:
     try:
-        generator.generate(h5_idx=h5_idx, batch_size=-1)
+        generator.generate(h5_idx=h5_idx, batch_size=CFG.BATCH_SIZE)
     except:
         h5_failed.append(h5_idx)
 

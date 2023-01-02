@@ -2,9 +2,9 @@ import os
 
 from definitions import ROOT_DIR
 from ray_tools.base.parameter import RandomParameter, GridParameter, RayParameterContainer
-from ray_tools.base.transform import Histogram, RayTransformConcat, ToDict
+from ray_tools.base.transform import Histogram, RayTransformConcat, ToDict, MultiLayer
 
-DATASET_NAME = 'ray_enhance'
+DATASET_NAME = 'ray_enhance_v2'
 H5_MAX_SIZE = 10000
 BATCH_SIZE = -1
 H5_IDX_RANGE = range(150)
@@ -21,8 +21,16 @@ TRANSFORMS = [
     RayTransformConcat({
         'hist': Histogram(n_bins=1024),
         'raw': ToDict(),
+        'ml': MultiLayer(dist_layers=[-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30],
+                         copy_directions=False,
+                         transform=Histogram(n_bins=256)),
     }),
-    Histogram(n_bins=1024)
+    RayTransformConcat({
+        'hist': Histogram(n_bins=1024),
+        'ml': MultiLayer(dist_layers=[-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30],
+                         copy_directions=False,
+                         transform=Histogram(n_bins=256)),
+    })
 ]
 
 PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
@@ -61,4 +69,5 @@ PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
     ('E2.rotationZerror', RandomParameter(value_lims=(-4, 4))),
     ('E2.translationYerror', RandomParameter(value_lims=(-1, 1))),
     ('E2.translationZerror', RandomParameter(value_lims=(-1, 1))),
+    ('ImagePlane.distanceImagePlane', RandomParameter(value_lims=(990, 1010))),
 ])
