@@ -19,7 +19,7 @@ h5_path = os.path.join('../datasets/metrix_simulation/ray_enhance_v2')
 h5_files = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
 
 dataset = RayDataset(h5_files=h5_files,
-                     nested_groups=False,
+                     nested_groups=True,
                      sub_groups=['1e6/params',
                                  '1e6/ray_output/ImagePlane/ml/0/n_rays',
                                  '1e6/ray_output/ImagePlane/ml/0'])
@@ -35,4 +35,5 @@ data_loader = DataLoader(dataset,
                          num_workers=100)
 
 for idx, item in tqdm(enumerate(data_loader)):
-    print(item['1e6/ray_output/ImagePlane/ml/0/n_rays'])
+    pass
+    # print(item['1e6/ray_output/ImagePlane/ml/0/n_rays'])
