@@ -1,5 +1,5 @@
 import os
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Union, Any
 
 import h5py
 import numpy as np
@@ -83,14 +83,13 @@ def dict_to_h5(h5_grp: h5py.Group, d: Dict, compress_numpy=False):
             h5_grp.create_dataset(name=str(k), data=v)
 
 
-def h5_to_dict(h5_grp: h5py.Group) -> Dict:
+def h5_to_dict(h5_obj: Union[h5py.Group, h5py.Dataset]) -> Any:
+    if isinstance(h5_obj, h5py.Dataset):
+        if h5py.check_string_dtype(h5_obj.dtype) is not None:
+            return h5_obj.asstr()[()]
+        else:
+            return h5_obj[()]
     d = {}
-    for k, v in h5_grp.items():
-        if isinstance(v, h5py.Group):
-            d[k] = h5_to_dict(v)
-        elif isinstance(v, h5py.Dataset):
-            if h5py.check_string_dtype(v.dtype) is not None:
-                d[k] = v.asstr()[()]
-            else:
-                d[k] = v[()]
+    for k, v in h5_obj.items():
+        d[k] = h5_to_dict(v)
     return d
