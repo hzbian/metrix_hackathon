@@ -24,7 +24,7 @@ class DefaultDataModule(pl.LightningDataModule):
         self.train_dataset = None
         if split is None:
             split = [0.8, 0.1, 0.1]
-        self.save_hyperparameters(ignore='dataset')
+        self.save_hyperparameters(ignore=['dataset', 'transform'])
         self.dataset = dataset
         self.batch_size_train = batch_size_train
         self.batch_size_val = batch_size_val

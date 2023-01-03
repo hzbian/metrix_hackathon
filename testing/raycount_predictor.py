@@ -7,6 +7,7 @@ from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
 from ray_tools.simulation.lightning_data_module import RayDataModule
+from ray_tools.simulation.torch_data_tools import Select
 
 sys.path.insert(0, '../')
 # Important fix to make custom collate_fn work
@@ -14,7 +15,6 @@ sys.path.insert(0, '../')
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 h5_path = os.path.join('../datasets/metrix_simulation/ray_enhance')
-
 h5_files: list[str] = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
 
 
@@ -68,20 +68,14 @@ class MetrixRayCountPredictor(pl.LightningModule):
         return self.net(x)
 
     def training_step(self, batch, batch_idx):
-        batch = batch['1e6']
-        x = batch['params']
-        x = torch.vstack([i for i in x.values()]).T.float()
-        y = batch['ray_output']['ImagePlane']['n_rays']['n_rays'].float()
+        x, y = batch
         y_hat = self.forward(x)
         loss = nn.MSELoss()(y, y_hat)
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_nb):
-        batch = batch['1e6']
-        x = batch['params']
-        x = torch.vstack([i for i in x.values()]).T.float()
-        y = batch['ray_output']['ImagePlane']['n_rays']['n_rays'].float()
+        x, y = batch
         y_hat = self.forward(x)
         val_loss = nn.MSELoss()(y_hat, y)
         return {'s_val_loss': val_loss, 'y': y, 'y_hat': y_hat, 'x': x}
@@ -104,7 +98,8 @@ class MetrixRayCountPredictor(pl.LightningModule):
 sub_groups = ['1e6/params',
               '1e6/ray_output/ImagePlane/n_rays']
 
-datamodule = RayDataModule(h5_files=h5_files, sub_groups=sub_groups)
+transform = Select(sub_groups)
+datamodule = RayDataModule(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
 model = MetrixRayCountPredictor()
-trainer = pl.Trainer()
+trainer = pl.Trainer(max_epochs=-1)
 trainer.fit(model, datamodule=datamodule)
