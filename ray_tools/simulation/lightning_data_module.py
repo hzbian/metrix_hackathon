@@ -60,7 +60,8 @@ class DefaultDataModule(pl.LightningDataModule):
 
 
 class RayDataModule(DefaultDataModule):
-    def __init__(self, h5_files, sub_groups):
+    def __init__(self, h5_files, sub_groups, transform=None):
         dataset = RayDataset(h5_files=h5_files,
-                             sub_groups=sub_groups)
+                             sub_groups=sub_groups,
+                             transform=transform)
         super().__init__(dataset)
