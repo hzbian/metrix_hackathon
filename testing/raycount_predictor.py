@@ -6,10 +6,10 @@ import torch
 from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
+sys.path.insert(0, '../')
 from ray_tools.simulation.lightning_data_module import RayDataModule
 from ray_tools.simulation.torch_data_tools import Select
 
-sys.path.insert(0, '../')
 # Important fix to make custom collate_fn work
 # https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
 torch.multiprocessing.set_sharing_strategy('file_system')
