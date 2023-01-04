@@ -7,7 +7,7 @@ from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
 sys.path.insert(0, '../')
-from ray_tools.simulation.lightning_data_module import RayDataModule
+from ray_nn.data.lightning_data_module import RayDataModule
 from ray_tools.simulation.torch_data_tools import Select
 
 # Important fix to make custom collate_fn work
@@ -101,5 +101,5 @@ sub_groups = ['1e6/params',
 transform = Select(sub_groups)
 datamodule = RayDataModule(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
 model = MetrixRayCountPredictor()
-trainer = pl.Trainer(max_epochs=-1)
+trainer = pl.Trainer(max_epochs=-1, accelerator="auto")
 trainer.fit(model, datamodule=datamodule)
