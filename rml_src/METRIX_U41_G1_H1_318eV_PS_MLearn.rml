@@ -301,8 +301,8 @@
     <param id="designEnergy" auto="T" enabled="T">318</param>
     <param id="lineDensity" enabled="T">1199.918</param>
     <param id="orderDiffraction" enabled="T">1</param>
-    <param id="alpha" auto="T" enabled="T">87.3610067368</param>
-    <param id="beta" auto="T" enabled="T">-83.8587057026</param>
+    <param id="alpha" auto="F" enabled="T">87.3610067368</param>
+    <param id="beta" auto="F" enabled="T">-83.8587057026</param>
     <param id="lineSpacing" comment="constant" enabled="T">0</param>
     <param id="vlsParameter1" enabled="F">0</param>
     <param id="vlsParameter2" enabled="F">0</param>
