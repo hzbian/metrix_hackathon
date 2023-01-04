@@ -293,7 +293,7 @@
     <param id="geometricalShape" comment="rectangle" enabled="T">0</param>
     <param id="totalWidth" enabled="T">20</param>
     <param id="totalLength" enabled="T">100</param>
-    <param id="gratingMount" comment="SGM fix-focus" enabled="T">2</param>
+    <param id="gratingMount" comment="constant incidence angle" enabled="T">1</param>
     <param id="deviationAngle" enabled="F">10</param>
     <param id="entranceArmLength" enabled="T">6000</param>
     <param id="exitArmLength" enabled="T">11000</param>
