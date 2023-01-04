@@ -6,7 +6,7 @@ import h5py
 
 from torch.utils.data import Dataset
 
-from .torch_data_tools import h5_to_dict
+from .data_tools import h5_to_dict
 
 
 class RayDataset(Dataset):
