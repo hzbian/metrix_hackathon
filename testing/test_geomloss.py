@@ -12,10 +12,10 @@ from ray_tools.simulation.torch_datasets import RayDataset, extract_field
 import torch
 from torch.utils.data import WeightedRandomSampler
 
-import pykeops
-
-pykeops.test_numpy_bindings()
-pykeops.test_torch_bindings()
+# import pykeops
+#
+# pykeops.test_numpy_bindings()
+# pykeops.test_torch_bindings()
 
 from geomloss import SamplesLoss
 
