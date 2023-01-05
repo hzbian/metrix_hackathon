@@ -2,8 +2,6 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
-from ray_tools.simulation.torch_datasets import RayDataset
-
 
 class DefaultDataModule(pl.LightningDataModule):
 
@@ -57,11 +55,3 @@ class DefaultDataModule(pl.LightningDataModule):
         return DataLoader(self.test_dataset, shuffle=False, batch_size=self.batch_size_val,
                           num_workers=self.num_workers,
                           pin_memory=self.on_gpu)
-
-
-class RayDataModule(DefaultDataModule):
-    def __init__(self, h5_files, sub_groups, transform=None):
-        dataset = RayDataset(h5_files=h5_files,
-                             sub_groups=sub_groups,
-                             transform=transform)
-        super().__init__(dataset)
