@@ -1,6 +1,6 @@
 import os
 
-os.environ["WANDB_MODE"] = "offline"
+#os.environ["WANDB_MODE"] = "offline"
 import sys
 import math
 
@@ -14,9 +14,9 @@ import torch.nn as nn
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data.dataloader import DataLoader
 
+sys.path.insert(0, '../')
 from ray_tools.simulation.torch_datasets import RayDataset, MemoryDataset
 
-sys.path.insert(0, '../')
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.data.transform import Select
 
@@ -127,7 +127,7 @@ sub_groups = ['1e6/params',
 
 transform = Select(sub_groups)
 dataset = RayDataset(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
-dataset = MemoryDataset(dataset, load_len=100)
+# dataset = MemoryDataset(dataset, load_len=100)
 datamodule = DefaultDataModule(dataset=dataset)
 # datamodule.setup()
 # train_dataloader = datamodule.train_dataloader()
