@@ -1,6 +1,6 @@
 from typing import List, Callable, Any, Dict
 
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 import h5py
 
@@ -69,6 +69,25 @@ class RayDataset(Dataset):
 
     def __len__(self):
         return self._n_samples_total
+
+
+class MemoryDataset(Dataset):
+    def __init__(self, dataset: Dataset, load_len: int = None):
+        super().__init__()
+        if load_len is not None:
+            if load_len > len(dataset):
+                raise ValueError("Loaded length needs to be smaller or equal to dataset length.")
+        if load_len is None:
+            load_len = len(dataset)
+
+        self.load_len = load_len
+        self.memory_dataset = [dataset[i] for i in trange(load_len)]
+
+    def __getitem__(self, idx) -> object:
+        return self.memory_dataset[idx]
+
+    def __len__(self):
+        return self.load_len
 
 
 def extract_field(dataset: RayDataset, field: str) -> List[Any]:
