@@ -6,9 +6,13 @@ import torch
 from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
+from pytorch_lightning.loggers import WandbLogger
+
+from ray_tools.simulation.torch_datasets import RayDataset, MemoryDataset
+
 sys.path.insert(0, '../')
-from ray_nn.data.lightning_data_module import RayDataModule
-from ray_tools.simulation.torch_data_tools import Select
+from ray_nn.data.lightning_data_module import DefaultDataModule
+from ray_nn.data.transform import Select
 
 # Important fix to make custom collate_fn work
 # https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
@@ -99,7 +103,11 @@ sub_groups = ['1e6/params',
               '1e6/ray_output/ImagePlane/n_rays']
 
 transform = Select(sub_groups)
-datamodule = RayDataModule(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
+dataset = RayDataset(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
+dataset = MemoryDataset(dataset)
+datamodule = DefaultDataModule(dataset=dataset)
 model = MetrixRayCountPredictor()
-trainer = pl.Trainer(max_epochs=-1, accelerator="auto")
+
+wandb_logger = WandbLogger()
+trainer = pl.Trainer(max_epochs=-1, accelerator="auto", logger=wandb_logger)
 trainer.fit(model, datamodule=datamodule)
