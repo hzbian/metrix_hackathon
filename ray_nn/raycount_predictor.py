@@ -1,4 +1,6 @@
 import os
+
+os.environ["WANDB_MODE"] = "offline"
 import sys
 import math
 
@@ -7,6 +9,7 @@ from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
 from pytorch_lightning.loggers import WandbLogger
+from torch.utils.data.dataloader import DataLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset, MemoryDataset
 
@@ -20,6 +23,18 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 h5_path = os.path.join('../datasets/metrix_simulation/ray_enhance')
 h5_files: list[str] = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
+
+from tqdm import tqdm
+
+
+def get_max_y(dataloader: DataLoader):
+    max_y = 0
+    for batch in tqdm(dataloader):
+        _, y = batch
+        new_max = torch.max(y)
+        if new_max > max_y:
+            max_y = new_max
+    return max_y
 
 
 def create_sequential(input_length, output_length, layer_size, blow=0, shrink_factor="log"):
@@ -104,8 +119,13 @@ sub_groups = ['1e6/params',
 
 transform = Select(sub_groups)
 dataset = RayDataset(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
-dataset = MemoryDataset(dataset)
+dataset = MemoryDataset(dataset, load_len=100)
 datamodule = DefaultDataModule(dataset=dataset)
+datamodule.setup()
+train_dataloader = datamodule.train_dataloader()
+
+print(get_max_y(datamodule.train_dataloader()))
+
 model = MetrixRayCountPredictor()
 
 wandb_logger = WandbLogger()
