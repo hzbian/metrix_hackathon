@@ -5,6 +5,9 @@ import sys
 import math
 
 import torch
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
 from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
@@ -88,6 +91,7 @@ class MetrixRayCountPredictor(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
+        y = y / 234044  # Normalization ;)
         y_hat = self.forward(x)
         loss = nn.MSELoss()(y, y_hat)
         self.log('train_loss', loss)
@@ -95,6 +99,7 @@ class MetrixRayCountPredictor(pl.LightningModule):
 
     def validation_step(self, batch, batch_nb):
         x, y = batch
+        y = y / 234044  # Normalization ;)
         y_hat = self.forward(x)
         val_loss = nn.MSELoss()(y_hat, y)
         return {'s_val_loss': val_loss, 'y': y, 'y_hat': y_hat, 'x': x}
@@ -102,10 +107,13 @@ class MetrixRayCountPredictor(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         val_loss = torch.stack([x['s_val_loss'] for x in outputs]).mean()
         self.log('val_loss', val_loss)
-
-        # y = torch.cat([x['y'] for x in outputs])
-        # y_hat = torch.cat([x['y_hat'] for x in outputs])
-        # sample_idx = torch.cat([x['idx'] for x in outputs])
+        y = torch.cat([x['y'] for x in outputs])
+        y_hat = torch.cat([x['y_hat'] for x in outputs])
+        data = pd.DataFrame(torch.hstack((y, y_hat)), columns=['real', 'predicted'])
+        joint = sns.jointplot(data, kind='scatter')
+        plt.tight_layout()
+        plt.savefig('lightning_logs/jointplot.pdf')
+        plt.close(joint.fig)
 
     def configure_optimizers(self):
         if self.hparams.optimizer == 'adam':
@@ -121,10 +129,10 @@ transform = Select(sub_groups)
 dataset = RayDataset(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
 dataset = MemoryDataset(dataset, load_len=100)
 datamodule = DefaultDataModule(dataset=dataset)
-datamodule.setup()
-train_dataloader = datamodule.train_dataloader()
+# datamodule.setup()
+# train_dataloader = datamodule.train_dataloader()
 
-print(get_max_y(datamodule.train_dataloader()))
+# print(get_max_y(datamodule.train_dataloader()))
 
 model = MetrixRayCountPredictor()
 
