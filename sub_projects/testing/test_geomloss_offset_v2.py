@@ -1,6 +1,5 @@
 import os
 import sys
-from typing import Tuple
 
 sys.path.insert(0, '../../')
 
@@ -22,7 +21,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 torch.manual_seed(0)  # keep the random seed of torch fixed
 np.random.seed(0)  # keep the random seed of numpy fixed
 
-h5_path = os.path.join('../datasets/metrix_simulation/ray_test')
+h5_path = os.path.join('../../datasets/metrix_simulation/ray_test')
 h5_files = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
 
 dataset = RayDataset(h5_files=h5_files,

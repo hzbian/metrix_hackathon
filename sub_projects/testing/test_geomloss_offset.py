@@ -22,7 +22,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 torch.manual_seed(0)  # keep the random seed of torch fixed
 np.random.seed(0)  # keep the random seed of numpy fixed
 
-h5_path = os.path.join('../datasets/metrix_simulation/ray_test')
+h5_path = os.path.join('../../datasets/metrix_simulation/ray_test')
 h5_files = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
 
 dataset = RayDataset(h5_files=h5_files,
@@ -43,7 +43,7 @@ dataloader = DataLoader(dataset,
 
 data = next(iter(dataloader))
 
-target_supp, target_weights = HistToPointCloud()(
+target_supp, target_weights = HistToPointCloud(normalize_weights=True)(
     hist=HistSubsampler(factor=8)(data['1e6/ray_output/ImagePlane/ml/0']['histogram'].cuda()),
     x_lims=data['1e6/ray_output/ImagePlane/ml/0']['x_lims'].cuda(),
     y_lims=data['1e6/ray_output/ImagePlane/ml/0']['y_lims'].cuda())
@@ -57,7 +57,7 @@ class Shifter(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.shift = nn.Parameter(torch.zeros(1, 1, 2), requires_grad=True)
-        self._hist_to_pc = HistToPointCloud()
+        self._hist_to_pc = HistToPointCloud(normalize_weights=True)
         self._subsampler = HistSubsampler(factor=8)
 
     def forward(self, inp) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -75,7 +75,7 @@ model = Shifter().cuda()
 loss_func = SinkhornLoss(p=2, backend='online', reduction='mean')
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-n_iterations = 1
+n_iterations = 1000
 
 t = trange(n_iterations)
 

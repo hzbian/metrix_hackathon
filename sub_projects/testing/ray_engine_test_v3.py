@@ -23,11 +23,11 @@ exported_planes = ["U41_318eV",
                    "E2",
                    "ImagePlane"]
 
-engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
                    exported_planes=exported_planes,
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      docker_container_name='ray-ui-service-test',
-                                                     ray_workdir='../ray_workdir',
+                                                     ray_workdir='../../ray_workdir',
                                                      verbose=True),
                    num_workers=-1,
                    as_generator=False)

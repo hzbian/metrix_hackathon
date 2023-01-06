@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 # https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-h5_path = os.path.join('../datasets/metrix_simulation/ray_surrogate')
+h5_path = os.path.join('../../datasets/metrix_simulation/ray_surrogate')
 
 h5_files = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
 
