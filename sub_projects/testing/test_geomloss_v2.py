@@ -3,7 +3,7 @@ import sys
 
 from matplotlib import pyplot as plt
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 
 from ray_tools.simulation.torch_datasets import RayDataset, extract_field
 from ray_nn.utils.ray_processing import HistSubsampler, HistToPointCloud

@@ -1,6 +1,6 @@
 import sys
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI

@@ -5,7 +5,7 @@ from typing import Tuple
 import numpy as np
 from matplotlib import pyplot as plt
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 
 from ray_tools.simulation.torch_datasets import RayDataset, extract_field
 

@@ -2,7 +2,7 @@ import os
 import sys
 from typing import Tuple
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 
 from tqdm import tqdm
 

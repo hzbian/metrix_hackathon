@@ -4,7 +4,7 @@ import sys
 from raypyng import RMLFile
 from raypyng.xmltools import XmlElement
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 
 import matplotlib.pyplot as plt
 

@@ -1,6 +1,6 @@
 import sys
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 
 import numpy as np
 
@@ -9,19 +9,12 @@ import matplotlib.pyplot as plt
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
-from ray_tools.base.transform import Histogram, RayTransformConcat, RayTransformDummy
+from ray_tools.base.transform import Histogram, RayTransformConcat, MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 n_rays = 1e5
 
-exported_planes = ["U41_318eV",
-                   "ASBL",
-                   "M1-Cylinder",
-                   "Spherical Grating",
-                   "Exit Slit",
-                   "E1",
-                   "E2",
-                   "ImagePlane"]
+exported_planes = ["ImagePlane"]
 
 engine = RayEngine(rml_basefile='../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
                    exported_planes=exported_planes,
@@ -72,11 +65,14 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-n_examples = 20
+n_examples = 10
+dist_layers = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 transform = RayTransformConcat({
-    'hist': Histogram(n_bins=256, x_lims=(-.25, .25), y_lims=(-.25, .25), auto_center=True),
-    'hist2': Histogram(n_bins=1024),
-    'raw': RayTransformDummy(),
+    'ml': MultiLayer(dist_layers=dist_layers,
+                     copy_directions=False,
+                     transform=Histogram(n_bins=256)),
+    'hist': Histogram(n_bins=1024),
+
 })
 
 result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
@@ -85,21 +81,14 @@ result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
 show_examples = [7]  # range(n_examples)
 
 for idx in show_examples:
-    for exported_plane in exported_planes:
-        plt.figure()
-        plt.title(exported_plane + ' ' + str(idx))
-        plt.scatter(result[idx]['ray_output'][exported_plane]['raw'].x_loc,
-                    result[idx]['ray_output'][exported_plane]['raw'].y_loc,
-                    s=0.01)
-        plt.show()
-
+    for dist in dist_layers:
         plt.figure(figsize=(10, 10))
-        plt.title(exported_plane + ' ' + str(idx))
-        plt.imshow(np.fliplr(result[idx]['ray_output'][exported_plane]['hist']['histogram'].T),
+        plt.title(str(dist) + ' ' + str(idx))
+        plt.imshow(np.flipud(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['histogram'].T),
                    cmap='Greys')
-        print(result[idx]['ray_output'][exported_plane]['hist']['n_rays'],
-              result[idx]['ray_output'][exported_plane]['hist']['x_lims'],
-              result[idx]['ray_output'][exported_plane]['hist']['y_lims'])
+        plt.xlabel(str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['n_rays']) + ' ' +
+                   str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['x_lims']) + ' ' +
+                   str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['y_lims']))
         plt.show()
 
 engine.ray_backend.kill()
