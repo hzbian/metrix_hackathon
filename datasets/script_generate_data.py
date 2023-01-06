@@ -8,7 +8,7 @@ from ray_tools.simulation.data_tools import RandomRayDatasetGenerator
 from ray_tools.base.parameter_builder import build_parameter_grid
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-import metrix_simulation.config_ray_enhance_v2 as CFG
+import metrix_simulation.config_ray_enhance_final as CFG
 
 os.makedirs(CFG.H5_DATADIR, exist_ok=True)
 

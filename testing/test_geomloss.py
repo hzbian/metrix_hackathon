@@ -10,7 +10,10 @@ sys.path.insert(0, '../')
 from ray_tools.simulation.torch_datasets import RayDataset, extract_field
 
 import torch
+<<<<<<< HEAD
 import torch.nn.functional as F
+=======
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
 from torch.utils.data import WeightedRandomSampler
 
 # import pykeops
@@ -20,6 +23,10 @@ from torch.utils.data import WeightedRandomSampler
 
 from geomloss import SamplesLoss
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
 # Important fix to make custom collate_fn work
 # https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -35,7 +42,10 @@ dataset = RayDataset(h5_files=h5_files[0:1],
                                  '1e4/ray_output/ImagePlane/hist/n_rays',
                                  '1e4/ray_output/ImagePlane/raw',
                                  '1e6/ray_output/ImagePlane/hist',
+<<<<<<< HEAD
                                  '1e6/ray_output/ImagePlane/ml/0',
+=======
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
                                  ])
 
 weights = extract_field(dataset, '1e4/ray_output/ImagePlane/hist/n_rays')
@@ -48,9 +58,15 @@ idx1 = next(sampler)
 idx2 = next(sampler)
 
 
+<<<<<<< HEAD
 def plot_data(data, weights=None):
     plt.figure()
     plt.scatter(data[:, 0], data[:, 1], s=2.0, c=weights)
+=======
+def plot_data(data):
+    plt.figure()
+    plt.scatter(data[:, 0], data[:, 1], s=0.1)
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
     plt.show()
 
 
@@ -61,12 +77,15 @@ s1_img = torch.tensor(dataset[idx1]['1e6/ray_output/ImagePlane/hist']['histogram
 s1_x_lims = torch.tensor(dataset[idx1]['1e6/ray_output/ImagePlane/hist']['x_lims'])
 s1_y_lims = torch.tensor(dataset[idx1]['1e6/ray_output/ImagePlane/hist']['y_lims'])
 
+<<<<<<< HEAD
 pooler = torch.nn.AvgPool2d(kernel_size=8, divisor_override=1)
 s1_img_small = pooler(
     torch.tensor(dataset[idx1]['1e6/ray_output/ImagePlane/ml/0']['histogram']).unsqueeze(0)).squeeze(0)
 s1_x_lims_small = torch.tensor(dataset[idx1]['1e6/ray_output/ImagePlane/ml/0']['x_lims'])
 s1_y_lims_small = torch.tensor(dataset[idx1]['1e6/ray_output/ImagePlane/ml/0']['y_lims'])
 
+=======
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
 s2_raw = torch.tensor(np.c_[
                           dataset[idx2]['1e4/ray_output/ImagePlane/raw']['x_loc'],
                           dataset[idx2]['1e4/ray_output/ImagePlane/raw']['y_loc']])
@@ -75,7 +94,11 @@ s2_x_lims = torch.tensor(dataset[idx2]['1e6/ray_output/ImagePlane/hist']['x_lims
 s2_y_lims = torch.tensor(dataset[idx2]['1e6/ray_output/ImagePlane/hist']['y_lims'])
 
 # plt.figure(figsize=(10, 10))
+<<<<<<< HEAD
 # plt.imshow(s1_img_small.T, cmap='Greys')
+=======
+# plt.imshow(s1_img, cmap='Greys', vmin=0.0, vmax=1.0)
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
 # plt.show()
 
 plot_data(s1_raw)
@@ -91,6 +114,7 @@ def hist_to_pc(hist: torch.Tensor, x_lims: Tuple[float, float], y_lims: Tuple[fl
     coord_x = torch.linspace(x_lims[0] + coord_x_width / 2., x_lims[1] - coord_x_width / 2., dim_x)
     coord_y = torch.linspace(y_lims[0] + coord_y_width / 2., y_lims[1] - coord_y_width / 2., dim_y)
     grid_x, grid_y = torch.meshgrid(coord_x, coord_y, indexing='ij')
+<<<<<<< HEAD
     grid_x = grid_x.to(hist.device) * torch.clamp(hist, 0.0, 1.0)
     grid_y = grid_y.to(hist.device) * torch.clamp(hist, 0.0, 1.0)
     pc_x = grid_x[hist != 0].flatten()
@@ -131,3 +155,20 @@ def sample_from_hist(hist: torch.Tensor, x_lims: Tuple[float, float], y_lims: Tu
 #
 # plot_data(s1_resample.cpu())
 # plot_data(s2_resample.cpu())
+=======
+    grid_x = grid_x * torch.clamp(hist, 0.0, 1.0)
+    grid_y = grid_y * torch.clamp(hist, 0.0, 1.0)
+    pc_x = grid_x[hist != 0].flatten()
+    pc_y = grid_y[hist != 0].flatten()
+    pc_weights = hist[hist != 0].flatten
+    return torch.stack([pc_x, pc_y], dim=1), pc_weights
+
+
+s1_raw_recov, s1_weights = hist_to_pc(s1_img, s1_x_lims, s1_y_lims)
+plot_data(s1_raw_recov.detach())
+s2_raw_recov, s2_weights = hist_to_pc(s2_img, s2_x_lims, s2_y_lims)
+plot_data(s2_raw_recov.detach())
+
+print(loss(s1_raw, s2_raw))
+print(loss(s1_raw_recov.cuda(), s2_raw_recov.cuda()))
+>>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
