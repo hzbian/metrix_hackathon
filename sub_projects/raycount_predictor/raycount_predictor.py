@@ -14,7 +14,7 @@ import torch.nn as nn
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data.dataloader import DataLoader
 
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 from ray_tools.simulation.torch_datasets import RayDataset, MemoryDataset
 
 from ray_nn.data.lightning_data_module import DefaultDataModule
@@ -24,7 +24,7 @@ from ray_nn.data.transform import Select
 # https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-h5_path = os.path.join('../datasets/metrix_simulation/ray_enhance')
+h5_path = os.path.join('../../datasets/metrix_simulation/ray_enhance')
 h5_files: list[str] = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.endswith('.h5')]
 
 from tqdm import tqdm
