@@ -12,18 +12,11 @@ from torch import optim
 import pytorch_lightning as pl
 import torch.nn as nn
 from pytorch_lightning.loggers import WandbLogger
-<<<<<<< HEAD
-
-from ray_tools.simulation.torch_datasets import RayDataset, MemoryDataset
-
-sys.path.insert(0, '../')
-=======
 from torch.utils.data.dataloader import DataLoader
 
 sys.path.insert(0, '../')
 from ray_tools.simulation.torch_datasets import RayDataset, MemoryDataset
 
->>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.data.transform import Select
 
@@ -134,14 +127,6 @@ sub_groups = ['1e6/params',
 
 transform = Select(sub_groups)
 dataset = RayDataset(h5_files=h5_files, sub_groups=sub_groups, transform=transform)
-<<<<<<< HEAD
-dataset = MemoryDataset(dataset)
-datamodule = DefaultDataModule(dataset=dataset)
-model = MetrixRayCountPredictor()
-
-wandb_logger = WandbLogger()
-trainer = pl.Trainer(max_epochs=-1, accelerator="auto", logger=wandb_logger)
-=======
 # dataset = MemoryDataset(dataset, load_len=100)
 datamodule = DefaultDataModule(dataset=dataset)
 # datamodule.setup()
@@ -153,5 +138,4 @@ model = MetrixRayCountPredictor()
 
 wandb_logger = WandbLogger()
 trainer = pl.Trainer(max_epochs=-1, accelerator="auto", devices=1, logger=wandb_logger)
->>>>>>> 51a708f02eee73ff34e77842b7d540ade7946b85
 trainer.fit(model, datamodule=datamodule)
