@@ -27,10 +27,11 @@ class HistToPointCloud(nn.Module):
         coord_x_width = (x_lims[:, 1] - x_lims[:, 0]) / dim_x
         coord_y_width = (y_lims[:, 1] - y_lims[:, 0]) / dim_y
 
-        unit_grid = torch.linspace(0.0, 1.0, dim_x, device=hist.device, dtype=hist.dtype).view(1, -1)
-        coord_x = unit_grid * coord_x_width.view(-1, 1) * (dim_x - 1)
+        unit_grid_x = torch.linspace(0.0, 1.0, dim_x, device=hist.device, dtype=hist.dtype).view(1, -1)
+        coord_x = unit_grid_x * coord_x_width.view(-1, 1) * (dim_x - 1)
         coord_x = coord_x + x_lims[:, 0].view(-1, 1) + coord_x_width.view(-1, 1) / 2.
-        coord_y = unit_grid * coord_y_width.view(-1, 1) * (dim_y - 1)
+        unit_grid_y = torch.linspace(0.0, 1.0, dim_y, device=hist.device, dtype=hist.dtype).view(1, -1)
+        coord_y = unit_grid_y * coord_y_width.view(-1, 1) * (dim_y - 1)
         coord_y = coord_y + y_lims[:, 0].view(-1, 1) + coord_y_width.view(-1, 1) / 2.
 
         mesh_x = coord_x.unsqueeze(2)
