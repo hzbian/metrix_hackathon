@@ -45,7 +45,7 @@ class RayDataset(Dataset):
         for h5_file_obj in self.h5_files_obj:
             h5_file_obj.close()
 
-    def __getitem__(self, idx, sub_groups: List[str] = None, nested_groups: bool = None) -> Dict[str, Any]:
+    def __getitem__(self, idx: int, sub_groups: List[str] = None, nested_groups: bool = None) -> Dict[str, Any]:
         sub_groups = sub_groups if sub_groups is not None else self.sub_groups
         nested_groups = nested_groups if nested_groups is not None else self.nested_groups
 
@@ -67,7 +67,7 @@ class RayDataset(Dataset):
 
         return self.transform(data) if self.transform else data
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self._n_samples_total
 
 
@@ -77,16 +77,16 @@ class MemoryDataset(Dataset):
         if load_len is not None:
             if load_len > len(dataset):
                 raise ValueError("Loaded length needs to be smaller or equal to dataset length.")
-        if load_len is None:
+        else:
             load_len = len(dataset)
 
         self.load_len = load_len
-        self.memory_dataset = [dataset[i] for i in trange(load_len)]
+        self.memory_dataset = [dataset[idx] for idx in trange(load_len)]
 
-    def __getitem__(self, idx) -> object:
+    def __getitem__(self, idx: int) -> Any:
         return self.memory_dataset[idx]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.load_len
 
 
