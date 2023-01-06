@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 from torch import nn
 
@@ -9,16 +11,17 @@ class HistSubsampler(nn.Module):
         self.factor = factor
         self._subsampler = nn.AvgPool2d(kernel_size=factor, divisor_override=1)
 
-    def forward(self, hist: torch.Tensor):
+    def forward(self, hist: torch.Tensor) -> torch.Tensor:
         return self._subsampler(hist)
 
 
 class HistToPointCloud(nn.Module):
 
-    def __init__(self) -> None:
+    def __init__(self, as_sequence: bool = True) -> None:
         super().__init__()
+        self.as_sequence = as_sequence
 
-    def forward(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor):
+    def forward(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         bs, dim_x, dim_y = hist.shape
 
         coord_x_width = (x_lims[:, 1] - x_lims[:, 0]) / dim_x
@@ -48,19 +51,25 @@ class HistToPointCloud(nn.Module):
         mesh_x = coord_x.unsqueeze(2)
         mesh_y = coord_y.unsqueeze(1)
 
-        grid_x = mesh_x * torch.clamp(hist, 0.0, 1.0)
-        grid_y = mesh_y * torch.clamp(hist, 0.0, 1.0)
+        if self.as_sequence:
+            grid_x = mesh_x * torch.clamp(hist, 0.0, 1.0)
+            grid_y = mesh_y * torch.clamp(hist, 0.0, 1.0)
 
-        idx_nonzero = hist != 0
+            idx_nonzero = hist != 0
 
-        # TODO: Can we make this operation batched (including padding)?
-        pc_x = [grid_x[idx, ...][idx_nonzero[idx, ...]].flatten() for idx in range(bs)]
-        pc_y = [grid_y[idx, ...][idx_nonzero[idx, ...]].flatten() for idx in range(bs)]
-        pc_weights = [hist[idx, ...][idx_nonzero[idx, ...]].flatten() for idx in range(bs)]
-        pc_len = [len(w) for w in pc_weights]
+            pc_x = [grid_x[idx, ...][idx_nonzero[idx, ...]].flatten() for idx in range(bs)]
+            pc_y = [grid_y[idx, ...][idx_nonzero[idx, ...]].flatten() for idx in range(bs)]
+            pc_weights = [hist[idx, ...][idx_nonzero[idx, ...]].flatten() for idx in range(bs)]
+            pc_lens = [len(w) for w in pc_weights]
 
-        pc_x = torch.nn.utils.rnn.pad_sequence(pc_x, batch_first=True)
-        pc_y = torch.nn.utils.rnn.pad_sequence(pc_y, batch_first=True)
-        pc_weights = torch.nn.utils.rnn.pad_sequence(pc_weights, batch_first=True)
+            pc_x = torch.nn.utils.rnn.pad_sequence(pc_x, batch_first=True)
+            pc_y = torch.nn.utils.rnn.pad_sequence(pc_y, batch_first=True)
+            pc_weights = torch.nn.utils.rnn.pad_sequence(pc_weights, batch_first=True)
 
-        return torch.stack([pc_x, pc_y], dim=-1), pc_weights, pc_len
+            return torch.stack([pc_x, pc_y], dim=-1), pc_weights, pc_lens
+        else:
+            pc_x = (mesh_x * torch.ones_like(mesh_y)).flatten(start_dim=1)
+            pc_y = (mesh_y * torch.ones_like(mesh_x)).flatten(start_dim=1)
+            pc_weights = hist.flatten(start_dim=1)
+
+            return torch.stack([pc_x, pc_y], dim=-1), pc_weights

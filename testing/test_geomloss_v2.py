@@ -85,13 +85,27 @@ sample_weights_1e4_ = [sample_weights_1e4[idx, :lens[idx]] for idx in range(batc
 
 # ------------
 
+sample_recov_masked, sample_weights_masked = HistToPointCloud(as_sequence=False)(
+    hist=HistSubsampler(factor=32)(sample_hist),
+    x_lims=sample_x_lims,
+    y_lims=sample_y_lims)
+
+sample_weights_masked = sample_weights_masked / sample_weights_masked.sum(dim=1, keepdim=True)
+
+sample_recov_masked_ = [sample_recov_masked[idx, sample_weights_masked[idx, ...] != 0] for idx in range(batch_size)]
+sample_weights_masked_ = [sample_weights_masked[idx, sample_weights_masked[idx, ...] != 0] for idx in range(batch_size)]
+
+# ------------
+
 plot_data(sample_recov_[0].detach().cpu(), weights=sample_weights_[0].detach().cpu())
 plot_data(sample_recov_small_[0].detach().cpu(), weights=sample_weights_small_[0].detach().cpu())
+plot_data(sample_recov_masked_[0].detach().cpu(), weights=sample_weights_masked_[0].detach().cpu())
 
 plot_data(sample_recov_1e4_[0].detach().cpu(), weights=sample_weights_1e4_[0].detach().cpu())
 
 plot_data(sample_recov_[1].detach().cpu(), weights=sample_weights_[1].detach().cpu())
 plot_data(sample_recov_small_[1].detach().cpu(), weights=sample_weights_small_[1].detach().cpu())
+plot_data(sample_recov_masked_[1].detach().cpu(), weights=sample_weights_masked_[1].detach().cpu())
 
 # ------------
 
@@ -104,6 +118,11 @@ print(loss(sample_recov_small,
            sample_recov_small,
            sample_weights_small,
            sample_weights_small))
+
+print(loss(sample_recov_small,
+           sample_recov_masked,
+           sample_weights_small,
+           sample_weights_masked))
 
 print(loss(sample_recov_small,
            sample_recov_1e4,
