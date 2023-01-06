@@ -13,8 +13,18 @@ from .parameter import RayParameterContainer
 from .transform import RayTransform
 
 
-
 class RayEngine:
+    """
+    Creates an engine to run raytracing simulations.
+    :param rml_basefile: RML-file to be used as beamline template.
+    :param exported_planes: Image planes and component outputs to be exported.
+    :param ray_backend: RayBackend object that actually runs the simulation.
+    :param num_workers: Number of parallel workers for runs (multi-threading, NOT multi-processing).
+        Use 1 for no single-threading.
+    :param as_generator: If True, :func:`RayEngine.run` returns a generator so that runs are performs when iterating
+        over it.
+    :param verbose:
+    """
 
     def __init__(self,
                  rml_basefile: str,
@@ -32,6 +42,7 @@ class RayEngine:
         self.as_generator = as_generator
         self.verbose = verbose
 
+        # internal RMLFile object
         self._raypyng_rml = RMLFile(self.rml_basefile)
         self.template = self._raypyng_rml.beamline
 
@@ -39,19 +50,35 @@ class RayEngine:
             param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
             transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
             ) -> Union[Dict, Iterable[Dict], List[Dict]]:
-
+        """
+        Runs simulation for given (Iterable of) parameter containers.
+        :param param_containers: (Iterable of) :class:`ray_tools.base.parameter.RayParameterContainer` to be processed.
+        :param transforms: :class:`ray_tools.base.transform.RayTransform` to be used.
+            If a singleton, the same transform is applied everywhere.
+            If Iterable of RayTransform (same length a param_containers), individual transforms are applied to each
+            parameter container. Transform can be also dicts of RayTransform specifying with transform to apply to
+            which exported planes (keys must be same as ``RayEngine.exported_planes``).
+        :return: (Iterable of) dict with ray outputs (field ``ray_output``,
+            see also :class:`ray_tools.base.backend.RayBackend`) and used parameters for simulation
+            (field ``param_container_dict``, dict with same keys as in ``param_containers``).
+        """
+        # wrap param_containers into list if it was a singleton
         if isinstance(param_containers, RayParameterContainer):
             param_containers = [param_containers]
 
+        # convert transforms into list if it was a singleton
         if transforms is None or isinstance(transforms, (RayTransform, dict)):
             transforms = len(param_containers) * [transforms]
 
+        # Iterable of arguments used for RayEngine._run_func
         _iter = ((str(run_id), run_params, transform) for run_id, (run_params, transform) in
                  enumerate(zip(param_containers, transforms)))
         if not self.as_generator:
+            # multi-threading (if self.num_workers > 1)
             worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
             jobs = (delayed(self._run_func)(*item) for item in _iter)
             result = worker(jobs)
+            # extract only element if param_containers was a singleton
             return result if len(result) > 1 else result[0]
         else:
             return (self._run_func(*item) for item in _iter)
@@ -61,20 +88,27 @@ class RayEngine:
                   param_container: RayParameterContainer,
                   transform: RayTransformType = None,
                   ) -> Dict:
+        """
+        This method performs the actual simulation run.
+        """
         result = {'param_container_dict': dict(), 'ray_output': None}
 
+        # create a copy of RML template to avoid problems with multi-threading
         raypyng_rml_work = RMLFile(self.rml_basefile)
         template_work = raypyng_rml_work.beamline
+        # write values in param_container to RML template and param_container_dict
         for key, param in param_container.items():
             value = param.get_value()
             element = self._key_to_element(key, template=template_work)
             element.cdata = str(value)
             result['param_container_dict'][key] = value
 
+        # call the backend to perform the run
         result['ray_output'] = self.ray_backend.run(raypyng_rml=raypyng_rml_work,
                                                     run_id=run_id,
                                                     exported_planes=self.exported_planes)
 
+        # apply transform (to each exported plane)
         if transform is not None:
             for plane in self.exported_planes:
                 t = transform if isinstance(transform, RayTransform) else transform[plane]
@@ -82,6 +116,9 @@ class RayEngine:
         return result
 
     def _key_to_element(self, key: str, template: XmlElement = None) -> XmlElement:
+        """
+        Helper function that retrieves an XML-subelement given a key (same format as in RayParameterContainer).
+        """
         if template is None:
             template = self.template
         component, param = key.split('.')

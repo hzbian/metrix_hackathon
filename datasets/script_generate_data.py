@@ -5,7 +5,7 @@ sys.path.insert(0, '../')
 
 from ray_tools.base.engine import RayEngine
 from ray_tools.simulation.data_tools import RandomRayDatasetGenerator
-from ray_tools.base.parameter_builder import build_parameter_grid
+from ray_tools.base.parameter import build_parameter_grid
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
 import metrix_simulation.config_ray_enhance_final as CFG

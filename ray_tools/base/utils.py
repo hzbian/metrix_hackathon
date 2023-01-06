@@ -6,6 +6,10 @@ import torch
 
 
 class RandomGenerator:
+    """
+    Container for random generators (rg_random: random / rg_numpy: numpy / rg_torch: pytorch)
+    :param seed: Random seed to be used for all generators.
+    """
 
     def __init__(self, seed: int = None):
         # dummies
@@ -17,6 +21,9 @@ class RandomGenerator:
         self.set_seed(seed)
 
     def set_seed(self, seed: int = None):
+        """
+        Creates random generators with given seed. Use random seed if None.
+        """
         if seed is None:
             self.seed = random.randrange(sys.maxsize)
         else:
