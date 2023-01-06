@@ -53,100 +53,80 @@ sample_hist = item['1e6/ray_output/ImagePlane/hist']['histogram'].cuda()
 sample_x_lims = item['1e6/ray_output/ImagePlane/hist']['x_lims'].cuda()
 sample_y_lims = item['1e6/ray_output/ImagePlane/hist']['y_lims'].cuda()
 
-sample_recov, sample_weights, lens = HistToPointCloud()(
+sample_supp, sample_weights = HistToPointCloud()(
     hist=sample_hist,
     x_lims=sample_x_lims,
     y_lims=sample_y_lims)
 
 sample_weights = sample_weights / sample_weights.sum(dim=1, keepdim=True)
 
-sample_recov_ = [sample_recov[idx, :lens[idx]] for idx in range(batch_size)]
-sample_weights_ = [sample_weights[idx, :lens[idx]] for idx in range(batch_size)]
+sample_supp_ = [sample_supp[idx, sample_weights[idx, ...] != 0] for idx in range(batch_size)]
+sample_weights_ = [sample_weights[idx, sample_weights[idx, ...] != 0] for idx in range(batch_size)]
 
-sample_recov_small, sample_weights_small, lens_small = HistToPointCloud()(
+sample_supp_small, sample_weights_small = HistToPointCloud()(
     hist=HistSubsampler(factor=32)(sample_hist),
     x_lims=sample_x_lims,
     y_lims=sample_y_lims)
 
 sample_weights_small = sample_weights_small / sample_weights_small.sum(dim=1, keepdim=True)
 
-sample_recov_small_ = [sample_recov_small[idx, :lens_small[idx]] for idx in range(batch_size)]
-sample_weights_small_ = [sample_weights_small[idx, :lens_small[idx]] for idx in range(batch_size)]
+sample_supp_small_ = [sample_supp_small[idx, sample_weights_small[idx, ...] != 0] for idx in range(batch_size)]
+sample_weights_small_ = [sample_weights_small[idx, sample_weights_small[idx, ...] != 0] for idx in range(batch_size)]
 
-sample_recov_1e4, sample_weights_1e4, lens = HistToPointCloud()(
+sample_supp_1e4, sample_weights_1e4 = HistToPointCloud()(
     hist=HistSubsampler(factor=32)(item['1e4/ray_output/ImagePlane/hist']['histogram'].cuda()),
     x_lims=item['1e4/ray_output/ImagePlane/hist']['x_lims'].cuda(),
     y_lims=item['1e4/ray_output/ImagePlane/hist']['y_lims'].cuda())
 
 sample_weights_1e4 = sample_weights_1e4 / sample_weights_1e4.sum(dim=1, keepdim=True)
 
-sample_recov_1e4_ = [sample_recov_1e4[idx, :lens[idx]] for idx in range(batch_size)]
-sample_weights_1e4_ = [sample_weights_1e4[idx, :lens[idx]] for idx in range(batch_size)]
+sample_supp_1e4_ = [sample_supp_1e4[idx, sample_weights_1e4[idx, ...] != 0] for idx in range(batch_size)]
+sample_weights_1e4_ = [sample_weights_1e4[idx, sample_weights_1e4[idx, ...] != 0] for idx in range(batch_size)]
 
 # ------------
 
-sample_recov_masked, sample_weights_masked = HistToPointCloud(as_sequence=False)(
-    hist=HistSubsampler(factor=32)(sample_hist),
-    x_lims=sample_x_lims,
-    y_lims=sample_y_lims)
+plot_data(sample_supp_[0].detach().cpu(), weights=sample_weights_[0].detach().cpu())
+plot_data(sample_supp_small_[0].detach().cpu(), weights=sample_weights_small_[0].detach().cpu())
+plot_data(sample_supp_1e4_[0].detach().cpu(), weights=sample_weights_1e4_[0].detach().cpu())
 
-sample_weights_masked = sample_weights_masked / sample_weights_masked.sum(dim=1, keepdim=True)
-
-sample_recov_masked_ = [sample_recov_masked[idx, sample_weights_masked[idx, ...] != 0] for idx in range(batch_size)]
-sample_weights_masked_ = [sample_weights_masked[idx, sample_weights_masked[idx, ...] != 0] for idx in range(batch_size)]
-
-# ------------
-
-plot_data(sample_recov_[0].detach().cpu(), weights=sample_weights_[0].detach().cpu())
-plot_data(sample_recov_small_[0].detach().cpu(), weights=sample_weights_small_[0].detach().cpu())
-plot_data(sample_recov_masked_[0].detach().cpu(), weights=sample_weights_masked_[0].detach().cpu())
-
-plot_data(sample_recov_1e4_[0].detach().cpu(), weights=sample_weights_1e4_[0].detach().cpu())
-
-plot_data(sample_recov_[1].detach().cpu(), weights=sample_weights_[1].detach().cpu())
-plot_data(sample_recov_small_[1].detach().cpu(), weights=sample_weights_small_[1].detach().cpu())
-plot_data(sample_recov_masked_[1].detach().cpu(), weights=sample_weights_masked_[1].detach().cpu())
+plot_data(sample_supp_[1].detach().cpu(), weights=sample_weights_[1].detach().cpu())
+plot_data(sample_supp_small_[1].detach().cpu(), weights=sample_weights_small_[1].detach().cpu())
 
 # ------------
 
 loss = SinkhornLoss(p=2, backend='online', reduction=None)
 
 sample_com = torch.unsqueeze(torch.stack([
-    sample_recov_small_[idx].sum(dim=0) / sample_recov_small_[idx].shape[0] for idx in range(batch_size)]), dim=1)
+    sample_supp_small_[idx].sum(dim=0) / sample_supp_small_[idx].shape[0] for idx in range(batch_size)]), dim=1)
 
-print(loss(sample_recov_small,
-           sample_recov_small,
+print(loss(sample_supp_small,
+           sample_supp_small,
            sample_weights_small,
            sample_weights_small))
 
-print(loss(sample_recov_small,
-           sample_recov_masked,
-           sample_weights_small,
-           sample_weights_masked))
-
-print(loss(sample_recov_small,
-           sample_recov_1e4,
+print(loss(sample_supp_small,
+           sample_supp_1e4,
            sample_weights_small,
            sample_weights_1e4))
 
-# for idx in range(len(sample_recov)):
-#     print(loss(sample_recov[idx, ...],
-#                sample_recov_small[idx, ...],
+# for idx in range(len(sample_supp)):
+#     print(loss(sample_supp[idx, ...],
+#                sample_supp_small[idx, ...],
 #                sample_weights[idx, ...],
 #                sample_weights_small[idx, ...]))
-#     print(loss(sample_recov_[idx],
-#                sample_recov_small_[idx],
+#     print(loss(sample_supp_[idx],
+#                sample_supp_small_[idx],
 #                sample_weights_[idx],
 #                sample_weights_small_[idx]))
 
-print(loss(sample_recov_small[0:1, ...].expand(batch_size, -1, -1).clone(),
-           sample_recov_small,
+print(loss(sample_supp_small[0:1, ...].expand(batch_size, -1, -1).clone(),
+           sample_supp_small,
            sample_weights_small[0:1, ...].expand(batch_size, -1).clone(),
            sample_weights_small))
 
-sample_recov_small = sample_recov_small - sample_com
+sample_supp_small = sample_supp_small - sample_com
 
-print(loss(sample_recov_small[0:1, ...].expand(batch_size, -1, -1).clone(),
-           sample_recov_small,
+print(loss(sample_supp_small[0:1, ...].expand(batch_size, -1, -1).clone(),
+           sample_supp_small,
            sample_weights_small[0:1, ...].expand(batch_size, -1).clone(),
            sample_weights_small))
