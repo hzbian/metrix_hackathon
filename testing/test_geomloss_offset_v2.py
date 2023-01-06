@@ -27,7 +27,8 @@ h5_files = [os.path.join(h5_path, file) for file in os.listdir(h5_path) if file.
 
 dataset = RayDataset(h5_files=h5_files,
                      nested_groups=False,
-                     sub_groups=['1e6/ray_output/ImagePlane/ml/0'])
+                     sub_groups=['1e4/ray_output/ImagePlane/ml/0',
+                                 '1e6/ray_output/ImagePlane/ml/0'])
 
 weights = extract_field(dataset, '1e6/ray_output/ImagePlane/ml/0/n_rays')
 
@@ -43,7 +44,7 @@ dataloader = DataLoader(dataset,
 
 device = torch.device('cuda:1')
 
-hist_to_pc = HistToPointCloud()
+hist_to_pc = HistToPointCloud(normalize_weights=True)
 subsampler = HistSubsampler(factor=8)
 
 tar_shift = torch.tensor([1.0, 1.0])
@@ -72,9 +73,9 @@ for epoch in range(num_epochs):
              total=len(dataloader))
     for idx, data in t:
         inp_supp, inp_weights = hist_to_pc(
-            hist=subsampler(data['1e6/ray_output/ImagePlane/ml/0']['histogram'].to(device)),
-            x_lims=data['1e6/ray_output/ImagePlane/ml/0']['x_lims'].to(device),
-            y_lims=data['1e6/ray_output/ImagePlane/ml/0']['y_lims'].to(device))
+            hist=subsampler(data['1e4/ray_output/ImagePlane/ml/0']['histogram'].to(device)),
+            x_lims=data['1e4/ray_output/ImagePlane/ml/0']['x_lims'].to(device),
+            y_lims=data['1e4/ray_output/ImagePlane/ml/0']['y_lims'].to(device))
 
         tar_supp, tar_weights = hist_to_pc(
             hist=subsampler(data['1e6/ray_output/ImagePlane/ml/0']['histogram'].to(device)),
