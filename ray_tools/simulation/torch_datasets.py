@@ -81,6 +81,7 @@ class MemoryDataset(Dataset):
             load_len = len(dataset)
 
         self.load_len = load_len
+        # TODO: **kwargs for __getitem__
         self.memory_dataset = [dataset[idx] for idx in trange(load_len)]
 
     def __getitem__(self, idx: int) -> Any:
