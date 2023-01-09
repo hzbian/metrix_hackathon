@@ -17,9 +17,8 @@ class HistSubsampler(nn.Module):
 
 class HistToPointCloud(nn.Module):
 
-    def __init__(self, normalize_weights: bool = False) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.normalize_weights = normalize_weights
 
     def forward(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         _, dim_x, dim_y = hist.shape
@@ -42,10 +41,5 @@ class HistToPointCloud(nn.Module):
         pc_x = mesh_x.flatten(start_dim=1)
         pc_y = mesh_y.flatten(start_dim=1)
         pc_weights = hist.flatten(start_dim=1)
-
-        if self.normalize_weights:
-            mass = pc_weights.sum(dim=1, keepdim=True)
-            mass[mass == 0.0] = 1.0
-            pc_weights = pc_weights / mass
 
         return torch.stack([pc_x, pc_y], dim=-1), pc_weights

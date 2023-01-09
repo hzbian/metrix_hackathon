@@ -43,7 +43,7 @@ dataloader = DataLoader(dataset,
 
 data = next(iter(dataloader))
 
-target_supp, target_weights = HistToPointCloud(normalize_weights=True)(
+target_supp, target_weights = HistToPointCloud()(
     hist=HistSubsampler(factor=8)(data['1e6/ray_output/ImagePlane/ml/0']['histogram'].cuda()),
     x_lims=data['1e6/ray_output/ImagePlane/ml/0']['x_lims'].cuda(),
     y_lims=data['1e6/ray_output/ImagePlane/ml/0']['y_lims'].cuda())
@@ -57,7 +57,7 @@ class Shifter(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.shift = nn.Parameter(torch.zeros(1, 1, 2), requires_grad=True)
-        self._hist_to_pc = HistToPointCloud(normalize_weights=True)
+        self._hist_to_pc = HistToPointCloud()
         self._subsampler = HistSubsampler(factor=8)
 
     def forward(self, inp) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -72,7 +72,7 @@ class Shifter(nn.Module):
 
 
 model = Shifter().cuda()
-loss_func = SinkhornLoss(p=2, backend='online', reduction='mean')
+loss_func = SinkhornLoss(p=2, normalize_weights=True, backend='online', reduction='mean')
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
 n_iterations = 1000

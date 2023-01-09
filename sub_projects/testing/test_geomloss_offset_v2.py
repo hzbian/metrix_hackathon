@@ -43,7 +43,7 @@ dataloader = DataLoader(dataset,
 
 device = torch.device('cuda:1')
 
-hist_to_pc = HistToPointCloud(normalize_weights=True)
+hist_to_pc = HistToPointCloud()
 subsampler = HistSubsampler(factor=8)
 
 tar_shift = torch.tensor([1.0, 1.0])
@@ -61,7 +61,7 @@ class Shifter(nn.Module):
 
 
 model = Shifter().to(device)
-loss_func = SinkhornLoss(p=2, backend='online', reduction='mean').to(device)
+loss_func = SinkhornLoss(p=2, normalize_weights=True, backend='online', reduction='mean').to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
 num_epochs = 10

@@ -7,7 +7,7 @@ from ray_tools.base.transform import Histogram, RayTransformConcat, ToDict, Mult
 DATASET_NAME = 'ray_enhance_final'
 H5_MAX_SIZE = 10000
 BATCH_SIZE = -1
-H5_IDX_RANGE = range(100)
+H5_IDX_RANGE = range(300)
 H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAME)
 
 RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
