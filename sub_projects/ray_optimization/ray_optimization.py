@@ -89,10 +89,10 @@ def ray_output_to_tensor(ray_output):
     y_loc = torch.tensor(y_loc)
     return torch.vstack((x_loc, y_loc)).T
 
+
 def loss(input, engine, secret_sample_rays):
-    #input = {k: NumericalParameter(v) for k, v in input.items()}
     param_container = RayParameterContainer()
-    for k,v in input.items():
+    for k, v in input.items():
         param_container.__setitem__(k, NumericalParameter(v))
     output = engine.run(param_container)
     y_hat = ray_output_to_tensor(output)
@@ -101,7 +101,7 @@ def loss(input, engine, secret_sample_rays):
     y_hat_filled = torch.zeros_like(y)
     y_hat_filled[:y_hat.shape[0]] = y_hat
     out = criterion(y, y_hat_filled)
-    return out
+    return out.item()
 
 
 secret_sample_params = RayParameterContainer()
@@ -112,13 +112,7 @@ for key, value in param_func().items():
         value = value.get_value()
     secret_sample_params[key] = NumericalParameter(value)
 
-
 secret_sample_rays = engine.run(secret_sample_params)
-
-#out = loss(secret_sample_rays, engine, secret_sample_rays)
-#print(out)
-
-#exit(0)
 
 parameters = []
 for (key, value) in param_func().items():
@@ -126,7 +120,9 @@ for (key, value) in param_func().items():
         parameters.append({"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
 
 best_parameters, best_values, experiment, model = optimize(
-     parameters=parameters,
-     evaluation_function=lambda x: loss(x, engine, secret_sample_rays),
-     minimize=True,
+    parameters=parameters,
+    evaluation_function=lambda x: loss(x, engine, secret_sample_rays),
+    minimize=True,
 )
+
+print(best_parameters, best_values)
