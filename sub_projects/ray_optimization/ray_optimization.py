@@ -92,13 +92,16 @@ def ray_output_to_tensor(ray_output):
 def loss(input, engine, secret_sample_rays):
     #input = {k: NumericalParameter(v) for k, v in input.items()}
     param_container = RayParameterContainer()
-    for k,v in input['param_container_dict'].items():
+    for k,v in input.items():
         param_container.__setitem__(k, NumericalParameter(v))
-    print(param_container)
-    output = engine.run(secret_sample_params)
+    output = engine.run(param_container)
     y_hat = ray_output_to_tensor(output)
     y = ray_output_to_tensor(secret_sample_rays)
-    return criterion(y, y_hat)
+
+    y_hat_filled = torch.zeros_like(y)
+    y_hat_filled[:y_hat.shape[0]] = y_hat
+    out = criterion(y, y_hat_filled)
+    return out
 
 
 secret_sample_params = RayParameterContainer()
