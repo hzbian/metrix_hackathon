@@ -59,6 +59,7 @@ class SurrogatePreparation:
         if n_rays.item() == 0.0:
             x_lims[0] = x_lims[1] = y_lims[0] = y_lims[1] = 10.0
             hist[0] = 1.0
+            n_rays = torch.tensor(1.0, dtype=torch.get_default_dtype())
 
         return dict(params=params,
                     tar_hist=hist,

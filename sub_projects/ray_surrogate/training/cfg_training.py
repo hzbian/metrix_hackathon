@@ -2,12 +2,10 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
-import random
-import string
 from collections import OrderedDict
 
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader, Subset
+from torch.utils.data import WeightedRandomSampler, DataLoader
 from pytorch_lightning.trainer.supporters import CombinedLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset
@@ -29,7 +27,7 @@ from cfg_params import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'test_v3' + '_mae'  # + ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(8))
+RUN_ID = 'test_v3' + '_sinkhorn_hist_ylims_given'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -53,7 +51,6 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     params_info=PARAMS_INFO,
                                                     hist_key=HIST_KEY,
                                                     hist_subsampler=HistSubsampler(factor=8)))
-# DATASET = Subset(DATASET, [int(idx) for idx in (N_RAYS > 20000).nonzero()])
 
 # --- Dataloaders ---
 MAX_EPOCHS = 10
@@ -96,9 +93,9 @@ VAL_DATALOADER = CombinedLoader(
 LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=1,
                                  sinkhorn_blur=0.05,
                                  sinkhorn_normalize=False,
-                                 sinkhorn_weight=0.0,
-                                 mae_lims_weight=100.0,
-                                 mae_hist_weight=1.0))
+                                 sinkhorn_weight=1.0,
+                                 mae_lims_weight=0.0,
+                                 mae_hist_weight=0.0))
 VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
