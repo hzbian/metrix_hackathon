@@ -18,7 +18,7 @@ from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
 from sub_projects.ray_surrogate.nn_models import MLP, SurrogateModel
 from sub_projects.ray_surrogate.losses import SurrogateLoss
 
-from cfg_params import *
+from cfg_params_all import *
 
 # --- Global ---
 
@@ -27,7 +27,7 @@ from cfg_params import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'test_v3' + '_sinkhorn_hist_ylims_given'
+RUN_ID = 'sinkhorn_p1_lims_given_no_n_rays'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -53,9 +53,9 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 10
-FRAC_TRAIN_SAMPLES = 0.1
-FRAC_VAL_SAMPLES = 0.1
+MAX_EPOCHS = 25
+FRAC_TRAIN_SAMPLES = 1.0
+FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
@@ -105,7 +105,7 @@ SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 1, "gamma": 1.0})
 
 # --- Callbacks ---
 CALLBACKS = [
-    LogPredictionsCallback(num_plots=50, overwrite_epoch=True)
+    LogPredictionsCallback(num_plots=50, overwrite_epoch=False)
 ]
 
 # --- Surrogate Model ---
