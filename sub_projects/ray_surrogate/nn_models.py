@@ -55,9 +55,15 @@ class SurrogateModel(LightningModule):
 
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         params = batch['params']
-        hist = torch.zeros_like(batch['tar_hist'])
-        x_lims = torch.zeros_like(batch['tar_x_lims'])
-        y_lims = torch.zeros_like(batch['tar_y_lims'])
+
+        if 'inp_hist' in batch:
+            hist = batch['inp_hist']
+            x_lims = batch['inp_x_lims']
+            y_lims = batch['inp_y_lims']
+        else:
+            hist = torch.zeros_like(batch['tar_hist'])
+            x_lims = torch.zeros_like(batch['tar_x_lims'])
+            y_lims = torch.zeros_like(batch['tar_y_lims'])
 
         params = self.bn_params(self.enc_params(params))
         hist = self.bn_hist(self.enc_hist(hist))
@@ -75,10 +81,9 @@ class SurrogateModel(LightningModule):
         pred_y_lims_lo = pred_y_lims.min(dim=1)[0]
         pred_y_lims_hi = pred_y_lims.max(dim=1)[0]
 
-        # batch['pred_hist'] = torch.clamp_min(self.dec_hist(bottleneck), 0.0)
+        batch['pred_hist'] = torch.clamp_min(self.dec_hist(bottleneck), 0.0)  # batch['tar_hist']
         # batch['pred_hist'] = batch['pred_hist'] / batch['pred_hist'].sum(dim=1, keepdim=True) * batch['tar_n_rays'].unsqueeze(-1)
-        batch['pred_hist'] = batch['tar_hist']
-        batch['pred_x_lims'] = torch.stack([pred_x_lims_lo, pred_x_lims_hi], dim=-1)  # batch['tar_x_lims']
+        batch['pred_x_lims'] = batch['tar_x_lims']  # torch.stack([pred_x_lims_lo, pred_x_lims_hi], dim=-1)
         batch['pred_y_lims'] = batch['tar_y_lims']  # torch.stack([pred_y_lims_lo, pred_y_lims_hi], dim=-1)
         batch['pred_n_rays'] = batch['pred_hist'].sum(dim=1)
 
