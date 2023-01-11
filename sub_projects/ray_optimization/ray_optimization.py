@@ -1,6 +1,9 @@
 import sys
 import os
 
+from ax.service.ax_client import AxClient
+
+os.environ["WANDB_MODE"]="offline"
 import torch
 from collections import OrderedDict
 
@@ -10,12 +13,17 @@ from ray_nn.data.transform import Select
 from ray_nn.metrics.geometric import SinkhornLoss
 
 sys.path.insert(0, '../../')
-from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter
+from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
+    GridParameter
 from ray_tools.base.utils import RandomGenerator
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import RayTransformConcat, ToDict
 from ray_tools.base.backend import RayBackendDockerRAYUI
+import wandb
+import matplotlib.pyplot as plt
+import numpy as np
 
+wandb.init(project="metrix-bayesian-e2-ty-only")
 root_dir = '../../'
 
 rml_basefile = os.path.join(root_dir, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
@@ -36,10 +44,11 @@ engine = RayEngine(rml_basefile=rml_basefile,
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      ray_workdir=ray_workdir,
                                                      verbose=True),
-                   num_workers=1,
+                   num_workers=-1,
                    as_generator=False)
 
 rg = RandomGenerator(seed=42)
+
 
 param_func = lambda: RayParameterContainer([
     (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e4)),
@@ -81,6 +90,21 @@ param_func = lambda: RayParameterContainer([
 
 criterion = SinkhornLoss()
 
+# optimize only some params
+params = param_func()
+fixed = params.keys() - ['E2.translationYerror']
+
+for key in params:
+    old_param = params[key]
+    if isinstance(old_param, MutableParameter) and key in fixed:
+        params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+
+print(params)
+
+def plot_data(data, weights=None):
+    plt.figure()
+    plt.scatter(data[:, 0], data[:, 1], s=2.0, c=weights)
+    plt.show()
 
 def ray_output_to_tensor(ray_output):
     x_loc = ray_output['ray_output']['ImagePlane'].x_loc
@@ -96,16 +120,17 @@ def loss(input, engine, secret_sample_rays):
         param_container.__setitem__(k, NumericalParameter(v))
     output = engine.run(param_container)
     y_hat = ray_output_to_tensor(output)
-    y = ray_output_to_tensor(secret_sample_rays)
 
-    y_hat_filled = torch.zeros_like(y)
+    y = ray_output_to_tensor(secret_sample_rays)
+    plot_data(y_hat)
+    y_hat_filled = torch.zeros_like(y) - 10.
     y_hat_filled[:y_hat.shape[0]] = y_hat
     out = criterion(y, y_hat_filled)
+    wandb.log({"loss": out, "ray_count": y_hat.shape[0]})
     return out.item()
 
-
 secret_sample_params = RayParameterContainer()
-for key, value in param_func().items():
+for key, value in params.items():
     if isinstance(value, MutableParameter):
         value = (value.value_lims[1] + value.value_lims[0]) / 2
     if isinstance(value, NumericalParameter):
@@ -114,8 +139,24 @@ for key, value in param_func().items():
 
 secret_sample_rays = engine.run(secret_sample_params)
 
+
+secret_sample_params['E2.translationYerror'] = GridParameter(np.arange(-1,1,0.1))
+
+output = engine.run(secret_sample_params)
+y_hat = ray_output_to_tensor(output)
+
+y = ray_output_to_tensor(secret_sample_rays)
+print(y)
+#plot_data(y_hat)
+y_hat_filled = torch.zeros_like(y) - 10.
+y_hat_filled[:y_hat.shape[0]] = y_hat[:y.shape[0]]
+out = criterion(y, y_hat_filled)
+wandb.log({"parameter": i, "loss": out, "ray_count": y_hat.shape[0]})
+
+exit(0)
+### Bayesian Optimization
 parameters = []
-for (key, value) in param_func().items():
+for (key, value) in params.items():
     if isinstance(value, MutableParameter):
         parameters.append({"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
 
@@ -123,6 +164,8 @@ best_parameters, best_values, experiment, model = optimize(
     parameters=parameters,
     evaluation_function=lambda x: loss(x, engine, secret_sample_rays),
     minimize=True,
+    total_trials=50,
+    arms_per_trial=1,
 )
 
 print(best_parameters, best_values)
