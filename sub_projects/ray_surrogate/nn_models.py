@@ -1,6 +1,7 @@
 from typing import Type, Dict, Any, List, Tuple
 from collections import OrderedDict
 
+import numpy as np
 import torch
 from torch import nn
 from pytorch_lightning import LightningModule
@@ -47,12 +48,18 @@ class SurrogateModel(LightningModule):
     def forward(self, params: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         bs = params.shape[0]
         params_emb = self.param_preprocessor(self._param_batch_norm(params))
-        pc_inp_supp = torch.zeros(bs, 2 * self.pc_supp_dim, device=params.device)
-        pc_inp_weight = torch.zeros(bs, self.pc_supp_dim, device=params.device)
-        out = self.base_net(torch.cat([pc_inp_supp, pc_inp_weight, params_emb], dim=1))
-        pc_pred_supp = out[:, :2 * self.pc_supp_dim].view(bs, self.pc_supp_dim, 2)
-        pc_pred_weight = out[:, 2 * self.pc_supp_dim:]
-        return pc_pred_supp.contiguous(), pc_pred_weight.contiguous()
+
+        hist_inp = torch.zeros(bs, self.pc_supp_dim, device=params.device)
+        x_lims_inp = torch.zeros(bs, 2, device=params.device)
+        y_lims_inp = torch.zeros(bs, 2, device=params.device)
+
+        out = self.base_net(torch.cat([hist_inp, x_lims_inp, y_lims_inp, params_emb], dim=1))
+        hist_out = out[:, :self.pc_supp_dim].view(bs, int(np.sqrt(self.pc_supp_dim)), -1)
+        x_lims_out = out[:, self.pc_supp_dim:self.pc_supp_dim + 2]
+        y_lims_out = out[:, self.pc_supp_dim + 2:self.pc_supp_dim + 4]
+
+        out_supp, out_weights = self.hist_to_pc(hist_out, x_lims_out, y_lims_out)
+        return out_supp, out_weights
 
     def training_step(self, batch, batch_idx):
         loss, pred, tar = self._process_batch(batch)

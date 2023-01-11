@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from collections import OrderedDict
 
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader
+from torch.utils.data import WeightedRandomSampler, DataLoader, Subset
 from pytorch_lightning.trainer.supporters import CombinedLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset
@@ -19,10 +19,10 @@ from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
 from sub_projects.ray_surrogate.nn_models import MLP
 
 # --- Name & Paths ---
-RUN_ID = 'test_v1_436347'
+RUN_ID = 'test_v1_ljhklh'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
-WANDB_ONLINE = False
+WANDB_ONLINE = True
 RESUME_RUN = False
 
 # --- Devices & Global Seed ---
@@ -45,8 +45,8 @@ LIST_PARAMS = ['ASBL.totalHeight', 'ASBL.totalWidth', 'ASBL.translationXerror', 
 PC_SUPP_DIM = 1024
 PARAM_DIM = len(LIST_PARAMS)
 PARAM_EMBEDDING_DIM = 128
-BASE_NET = (MLP, dict(dim_in=3 * PC_SUPP_DIM + PARAM_EMBEDDING_DIM,
-                      dim_out=3 * PC_SUPP_DIM,
+BASE_NET = (MLP, dict(dim_in=PC_SUPP_DIM + 4 + PARAM_EMBEDDING_DIM,
+                      dim_out=PC_SUPP_DIM + 4,
                       dim_hidden=3 * [5 * PC_SUPP_DIM]))
 PARAM_PREPROCESSOR = (MLP, dict(dim_in=len(LIST_PARAMS),
                                 dim_out=PARAM_EMBEDDING_DIM,
@@ -60,8 +60,8 @@ H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray
 KEY_PARAMS = '1e6/params'
 KEY_HIST = '1e6/ray_output/ImagePlane/ml/0'
 
-FRAC_TRAIN_SAMPLES = 0.05
-FRAC_VAL_SAMPLES = 0.05
+FRAC_TRAIN_SAMPLES = 1.0
+FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
@@ -70,6 +70,8 @@ NUM_SANITY_VAL_STEPS = 0
 
 SEED_TRAIN_DATA = 43
 SEED_DATA_SPLIT = 44
+
+N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
 
 # Important fix to make custom collate_fn work
 # https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
@@ -82,6 +84,8 @@ dataset = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     list_params=LIST_PARAMS,
                                                     key_hist=KEY_HIST))
 
+dataset = Subset(dataset, [int(idx) for idx in (N_RAYS > 20000).nonzero()])
+
 data_module = DefaultDataModule(dataset=dataset,
                                 batch_size_train=BATCH_SIZE_TRAIN,
                                 batch_size_val=BATCH_SIZE_VAL,
@@ -92,20 +96,18 @@ data_module = DefaultDataModule(dataset=dataset,
                                 seed_train=SEED_TRAIN_DATA)
 data_module.setup()
 
-N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
-
 TRAIN_DATALOADER = data_module.train_dataloader()
 VAL_DATALOADER = CombinedLoader(
     OrderedDict([('reference', data_module.val_dataloader()),
-                 ('many rays', DataLoader(dataset,
-                                          sampler=WeightedRandomSampler(
-                                              weights=N_RAYS,
-                                              num_samples=5000,
-                                              replacement=False),
-                                          batch_size=BATCH_SIZE_VAL,
-                                          num_workers=DL_NUM_WORKERS,
-                                          pin_memory=False if DEVICE == 'cpu' else True,
-                                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
+                 # ('many rays', DataLoader(dataset,
+                 #                          sampler=WeightedRandomSampler(
+                 #                              weights=N_RAYS,
+                 #                              num_samples=5000,
+                 #                              replacement=False),
+                 #                          batch_size=BATCH_SIZE_VAL,
+                 #                          num_workers=DL_NUM_WORKERS,
+                 #                          pin_memory=False if DEVICE == 'cpu' else True,
+                 #                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
                  ]),
     mode="max_size_cycle")
 
@@ -118,6 +120,6 @@ VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
 # --- Training ---
-MAX_EPOCHS = 25
+MAX_EPOCHS = 100
 OPTIMIZER = (torch.optim.Adam, {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4})
 SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 1, "gamma": 1.0})
