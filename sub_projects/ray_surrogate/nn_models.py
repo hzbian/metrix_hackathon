@@ -1,27 +1,23 @@
 from typing import Type, Dict, Any, List, Tuple
 from collections import OrderedDict
 
-import numpy as np
 import torch
 from torch import nn
 from pytorch_lightning import LightningModule
-
-from ray_nn.utils.ray_processing import HistSubsampler, HistToPointCloud
 
 
 class SurrogateModel(LightningModule):
 
     def __init__(self,
-                 base_net: Type[nn.Module],
-                 base_net_params: Dict,
-                 param_preprocessor: Type[nn.Module],
-                 param_preprocessor_params: Dict,
-                 hist_subsampler: Type[HistSubsampler],
-                 hist_subsampler_params: Dict,
-                 hist_to_pc: Type[HistToPointCloud],
-                 hist_to_pc_params: Dict,
-                 param_dim: int,
-                 pc_supp_dim: int,
+                 dim_bottleneck: int,
+                 net_bottleneck: Type[nn.Module],
+                 net_bottleneck_params: Dict,
+                 net_hist: Tuple[Type[nn.Module], Type[nn.Module]],
+                 net_hist_params: Tuple[Dict, Dict],
+                 net_lims: Tuple[Type[nn.Module], Type[nn.Module]],
+                 net_lims_params: Tuple[Dict, Dict],
+                 enc_params: Type[nn.Module],
+                 enc_params_params: Dict,
                  loss_func: Type[nn.Module],
                  loss_func_params: Dict,
                  optimizer: Type[Any] = torch.optim.Adam,
@@ -33,71 +29,83 @@ class SurrogateModel(LightningModule):
                  ):
         super().__init__()
         self.save_hyperparameters()
-        self.base_net = base_net(**base_net_params)
-        self.param_preprocessor = param_preprocessor(**param_preprocessor_params)
-        self.hist_subsampler = hist_subsampler(**hist_subsampler_params)
-        self.hist_to_pc = hist_to_pc(**hist_to_pc_params)
-        self.param_dim = param_dim
-        self.pc_supp_dim = pc_supp_dim
+
+        self.dim_bottleneck = dim_bottleneck
+
+        self.net_bottleneck = net_bottleneck(**net_bottleneck_params)
+        self.bn_net_bottleneck = nn.BatchNorm1d(self.dim_bottleneck)
+
+        self.enc_hist = net_hist[0](**net_hist_params[0])
+        self.dec_hist = net_hist[1](**net_hist_params[1])
+        self.bn_hist = nn.BatchNorm1d(self.dim_bottleneck)
+
+        self.enc_x_lims = net_lims[0](**net_lims_params[0])
+        self.dec_x_lims = net_lims[1](**net_lims_params[1])
+        self.bn_x_lims = nn.BatchNorm1d(self.dim_bottleneck)
+
+        self.enc_y_lims = net_lims[0](**net_lims_params[0])
+        self.dec_y_lims = net_lims[1](**net_lims_params[1])
+        self.bn_y_lims = nn.BatchNorm1d(self.dim_bottleneck)
+
+        self.enc_params = enc_params(**enc_params_params)
+        self.bn_params = nn.BatchNorm1d(self.dim_bottleneck)
 
         self.loss_func = loss_func(**loss_func_params)
         self.val_metrics = val_metrics if val_metrics is not None else []
 
-        self._param_batch_norm = nn.BatchNorm1d(self.param_dim)
+    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        params = batch['params']
+        hist = torch.zeros_like(batch['tar_hist'])
+        x_lims = torch.zeros_like(batch['tar_x_lims'])
+        y_lims = torch.zeros_like(batch['tar_y_lims'])
 
-    def forward(self, params: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        bs = params.shape[0]
-        params_emb = self.param_preprocessor(self._param_batch_norm(params))
+        params = self.bn_params(self.enc_params(params))
+        hist = self.bn_hist(self.enc_hist(hist))
+        x_lims = self.bn_x_lims(self.enc_x_lims(x_lims))
+        y_lims = self.bn_y_lims(self.enc_y_lims(y_lims))
 
-        hist_inp = torch.zeros(bs, self.pc_supp_dim, device=params.device)
-        x_lims_inp = torch.zeros(bs, 2, device=params.device)
-        y_lims_inp = torch.zeros(bs, 2, device=params.device)
+        bottleneck = sum([params, hist, x_lims, y_lims])
+        bottleneck = self.bn_net_bottleneck(self.net_bottleneck(bottleneck))
 
-        out = self.base_net(torch.cat([hist_inp, x_lims_inp, y_lims_inp, params_emb], dim=1))
-        hist_out = out[:, :self.pc_supp_dim].view(bs, int(np.sqrt(self.pc_supp_dim)), -1)
-        x_lims_out = out[:, self.pc_supp_dim:self.pc_supp_dim + 2]
-        y_lims_out = out[:, self.pc_supp_dim + 2:self.pc_supp_dim + 4]
+        batch['pred_hist'] = torch.clamp_min(self.dec_hist(bottleneck), 0.0)
+        batch['pred_x_lims'] = self.dec_x_lims(bottleneck)
+        batch['pred_y_lims'] = self.dec_y_lims(bottleneck)
+        batch['pred_n_rays'] = batch['pred_hist'].sum(dim=1)
 
-        out_supp, out_weights = self.hist_to_pc(hist_out, x_lims_out, y_lims_out)
-        return out_supp, out_weights
+        return batch
 
-    def training_step(self, batch, batch_idx):
-        loss, pred, tar = self._process_batch(batch)
-        bs = pred[0].shape[0]
+    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
+        loss, batch = self._process_batch(batch)
+        bs = batch['params'].shape[0]
         self.log("train/loss", loss.item(), batch_size=bs)
 
         if batch_idx in self.hparams.keep_batch:
-            out = (pred, tar)
+            out = batch
         else:
             out = None
         return {"loss": loss, "out": out}
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
         out = {}
         for dl_name, dl_batch in batch.items():
-            loss, pred, tar = self._process_batch(dl_batch)
-            bs = pred[0].shape[0]
+            loss, dl_batch = self._process_batch(dl_batch)
+            bs = dl_batch['params'].shape[0]
             self.log(f"val/loss/{dl_name}", loss.item(), batch_size=bs)
 
             with torch.no_grad():
                 for metric, metric_func in self.val_metrics:
-                    self.log(f"val/metrics/{metric}_{dl_name}",
-                             metric_func(pred[0], tar[0], pred[1], tar[1]),
-                             batch_size=bs)
+                    self.log(f"val/metrics/{metric}_{dl_name}", metric_func(dl_batch).item(), batch_size=bs)
 
             if batch_idx in self.hparams.keep_batch:
-                out[dl_name] = (pred, tar)
+                out[dl_name] = dl_batch
             else:
                 out[dl_name] = None
         return {"out": out}
 
-    def _process_batch(self, batch: Tuple[torch.Tensor, ...]) -> Any:
-        params, histogram, x_lim, y_lim, _ = batch
-        tar_supp, tar_weights = self.hist_to_pc(self.hist_subsampler(histogram),
-                                                x_lim, y_lim)
-        pred_supp, pred_weights = self(params)
-        loss = self.loss_func(pred_supp, tar_supp, pred_weights, tar_weights)
-        return loss, (pred_supp, pred_weights), (tar_supp, tar_weights)
+    def _process_batch(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        batch = self(batch)
+        loss = self.loss_func(batch)
+        return loss, batch
 
     def configure_optimizers(self):
         optimizer = self.hparams.optimizer(self.parameters(), **self.hparams.optimizer_params)

@@ -17,7 +17,7 @@ class LogPredictionsCallback(Callback):
     def __init__(self, num_plots: int = 5, overwrite_epoch: bool = True):
         super().__init__()
 
-        self.columns = ['epoch', 'pred', 'target']
+        self.columns = ['epoch', 'pred_hist', 'tar_hist', 'pred_n_rays', 'tar_n_rays']
         self.train_data = []
         self.train_data_cur = []
         self.val_data = defaultdict(list)
@@ -27,26 +27,35 @@ class LogPredictionsCallback(Callback):
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, unused: int = 0):
         if outputs["out"]:
-            pred_supp, pred_weights = outputs["out"][0]
-            tar_supp, tar_weights = outputs["out"][1]
-            bs = pred_supp.shape[0]
+            batch = outputs["out"]
+            batch = {k: v.detach().cpu() for k, v in batch.items()}
+            bs = batch['params'].shape[0]
             self.train_data_cur += [
                 [trainer.current_epoch,
-                 wandb.Image(self.plot_data(pred_supp[idx, ...], pred_weights[idx, ...])),
-                 wandb.Image(self.plot_data(tar_supp[idx, ...], tar_weights[idx, ...]))]
+                 wandb.Image(self.plot_data(hist=batch['pred_hist'][idx, ...],
+                                            x_lims=batch['pred_x_lims'][idx, ...],
+                                            y_lims=batch['pred_y_lims'][idx, ...])),
+                 wandb.Image(self.plot_data(hist=batch['tar_hist'][idx, ...],
+                                            x_lims=batch['tar_x_lims'][idx, ...],
+                                            y_lims=batch['tar_y_lims'][idx, ...])),
+                 batch['pred_n_rays'][idx].item(), batch['tar_n_rays'][idx].item()]
                 for idx in range(bs)
             ]
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
-        for dl_name, output in outputs["out"].items():
-            if output:
-                pred_supp, pred_weights = output[0]
-                tar_supp, tar_weights = output[1]
-                bs = pred_supp.shape[0]
+        for dl_name, dl_batch in outputs["out"].items():
+            if dl_batch:
+                dl_batch = {k: v.detach().cpu() for k, v in dl_batch.items()}
+                bs = dl_batch['params'].shape[0]
                 self.val_data_cur[dl_name] += [
                     [trainer.current_epoch,
-                     wandb.Image(self.plot_data(pred_supp[idx, ...], pred_weights[idx, ...])),
-                     wandb.Image(self.plot_data(tar_supp[idx, ...], tar_weights[idx, ...]))]
+                     wandb.Image(self.plot_data(hist=dl_batch['pred_hist'][idx, ...],
+                                                x_lims=dl_batch['pred_x_lims'][idx, ...],
+                                                y_lims=dl_batch['pred_y_lims'][idx, ...])),
+                     wandb.Image(self.plot_data(hist=dl_batch['tar_hist'][idx, ...],
+                                                x_lims=dl_batch['tar_x_lims'][idx, ...],
+                                                y_lims=dl_batch['tar_y_lims'][idx, ...])),
+                     dl_batch['pred_n_rays'][idx].item(), dl_batch['tar_n_rays'][idx].item()]
                     for idx in range(bs)
                 ]
 
@@ -74,13 +83,15 @@ class LogPredictionsCallback(Callback):
             if self.overwrite_epoch:
                 self.val_data[dl_name] = []
 
-    def plot_data(self, pc_supp: torch.Tensor, pc_weights: torch.Tensor):
-        pc_supp = pc_supp.detach().cpu()
-        pc_weights = pc_weights.detach().cpu()
-
+    def plot_data(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor):
         fig = plt.figure()
         ax = fig.gca()
-        ax.scatter(pc_supp[:, 0], pc_supp[:, 1], s=2.0, c=pc_weights)
+        dim_x = dim_y = int(np.sqrt(hist.shape[0]))
+        im = ax.imshow(hist.view(dim_x, dim_y).T, cmap='turbo', interpolation='none',
+                       extent=[x_lims[0].item(), x_lims[1].item() + 1e-8, y_lims[0].item(), y_lims[1].item() + 1e-8],
+                       origin='lower', aspect='auto')
+        fig.colorbar(im)
+        fig.tight_layout()
 
         fig.canvas.draw()
         image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)

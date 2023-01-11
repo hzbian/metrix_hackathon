@@ -2,6 +2,8 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
+import random
+import string
 from collections import OrderedDict
 
 import torch
@@ -12,14 +14,22 @@ from ray_tools.simulation.torch_datasets import RayDataset
 
 from ray_nn.data.transform import SurrogatePreparation
 from ray_nn.data.lightning_data_module import DefaultDataModule
-from ray_nn.metrics.geometric import SinkhornLoss
-from ray_nn.utils.ray_processing import HistSubsampler, HistToPointCloud
+from ray_nn.utils.ray_processing import HistSubsampler
 
 from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
-from sub_projects.ray_surrogate.nn_models import MLP
+from sub_projects.ray_surrogate.nn_models import MLP, SurrogateModel
+from sub_projects.ray_surrogate.losses import SurrogateLoss
+
+from cfg_params import *
+
+# --- Global ---
+
+# Important fix to make custom collate_fn work
+# https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'test_v1_ljhklh'
+RUN_ID = 'test_v3' + '_mae'  # + ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(8))
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -27,66 +37,37 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 0
+GPU_ID = 1
 TRAINING_SEED = 42
 
-# --- Surrogate Model ---
-LIST_PARAMS = ['ASBL.totalHeight', 'ASBL.totalWidth', 'ASBL.translationXerror', 'ASBL.translationYerror',
-               'E1.longHalfAxisA', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.shortHalfAxisB',
-               'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.rotationXerror',
-               'E2.rotationYerror', 'E2.rotationZerror', 'E2.shortHalfAxisB', 'E2.translationYerror',
-               'E2.translationZerror', 'ExitSlit.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror',
-               'ImagePlane.distanceImagePlane', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror',
-               'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror',
-               'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror',
-               'SphericalGrating.rotationZerror', 'U41_318eV.numberRays', 'U41_318eV.rotationXerror',
-               'U41_318eV.rotationYerror', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror']
-
-PC_SUPP_DIM = 1024
-PARAM_DIM = len(LIST_PARAMS)
-PARAM_EMBEDDING_DIM = 128
-BASE_NET = (MLP, dict(dim_in=PC_SUPP_DIM + 4 + PARAM_EMBEDDING_DIM,
-                      dim_out=PC_SUPP_DIM + 4,
-                      dim_hidden=3 * [5 * PC_SUPP_DIM]))
-PARAM_PREPROCESSOR = (MLP, dict(dim_in=len(LIST_PARAMS),
-                                dim_out=PARAM_EMBEDDING_DIM,
-                                dim_hidden=3 * [PARAM_EMBEDDING_DIM]))
-HIST_SUBSAMPLER = (HistSubsampler, dict(factor=8))
-HIST_TO_PC = (HistToPointCloud, dict())
-
-# --- Data ---
+# --- Dataset ---
 H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_enhance_final')
+PARAMS_KEY = '1e6/params'
+HIST_KEY = '1e6/ray_output/ImagePlane/ml/0'
 
-KEY_PARAMS = '1e6/params'
-KEY_HIST = '1e6/ray_output/ImagePlane/ml/0'
+N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
+DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
+                     nested_groups=False,
+                     sub_groups=[PARAMS_KEY, HIST_KEY],
+                     transform=SurrogatePreparation(params_key=PARAMS_KEY,
+                                                    params_info=PARAMS_INFO,
+                                                    hist_key=HIST_KEY,
+                                                    hist_subsampler=HistSubsampler(factor=8)))
+# DATASET = Subset(DATASET, [int(idx) for idx in (N_RAYS > 20000).nonzero()])
 
-FRAC_TRAIN_SAMPLES = 1.0
-FRAC_VAL_SAMPLES = 1.0
+# --- Dataloaders ---
+MAX_EPOCHS = 10
+FRAC_TRAIN_SAMPLES = 0.1
+FRAC_VAL_SAMPLES = 0.1
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
 DL_NUM_WORKERS = 25
 NUM_SANITY_VAL_STEPS = 0
-
 SEED_TRAIN_DATA = 43
 SEED_DATA_SPLIT = 44
 
-N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
-
-# Important fix to make custom collate_fn work
-# https://forums.fast.ai/t/runtimeerror-received-0-items-of-ancdata/48935
-torch.multiprocessing.set_sharing_strategy('file_system')
-
-dataset = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
-                     nested_groups=False,
-                     sub_groups=[KEY_PARAMS, KEY_HIST],
-                     transform=SurrogatePreparation(key_params=KEY_PARAMS,
-                                                    list_params=LIST_PARAMS,
-                                                    key_hist=KEY_HIST))
-
-dataset = Subset(dataset, [int(idx) for idx in (N_RAYS > 20000).nonzero()])
-
-data_module = DefaultDataModule(dataset=dataset,
+data_module = DefaultDataModule(dataset=DATASET,
                                 batch_size_train=BATCH_SIZE_TRAIN,
                                 batch_size_val=BATCH_SIZE_VAL,
                                 split=DATA_SPLIT,
@@ -99,27 +80,77 @@ data_module.setup()
 TRAIN_DATALOADER = data_module.train_dataloader()
 VAL_DATALOADER = CombinedLoader(
     OrderedDict([('reference', data_module.val_dataloader()),
-                 # ('many rays', DataLoader(dataset,
-                 #                          sampler=WeightedRandomSampler(
-                 #                              weights=N_RAYS,
-                 #                              num_samples=5000,
-                 #                              replacement=False),
-                 #                          batch_size=BATCH_SIZE_VAL,
-                 #                          num_workers=DL_NUM_WORKERS,
-                 #                          pin_memory=False if DEVICE == 'cpu' else True,
-                 #                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
+                 ('many rays', DataLoader(DATASET,
+                                          sampler=WeightedRandomSampler(
+                                              weights=N_RAYS,
+                                              num_samples=5000,
+                                              replacement=False),
+                                          batch_size=BATCH_SIZE_VAL,
+                                          num_workers=DL_NUM_WORKERS,
+                                          pin_memory=False if DEVICE == 'cpu' else True,
+                                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
                  ]),
     mode="max_size_cycle")
 
-# --- Callbacks ---
-CALLBACKS = [LogPredictionsCallback(num_plots=50, overwrite_epoch=True)]
-
 # --- Loss & Validation Metrics ---
-LOSS_FUNC = (SinkhornLoss, dict(p=2, normalize_weights=False, backend='online', reduction='mean'))
+LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=1,
+                                 sinkhorn_blur=0.05,
+                                 sinkhorn_normalize=False,
+                                 sinkhorn_weight=0.0,
+                                 mae_lims_weight=100.0,
+                                 mae_hist_weight=1.0))
 VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
-# --- Training ---
-MAX_EPOCHS = 100
+# --- Optimization ---
 OPTIMIZER = (torch.optim.Adam, {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4})
 SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 1, "gamma": 1.0})
+
+# --- Callbacks ---
+CALLBACKS = [
+    LogPredictionsCallback(num_plots=50, overwrite_epoch=True)
+]
+
+# --- Surrogate Model ---
+DIM_HIST = 1024
+DIM_BOTTLENECK = 2 * 1024
+
+if RESUME_RUN:
+    SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RUN_PATH, 'last.ckpt'))
+else:
+    SURROGATE = SurrogateModel(dim_bottleneck=DIM_BOTTLENECK,
+                               net_bottleneck=MLP,
+                               net_bottleneck_params=dict(dim_in=DIM_BOTTLENECK,
+                                                          dim_out=DIM_BOTTLENECK,
+                                                          dim_hidden=3 * [DIM_BOTTLENECK]),
+                               net_lims=(MLP, MLP),
+                               net_lims_params=(dict(dim_in=2,
+                                                     dim_out=DIM_BOTTLENECK,
+                                                     dim_hidden=[DIM_BOTTLENECK // 8,
+                                                                 DIM_BOTTLENECK // 4,
+                                                                 DIM_BOTTLENECK // 2]),
+                                                dict(dim_in=DIM_BOTTLENECK,
+                                                     dim_out=2,
+                                                     dim_hidden=[DIM_BOTTLENECK // 2,
+                                                                 DIM_BOTTLENECK // 4,
+                                                                 DIM_BOTTLENECK // 8])),
+                               net_hist=(MLP, MLP),
+                               net_hist_params=(dict(dim_in=DIM_HIST,
+                                                     dim_out=DIM_BOTTLENECK,
+                                                     dim_hidden=3 * [DIM_HIST]),
+                                                dict(dim_in=DIM_BOTTLENECK,
+                                                     dim_out=DIM_HIST,
+                                                     dim_hidden=3 * [DIM_HIST])),
+                               enc_params=MLP,
+                               enc_params_params=dict(dim_in=len(PARAMS_INFO),
+                                                      dim_out=DIM_BOTTLENECK,
+                                                      dim_hidden=[DIM_BOTTLENECK // 2,
+                                                                  DIM_BOTTLENECK // 4,
+                                                                  DIM_BOTTLENECK // 8]),
+                               loss_func=LOSS_FUNC[0],
+                               loss_func_params=LOSS_FUNC[1],
+                               optimizer=OPTIMIZER[0],
+                               optimizer_params=OPTIMIZER[1],
+                               scheduler=SCHEDULER[0],
+                               scheduler_params=SCHEDULER[1],
+                               val_metrics=VAL_METRICS)
