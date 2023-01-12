@@ -3,7 +3,6 @@ import os
 
 from ax.service.ax_client import AxClient
 
-#os.environ["WANDB_MODE"]="offline"
 import torch
 from collections import OrderedDict
 
@@ -23,7 +22,12 @@ import wandb
 import matplotlib.pyplot as plt
 import numpy as np
 
-wandb.init(project="metrix-bayesian-e2-ty-tz-roty-only")
+wandb.init(entity='hzb-aos',
+           project='metrix_hackathon_optimization',
+           name='test-run',
+           mode='online', # 'disabled' or 'online'
+           )
+
 root_dir = '../../'
 
 rml_basefile = os.path.join(root_dir, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
@@ -101,14 +105,8 @@ for key in params:
 
 print(params)
 
-def plot_data(data, weights=None):
-    plt.figure()
-    plt.scatter(data[:, 0], data[:, 1], s=2.0, c=weights)
-    plt.show()
-
-def plot_data2(pc_supp: torch.Tensor, pc_weights: torch.Tensor):
+def plot_data(pc_supp: torch.Tensor, pc_weights=None):
     pc_supp = pc_supp.detach().cpu()
-    pc_weights = pc_weights.detach().cpu()
 
     fig = plt.figure()
     ax = fig.gca()
@@ -137,11 +135,11 @@ def loss(input, engine, secret_sample_rays):
     y_hat = ray_output_to_tensor(output)
 
     y = ray_output_to_tensor(secret_sample_rays)
-    plot_data(y_hat)
     if y_hat.shape[0] == 0:
         y_hat = torch.ones((1, 2)) * -1
     out = criterion(y, y_hat)
-    wandb.log({"loss": out, "ray_count": y_hat.shape[0]})
+    image = wandb.Image(plot_data(y_hat))
+    wandb.log({"loss": out, "ray_count": y_hat.shape[0], "plot": image})
     return out.item()
 
 secret_sample_params = RayParameterContainer()
