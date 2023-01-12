@@ -5,7 +5,6 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from collections import OrderedDict
 
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader
 from pytorch_lightning.trainer.supporters import CombinedLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset
@@ -27,7 +26,7 @@ from cfg_params_asbl import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'sinkhorn_p2_lims_given_dshbsdh'
+RUN_ID = 'asbl_v1_no_input'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -35,24 +34,24 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 0
+GPU_ID = 1
 TRAINING_SEED = 42
 
 # --- Dataset ---
-H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_enhance_final')
-PARAMS_KEY = '1e6/params'
-HIST_KEY = '1e6/ray_output/ASBL/hist_small'
-INP_HIST_KEY = '1e6/ray_output/U41_318eV/hist_small'
+H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
+PARAMS_KEY = '1e5/params'
+HIST_KEY = '1e5/ray_output/ASBL/hist_small'
+INP_HIST_KEY = '1e5/ray_output/U41_318eV/hist_small'
 
 N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
 DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
                      nested_groups=False,
-                     sub_groups=[PARAMS_KEY, HIST_KEY],
+                     sub_groups=[PARAMS_KEY, HIST_KEY, INP_HIST_KEY],
                      transform=SurrogatePreparation(params_key=PARAMS_KEY,
                                                     params_info=PARAMS_INFO,
                                                     hist_key=HIST_KEY,
                                                     hist_subsampler=HistSubsampler(factor=8),
-                                                    inp_hist_key=INP_HIST_KEY))
+                                                    inp_hist_key=None))
 
 # --- Dataloaders ---
 MAX_EPOCHS = 10
@@ -78,21 +77,11 @@ data_module.setup()
 
 TRAIN_DATALOADER = data_module.train_dataloader()
 VAL_DATALOADER = CombinedLoader(
-    OrderedDict([('reference', data_module.val_dataloader()),
-                 ('many rays', DataLoader(DATASET,
-                                          sampler=WeightedRandomSampler(
-                                              weights=N_RAYS,
-                                              num_samples=5000,
-                                              replacement=False),
-                                          batch_size=BATCH_SIZE_VAL,
-                                          num_workers=DL_NUM_WORKERS,
-                                          pin_memory=False if DEVICE == 'cpu' else True,
-                                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
-                 ]),
+    OrderedDict([('reference', data_module.val_dataloader())]),
     mode="max_size_cycle")
 
 # --- Loss & Validation Metrics ---
-LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=2,
+LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=1,
                                  sinkhorn_blur=0.05,
                                  sinkhorn_normalize=False,
                                  sinkhorn_weight=1.0,

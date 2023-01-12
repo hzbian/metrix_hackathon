@@ -16,7 +16,8 @@ class SurrogateLoss(nn.Module):
                  sinkhorn_normalize: bool = False,
                  sinkhorn_weight: float = 1.0,
                  mae_lims_weight: float = 1.0,
-                 mae_hist_weight: float = 1.0) -> None:
+                 mae_hist_weight: float = 1.0,
+                 mae_n_rays_weight: float = 0.0) -> None:
         super().__init__()
         self.loss_sinkhorn = SinkhornLoss(p=sinkhorn_p,
                                           blur=sinkhorn_blur,
@@ -27,8 +28,9 @@ class SurrogateLoss(nn.Module):
         self.hist_to_pc = HistToPointCloud()
 
         self.sinkhorn_weight = sinkhorn_weight
-        self.mae_lims_weight = mae_lims_weight
         self.mae_hist_weight = mae_hist_weight
+        self.mae_lims_weight = mae_lims_weight
+        self.mae_n_rays_weight = mae_n_rays_weight
 
     def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         dim_x = dim_y = int(np.sqrt(batch['pred_hist'].shape[1]))
@@ -42,16 +44,20 @@ class SurrogateLoss(nn.Module):
                                                                     inp2=tar_pc_supp,
                                                                     weights1=pred_pc_weights,
                                                                     weights2=tar_pc_weights)
-        if self.mae_lims_weight > 0:
-            loss = loss + self.mae_lims_weight * (
-                    (batch['pred_x_lims'] - batch['tar_x_lims']).abs().sum(dim=1).mean() +
-                    (batch['pred_y_lims'] - batch['tar_y_lims']).abs().sum(dim=1).mean()
-            )
 
         if self.mae_hist_weight > 0:
             loss = loss + self.mae_hist_weight * \
                    ((batch['pred_hist'] - batch['tar_hist']).abs().sum(dim=1) /
                     batch['pred_hist'].shape[1]  # (batch['tar_hist'].abs().sum(dim=1) + 1)
                     ).mean()
+
+        if self.mae_lims_weight > 0:
+            loss = loss + self.mae_lims_weight * (
+                    (batch['pred_x_lims'] - batch['tar_x_lims']).abs().sum(dim=1).mean() +
+                    (batch['pred_y_lims'] - batch['tar_y_lims']).abs().sum(dim=1).mean()
+            )
+
+        if self.mae_n_rays_weight > 0:
+            loss = loss + self.mae_n_rays_weight * (batch['pred_n_rays'] - batch['tar_n_rays']).abs().mean()
 
         return loss

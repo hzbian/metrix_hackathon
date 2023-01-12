@@ -5,7 +5,6 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from collections import OrderedDict
 
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader
 from pytorch_lightning.trainer.supporters import CombinedLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset
@@ -18,7 +17,7 @@ from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
 from sub_projects.ray_surrogate.nn_models import MLP, SurrogateModel
 from sub_projects.ray_surrogate.losses import SurrogateLoss
 
-from cfg_params_all import *
+from cfg_params_sg import *
 
 # --- Global ---
 
@@ -27,7 +26,7 @@ from cfg_params_all import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'sinkhorn_p1_lims_n_rays_given'
+RUN_ID = 'sg_v1_no_input'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -35,13 +34,13 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 0
+GPU_ID = 1
 TRAINING_SEED = 42
 
 # --- Dataset ---
-H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_enhance_final')
-PARAMS_KEY = '1e6/params'
-HIST_KEY = '1e6/ray_output/ImagePlane/ml/0'
+H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
+PARAMS_KEY = '1e5/params'
+HIST_KEY = '1e5/ray_output/Spherical Grating/hist_small'
 
 N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
 DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
@@ -53,9 +52,9 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 25
-FRAC_TRAIN_SAMPLES = 0.25
-FRAC_VAL_SAMPLES = 0.05
+MAX_EPOCHS = 10
+FRAC_TRAIN_SAMPLES = 1.0
+FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
@@ -76,17 +75,7 @@ data_module.setup()
 
 TRAIN_DATALOADER = data_module.train_dataloader()
 VAL_DATALOADER = CombinedLoader(
-    OrderedDict([('reference', data_module.val_dataloader()),
-                 ('many rays', DataLoader(DATASET,
-                                          sampler=WeightedRandomSampler(
-                                              weights=N_RAYS,
-                                              num_samples=5000,
-                                              replacement=False),
-                                          batch_size=BATCH_SIZE_VAL,
-                                          num_workers=DL_NUM_WORKERS,
-                                          pin_memory=False if DEVICE == 'cpu' else True,
-                                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
-                 ]),
+    OrderedDict([('reference', data_module.val_dataloader())]),
     mode="max_size_cycle")
 
 # --- Loss & Validation Metrics ---
@@ -105,7 +94,7 @@ SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 1, "gamma": 1.0})
 
 # --- Callbacks ---
 CALLBACKS = [
-    LogPredictionsCallback(num_plots=50, overwrite_epoch=False)
+    LogPredictionsCallback(num_plots=50, overwrite_epoch=True)
 ]
 
 # --- Surrogate Model ---

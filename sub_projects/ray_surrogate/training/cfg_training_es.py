@@ -3,6 +3,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 from collections import OrderedDict
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import WeightedRandomSampler, DataLoader
@@ -18,7 +19,7 @@ from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
 from sub_projects.ray_surrogate.nn_models import MLP, SurrogateModel
 from sub_projects.ray_surrogate.losses import SurrogateLoss
 
-from cfg_params_all import *
+from cfg_params_es import *
 
 # --- Global ---
 
@@ -27,7 +28,7 @@ from cfg_params_all import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'sinkhorn_p1_lims_n_rays_given'
+RUN_ID = 'es_v1_no_input'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -35,15 +36,26 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 0
+GPU_ID = 1
 TRAINING_SEED = 42
 
 # --- Dataset ---
-H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_enhance_final')
-PARAMS_KEY = '1e6/params'
-HIST_KEY = '1e6/ray_output/ImagePlane/ml/0'
+H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
+PARAMS_KEY = '1e5/params'
+HIST_KEY = '1e5/ray_output/Exit Slit/hist_small'
 
-N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
+DATASET_N_RAYS = RayDataset(
+    h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
+    nested_groups=False,
+    sub_groups=['1e5/ray_output/Exit Slit/hist_small/n_rays'],
+    transform=None)
+N_RAYS = [item for idx, item in tqdm(enumerate(DataLoader(DATASET_N_RAYS,
+                                                          shuffle=False,
+                                                          batch_size=1000,
+                                                          num_workers=10)))]
+N_RAYS = torch.cat([list(w.values())[0] for w in N_RAYS], dim=0)
+del DATASET_N_RAYS
+
 DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
                      nested_groups=False,
                      sub_groups=[PARAMS_KEY, HIST_KEY],
@@ -54,8 +66,8 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
 
 # --- Dataloaders ---
 MAX_EPOCHS = 25
-FRAC_TRAIN_SAMPLES = 0.25
-FRAC_VAL_SAMPLES = 0.05
+FRAC_TRAIN_SAMPLES = 1.0
+FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
