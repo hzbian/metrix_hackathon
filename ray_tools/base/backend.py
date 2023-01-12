@@ -168,13 +168,13 @@ class RayBackendDockerRAYUI(RayBackend):
                                               exported_plane + '_DX', exported_plane + '_DY', exported_plane + '_DZ',
                                               exported_plane + '_EN', exported_plane + '_PL'])
 
-            ray_output[exported_plane] = RayOutput(x_loc=raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float64),
-                                                   y_loc=raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float64),
-                                                   z_loc=raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float64),
-                                                   x_dir=raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float64),
-                                                   y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float64),
-                                                   z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float64),
-                                                   energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float64))
+            ray_output[exported_plane] = RayOutput(x_loc=raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float32),
+                                                   y_loc=raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float32),
+                                                   z_loc=raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float32),
+                                                   x_dir=raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float32),
+                                                   y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float32),
+                                                   z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float32),
+                                                   energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float32))
 
         # remove sub-workdir
         shutil.rmtree(run_workdir)
