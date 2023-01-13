@@ -7,6 +7,7 @@ import torch
 from collections import OrderedDict
 
 from ax import optimize
+from ax.service.ax_client import AxClient
 
 from ray_nn.data.transform import Select
 from ray_nn.metrics.geometric import SinkhornLoss
@@ -24,8 +25,8 @@ import numpy as np
 
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
-           name='test-run',
-           mode='online', # 'disabled' or 'online'
+           name='4-parameter-no-normalize',
+           mode='disabled',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -35,7 +36,7 @@ ray_workdir = os.path.join(root_dir, 'ray_workdir', 'optimization')
 
 n_rays = ['1e4']
 
-exported_planes = ["ImagePlane"]
+exported_plane = "Spherical Grating"
 
 transforms = [
     RayTransformConcat({
@@ -44,15 +45,14 @@ transforms = [
 ]
 
 engine = RayEngine(rml_basefile=rml_basefile,
-                   exported_planes=exported_planes,
+                   exported_planes=[exported_plane],
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      ray_workdir=ray_workdir,
                                                      verbose=True),
-                   num_workers=-1,
+                   num_workers=1,
                    as_generator=False)
 
 rg = RandomGenerator(seed=42)
-
 
 param_func = lambda: RayParameterContainer([
     (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e4)),
@@ -92,11 +92,11 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-criterion = SinkhornLoss(normalize_weights=True)
+criterion = SinkhornLoss(normalize_weights=False)
 
 # optimize only some params
 params = param_func()
-fixed = [] #params.keys() - ['E2.translationYerror', 'E2.translationZerror', 'E2.rotationYerror', 'M1_Cylinder.translationYerror', 'ASBL.translationXerror', 'ASBL.totalWidth', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.translationXerror']
+fixed = params.keys() - ['E2.translationZerror', 'E2.rotationYerror', 'M1_Cylinder.translationYerror', 'ASBL.translationXerror']# , , 'ASBL.totalWidth', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.translationXerror']
 
 for key in params:
     old_param = params[key]
@@ -104,6 +104,7 @@ for key in params:
         params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
 
 print(params)
+
 
 def plot_data(pc_supp: torch.Tensor, pc_weights=None):
     pc_supp = pc_supp.detach().cpu()
@@ -119,28 +120,46 @@ def plot_data(pc_supp: torch.Tensor, pc_weights=None):
 
     return out
 
+
 def ray_output_to_tensor(ray_output):
-    x_loc = ray_output['ray_output']['ImagePlane'].x_loc
-    y_loc = ray_output['ray_output']['ImagePlane'].y_loc
+    if isinstance(ray_output, list):
+        return [ray_output_to_tensor(element) for element in ray_output]
+    x_loc = ray_output['ray_output'][exported_plane].x_loc
+    y_loc = ray_output['ray_output'][exported_plane].y_loc
     x_loc = torch.tensor(x_loc)
     y_loc = torch.tensor(y_loc)
     return torch.vstack((x_loc, y_loc)).T
 
 
-def loss(input, engine, secret_sample_rays):
-    param_container = RayParameterContainer()
-    for k, v in input.items():
-        param_container.__setitem__(k, NumericalParameter(v))
-    output = engine.run(param_container)
-    y_hat = ray_output_to_tensor(output)
+def loss(trial_params, engine, secret_sample_rays, param_container):
+    if not isinstance(trial_params, RayParameterContainer): #len(trial_params) > 1:#isinstance(next(iter(trial_params.keys())), int):
+        trial_params_first_key = min(trial_params.keys())
+        param_container_list = []
 
-    y = ray_output_to_tensor(secret_sample_rays)
+        for i in range(trial_params_first_key, trial_params_first_key + len(trial_params)):
+            for param_key in trial_params[trial_params_first_key].keys():
+                param_container.__setitem__(param_key, NumericalParameter(trial_params[i][param_key]))
+            param_container_list.append(param_container.copy())
+        param_container = param_container_list
+    else:
+        for k, v in trial_params.items():
+            param_container.__setitem__(k, NumericalParameter(v))
+    output = engine.run(param_container)
+    if isinstance(output, list):
+        return {key+trial_params_first_key: calculate_loss(secret_sample_rays, element) for key, element in enumerate(output)}
+    return calculate_loss(secret_sample_rays, output)
+
+
+def calculate_loss(y, y_hat):
+    y = ray_output_to_tensor(y)
+    y_hat = ray_output_to_tensor(y_hat)
     if y_hat.shape[0] == 0:
         y_hat = torch.ones((1, 2)) * -1
-    out = criterion(y, y_hat)
+    loss_out = criterion(y, y_hat, torch.ones_like(y[:,1]) / y.shape[0], torch.ones_like(y_hat[:,1]) / y_hat.shape[0])
     image = wandb.Image(plot_data(y_hat))
-    wandb.log({"loss": out, "ray_count": y_hat.shape[0], "plot": image})
-    return out.item()
+    wandb.log({"loss": loss_out, "ray_count": y_hat.shape[0], "plot": image})
+    return loss_out.item()
+
 
 secret_sample_params = RayParameterContainer()
 for key, value in params.items():
@@ -152,11 +171,10 @@ for key, value in params.items():
 
 secret_sample_rays = engine.run(secret_sample_params)
 
+# secret_sample_params['E2.translationYerror'] = GridParameter(np.arange(-1,1,0.1))
 
-#secret_sample_params['E2.translationYerror'] = GridParameter(np.arange(-1,1,0.1))
-
-#output = engine.run(build_parameter_grid(secret_sample_params))
-#for element in output:
+# output = engine.run(build_parameter_grid(secret_sample_params))
+# for element in output:
 #    y_hat = ray_output_to_tensor(element)
 #
 #    y = ray_output_to_tensor(secret_sample_rays)
@@ -166,17 +184,28 @@ secret_sample_rays = engine.run(secret_sample_params)
 #    wandb.log({"loss": out, "ray_count": y_hat.shape[0]})
 
 ### Bayesian Optimization
-parameters = []
+experiment_parameters = []
 for (key, value) in params.items():
     if isinstance(value, MutableParameter):
-        parameters.append({"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
+        experiment_parameters.append(
+            {"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
 
-best_parameters, best_values, experiment, model = optimize(
-    parameters=parameters,
-    evaluation_function=lambda x: loss(x, engine, secret_sample_rays),
+ax_client = AxClient()
+ax_client.create_experiment(
+    name="metrix_experiment",
+    parameters=experiment_parameters,
+    objective_name="metrix",
     minimize=True,
-    total_trials=20,
-    arms_per_trial=1,
 )
 
-print(best_parameters, best_values)
+for _ in range(1000):
+    trials_to_evaluate = ax_client.get_next_trials(max_trials=2)
+    results = loss(trials_to_evaluate[0], engine, secret_sample_rays, params)
+
+    if isinstance(trials_to_evaluate, list):
+        for trial_index in results:
+            ax_client.complete_trial(trial_index, results[trial_index])
+
+best_parameters, metrics = ax_client.get_best_parameters()
+
+print(best_parameters, metrics)
