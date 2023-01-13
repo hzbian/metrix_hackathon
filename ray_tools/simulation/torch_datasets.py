@@ -1,5 +1,6 @@
 from typing import List, Callable, Any, Dict
 from tqdm import tqdm, trange
+from copy import deepcopy
 
 import h5py
 
@@ -34,9 +35,9 @@ class RayDataset(Dataset):
         self.h5_files_obj = [h5py.File(f, "r", swmr=True, libver='latest') for f in self.h5_files]
 
         # map that yields the consecutive index based on (h5-file index, sample index within h5-file)
-        self.get_idx = {}
+        self.get_idx = dict()
         # map that yields a tuple (h5-file index, sample index within h5-file) given a (consecutive) index
-        self.get_identifier = {}
+        self.get_identifier = dict()
         # lengths of data in each h5file
         self._n_samples = []
         idx_total = 0
@@ -46,13 +47,11 @@ class RayDataset(Dataset):
 
             for idx_sample in h5_file_obj.keys():
                 self.get_idx[(idx_h5, idx_sample)] = idx_total
-                self.get_identifier[idx_total] = (idx_h5, idx_sample)
+                self.get_identifier[idx_total] = [idx_h5, idx_sample]
                 idx_total += 1
 
         self._n_samples_total = sum(self._n_samples)
 
-    def __del__(self):
-        # close all open h5-files
         for h5_file_obj in self.h5_files_obj:
             h5_file_obj.close()
 
@@ -68,7 +67,8 @@ class RayDataset(Dataset):
 
         # retrieve correct sample in corresponding h5-file
         idx_h5, idx_sample = self.get_identifier[idx]
-        sample_grp: h5py.Group = self.h5_files_obj[idx_h5][idx_sample]
+        h5_file_obj = h5py.File(deepcopy(self.h5_files[idx_h5]), "r", libver='latest')
+        sample_grp: h5py.Group = h5_file_obj[idx_sample]
 
         data = {}
         for grp in sub_groups:
@@ -84,6 +84,8 @@ class RayDataset(Dataset):
             else:
                 # create dictionary with keys equal to sub_groups
                 data[grp] = h5_to_dict(sample_grp[grp])
+
+        h5_file_obj.close()
 
         return self.transform(data) if self.transform else data
 
