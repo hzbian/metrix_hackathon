@@ -1,4 +1,5 @@
 import sys
+sys.path.insert(0, '../../')
 import os
 
 from ax.service.ax_client import AxClient
@@ -12,7 +13,9 @@ from ax.service.ax_client import AxClient
 from ray_nn.data.transform import Select
 from ray_nn.metrics.geometric import SinkhornLoss
 
-sys.path.insert(0, '../../')
+
+from sub_projects.ray_surrogate.ray_engine_surrogate import RayEngineSurrogate
+
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
     GridParameter, build_parameter_grid
 from ray_tools.base.utils import RandomGenerator
@@ -25,8 +28,8 @@ import numpy as np
 
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
-           name='4-parameter-no-normalize',
-           mode='disabled',  # 'disabled' or 'online'
+           name='17-parameter-surrogate-multiscale',
+           mode='online',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -49,8 +52,32 @@ engine = RayEngine(rml_basefile=rml_basefile,
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      ray_workdir=ray_workdir,
                                                      verbose=True),
-                   num_workers=1,
+                   num_workers=-1,
                    as_generator=False)
+
+PARAMS_INFO = [
+    ('U41_318eV.translationXerror', (-0.25, 0.25)),
+    ('U41_318eV.translationYerror', (-0.25, 0.25)),
+    ('U41_318eV.rotationXerror', (-0.05, 0.05)),
+    ('U41_318eV.rotationYerror', (-0.05, 0.05)),
+    ('ASBL.totalWidth', (1.9, 2.1)),
+    ('ASBL.totalHeight', (0.9, 1.1)),
+    ('ASBL.translationXerror', (-0.2, 0.2)),
+    ('ASBL.translationYerror', (-0.2, 0.2)),
+    ('M1_Cylinder.radius', (174.06, 174.36)),
+    ('M1_Cylinder.rotationXerror', (-0.25, 0.25)),
+    ('M1_Cylinder.rotationYerror', (-1., 1.)),
+    ('M1_Cylinder.rotationZerror', (-1., 1.)),
+    ('M1_Cylinder.translationXerror', (-0.15, 0.15)),
+    ('M1_Cylinder.translationYerror', (-1., 1.)),
+    ('SphericalGrating.radius', (109741., 109841.)),
+    ('SphericalGrating.rotationYerror', (-1., 1.)),
+    ('SphericalGrating.rotationZerror', (-2.5, 2.5)),
+]
+
+nn_engine = RayEngineSurrogate(
+    ckpt_path='/scratch/meier/metrix_hackathon/sub_projects/ray_surrogate/training/results/sg_v1_nothing_given/best_val.ckpt',
+    params_info=PARAMS_INFO, hist_dim=1024, gpu_id=0)
 
 rg = RandomGenerator(seed=42)
 
@@ -92,12 +119,15 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-criterion = SinkhornLoss(normalize_weights=False)
+criterion = SinkhornLoss(normalize_weights=False, p=1, backend='online')
 
 # optimize only some params
 params = param_func()
-fixed = params.keys() - ['E2.translationZerror', 'E2.rotationYerror', 'M1_Cylinder.translationYerror', 'ASBL.translationXerror']# , , 'ASBL.totalWidth', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.translationXerror']
+fixed = ['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
 
+#['E2.translationZerror', 'E2.rotationYerror', 'M1_Cylinder.translationYerror',
+         #                'ASBL.translationXerror']  # , , 'ASBL.totalWidth', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.translationXerror'] #
+# Out[3]: odict_keys(['U41_318eV.numberRays', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror'])
 for key in params:
     old_param = params[key]
     if isinstance(old_param, MutableParameter) and key in fixed:
@@ -132,7 +162,8 @@ def ray_output_to_tensor(ray_output):
 
 
 def loss(trial_params, engine, secret_sample_rays, param_container):
-    if not isinstance(trial_params, RayParameterContainer): #len(trial_params) > 1:#isinstance(next(iter(trial_params.keys())), int):
+    if not isinstance(trial_params,
+                      RayParameterContainer):  # len(trial_params) > 1:#isinstance(next(iter(trial_params.keys())), int):
         trial_params_first_key = min(trial_params.keys())
         param_container_list = []
 
@@ -144,20 +175,27 @@ def loss(trial_params, engine, secret_sample_rays, param_container):
     else:
         for k, v in trial_params.items():
             param_container.__setitem__(k, NumericalParameter(v))
+        param_container = [param_container]
+    print("Before execution")
     output = engine.run(param_container)
+    print("After execution")
     if isinstance(output, list):
-        return {key+trial_params_first_key: calculate_loss(secret_sample_rays, element) for key, element in enumerate(output)}
+        return {key + trial_params_first_key: calculate_loss(secret_sample_rays, element) for key, element in
+                enumerate(output)}
     return calculate_loss(secret_sample_rays, output)
 
 
 def calculate_loss(y, y_hat):
-    y = ray_output_to_tensor(y)
-    y_hat = ray_output_to_tensor(y_hat)
+    print("Before loss")
+    y = ray_output_to_tensor(y).cuda()
+    y_hat = ray_output_to_tensor(y_hat).cuda()
     if y_hat.shape[0] == 0:
         y_hat = torch.ones((1, 2)) * -1
-    loss_out = criterion(y, y_hat, torch.ones_like(y[:,1]) / y.shape[0], torch.ones_like(y_hat[:,1]) / y_hat.shape[0])
+    loss_out = criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0], torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
+    print("After loss")
     image = wandb.Image(plot_data(y_hat))
-    wandb.log({"loss": loss_out, "ray_count": y_hat.shape[0], "plot": image})
+    image_2 = wandb.Image(plot_data(y))
+    wandb.log({"loss": loss_out.cpu(), "ray_count": y_hat.shape[0], "plot": image, "plot2": image_2})
     return loss_out.item()
 
 
@@ -190,7 +228,7 @@ for (key, value) in params.items():
         experiment_parameters.append(
             {"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
 
-ax_client = AxClient()
+ax_client = AxClient(early_stopping_strategy=None)
 ax_client.create_experiment(
     name="metrix_experiment",
     parameters=experiment_parameters,
@@ -198,8 +236,10 @@ ax_client.create_experiment(
     minimize=True,
 )
 
-for _ in range(1000):
-    trials_to_evaluate = ax_client.get_next_trials(max_trials=2)
+for i in range(1000):
+    trials_to_evaluate = ax_client.get_next_trials(max_trials=10)
+    #if i > 34:
+    #    print(i)
     results = loss(trials_to_evaluate[0], engine, secret_sample_rays, params)
 
     if isinstance(trials_to_evaluate, list):

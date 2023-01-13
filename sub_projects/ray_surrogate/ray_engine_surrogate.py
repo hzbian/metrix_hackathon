@@ -40,7 +40,7 @@ class RayEngineSurrogate:
                                       dtype=torch.get_default_dtype())
             params_cur[:, 0] = params_cur[:, 0] - params_cur[:, 1]
             params_cur[:, 0] = params_cur[:, 0] / (params_cur[:, 2] - params_cur[:, 1] + 1e-8)
-            params[idx, :] = params[:, 0]
+            params[idx, :] = params_cur[:, 0]
 
         hist = torch.zeros(bs, self.hist_dim, dtype=torch.get_default_dtype())
         x_lims = torch.zeros(bs, 2, dtype=torch.get_default_dtype())
@@ -54,8 +54,8 @@ class RayEngineSurrogate:
                      tar_n_rays=n_rays)
 
         if self.gpu_id is not None:
-            for v in batch.values():
-                v.cuda(self.gpu_id)
+            for k, v in batch.items():
+                batch[k] = v.cuda(self.gpu_id)
 
         batch = self.surrogate_model(batch)
 
@@ -67,12 +67,17 @@ class RayEngineSurrogate:
         for idx_bs in range(bs):
             x_loc, y_loc = [], []
             for idx_coord in range(self.hist_dim):
-                x_loc += int(pred_pc_weights[idx_bs, idx_coord]) * [pred_pc_supp[idx_bs, idx_coord, 0]]
-                y_loc += int(pred_pc_weights[idx_bs, idx_coord]) * [pred_pc_supp[idx_bs, idx_coord, 1]]
-            x_loc = torch.cat(x_loc).cpu().numpy()
-            y_loc = torch.cat(y_loc).cpu().numpy()
+                if int(pred_pc_weights[idx_bs, idx_coord]) > 0:
+                    x_loc += int(pred_pc_weights[idx_bs, idx_coord]) * [pred_pc_supp[idx_bs, idx_coord, 0]]
+                    y_loc += int(pred_pc_weights[idx_bs, idx_coord]) * [pred_pc_supp[idx_bs, idx_coord, 1]]
+            if len(x_loc) > 0:
+                x_loc = torch.stack(x_loc).flatten().cpu().numpy()
+                y_loc = torch.stack(y_loc).flatten().cpu().numpy()
+            else:
+                x_loc = np.array([])
+                y_loc = np.array([])
 
-            out.append({'ray_output': RayOutput(x_loc=x_loc, y_loc=y_loc, z_loc=None,
-                                                x_dir=None, y_dir=None, z_dir=None, energy=None)})
+            out.append({'ray_output': {'Spherical Grating': RayOutput(x_loc=x_loc, y_loc=y_loc, z_loc=None,
+                                                x_dir=None, y_dir=None, z_dir=None, energy=None)}})
 
         return out
