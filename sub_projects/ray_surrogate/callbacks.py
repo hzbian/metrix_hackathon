@@ -1,4 +1,7 @@
+import os, psutil
 from collections import defaultdict
+from humanize import naturalsize
+import gc
 
 import wandb
 
@@ -34,7 +37,10 @@ class LogPredictionsCallback(Callback):
                 [trainer.current_epoch,
                  wandb.Image(self.plot_data(hist=batch['pred_hist'][idx, ...],
                                             x_lims=batch['pred_x_lims'][idx, ...],
-                                            y_lims=batch['pred_y_lims'][idx, ...])),
+                                            y_lims=batch['pred_y_lims'][idx, ...],
+                                            x_lims_show=batch['tar_x_lims'][idx, ...],
+                                            y_lims_show=batch['tar_y_lims'][idx, ...],
+                                            hist_show=batch['tar_hist'][idx, ...])),
                  wandb.Image(self.plot_data(hist=batch['tar_hist'][idx, ...],
                                             x_lims=batch['tar_x_lims'][idx, ...],
                                             y_lims=batch['tar_y_lims'][idx, ...])),
@@ -51,7 +57,10 @@ class LogPredictionsCallback(Callback):
                     [trainer.current_epoch,
                      wandb.Image(self.plot_data(hist=dl_batch['pred_hist'][idx, ...],
                                                 x_lims=dl_batch['pred_x_lims'][idx, ...],
-                                                y_lims=dl_batch['pred_y_lims'][idx, ...])),
+                                                y_lims=dl_batch['pred_y_lims'][idx, ...],
+                                                x_lims_show=dl_batch['tar_x_lims'][idx, ...],
+                                                y_lims_show=dl_batch['tar_y_lims'][idx, ...],
+                                                hist_show=dl_batch['tar_hist'][idx, ...])),
                      wandb.Image(self.plot_data(hist=dl_batch['tar_hist'][idx, ...],
                                                 x_lims=dl_batch['tar_x_lims'][idx, ...],
                                                 y_lims=dl_batch['tar_y_lims'][idx, ...])),
@@ -83,14 +92,29 @@ class LogPredictionsCallback(Callback):
             if self.overwrite_epoch:
                 self.val_data[dl_name] = []
 
-    def plot_data(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor):
+    def plot_data(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor,
+                  x_lims_show: torch.Tensor = None, y_lims_show: torch.Tensor = None,
+                  hist_show: torch.Tensor = None):
         fig = plt.figure()
         ax = fig.gca()
         dim_x = dim_y = int(np.sqrt(hist.shape[0]))
+        if hist_show is not None:
+            vmin = torch.min(hist_show).item()
+            vmax = torch.max(hist_show).item()
+        else:
+            vmin = None
+            vmax = None
+
         im = ax.imshow(hist.view(dim_x, dim_y).T, cmap='turbo', interpolation='none',
                        extent=[x_lims[0].item(), x_lims[1].item() + 1e-8, y_lims[0].item(), y_lims[1].item() + 1e-8],
-                       origin='lower', aspect='auto')
+                       origin='lower', aspect='auto',
+                       vmin=vmin, vmax=vmax)
         fig.colorbar(im)
+
+        if x_lims_show is not None and y_lims is not None:
+            ax.set_xlim([x_lims_show[0].item(), x_lims_show[1].item() + 1e-8])
+            ax.set_ylim([y_lims_show[0].item(), y_lims_show[1].item() + 1e-8])
+
         fig.tight_layout()
 
         fig.canvas.draw()
@@ -99,3 +123,17 @@ class LogPredictionsCallback(Callback):
         plt.close(fig)
 
         return out
+
+
+class MemoryManagementCallback(Callback):
+
+    def on_train_epoch_start(self, trainer, pl_module) -> None:
+        current_process = psutil.Process(os.getpid())
+        mem = current_process.memory_full_info().uss
+        for child in current_process.children(recursive=True):
+            mem += child.memory_full_info().uss
+        print(naturalsize(mem / 1024, format="%.3f", gnu=True))
+
+    def on_validation_epoch_end(self, trainer, pl_module) -> None:
+        gc.collect()
+        print('Garbage collected...')

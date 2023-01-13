@@ -26,7 +26,7 @@ from cfg_params_sg import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'sg_v1_no_input'
+RUN_ID = 'sg_v1_nothing_given'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -42,7 +42,6 @@ H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray
 PARAMS_KEY = '1e5/params'
 HIST_KEY = '1e5/ray_output/Spherical Grating/hist_small'
 
-N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
 DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
                      nested_groups=False,
                      sub_groups=[PARAMS_KEY, HIST_KEY],
@@ -52,9 +51,9 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 10
-FRAC_TRAIN_SAMPLES = 1.0
-FRAC_VAL_SAMPLES = 1.0
+MAX_EPOCHS = 100
+FRAC_TRAIN_SAMPLES = 0.25
+FRAC_VAL_SAMPLES = 0.05
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
@@ -82,19 +81,22 @@ VAL_DATALOADER = CombinedLoader(
 LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=1,
                                  sinkhorn_blur=0.05,
                                  sinkhorn_normalize=False,
+                                 sinkhorn_n_rays_weighting=False,
+                                 sinkhorn_standardize_lims=True,
                                  sinkhorn_weight=1.0,
                                  mae_lims_weight=0.0,
-                                 mae_hist_weight=0.0))
+                                 mae_hist_weight=0.0,
+                                 mae_n_rays_weight=0.0))
 VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
 # --- Optimization ---
 OPTIMIZER = (torch.optim.Adam, {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4})
-SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 1, "gamma": 1.0})
+SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.98})
 
 # --- Callbacks ---
 CALLBACKS = [
-    LogPredictionsCallback(num_plots=50, overwrite_epoch=True)
+    LogPredictionsCallback(num_plots=50, overwrite_epoch=False)
 ]
 
 # --- Surrogate Model ---
@@ -108,7 +110,7 @@ else:
                                net_bottleneck=MLP,
                                net_bottleneck_params=dict(dim_in=DIM_BOTTLENECK,
                                                           dim_out=DIM_BOTTLENECK,
-                                                          dim_hidden=3 * [DIM_BOTTLENECK]),
+                                                          dim_hidden=6 * [DIM_BOTTLENECK]),
                                net_lims=(MLP, MLP),
                                net_lims_params=(dict(dim_in=2,
                                                      dim_out=DIM_BOTTLENECK,
@@ -123,10 +125,10 @@ else:
                                net_hist=(MLP, MLP),
                                net_hist_params=(dict(dim_in=DIM_HIST,
                                                      dim_out=DIM_BOTTLENECK,
-                                                     dim_hidden=3 * [DIM_HIST]),
+                                                     dim_hidden=6 * [DIM_HIST]),
                                                 dict(dim_in=DIM_BOTTLENECK,
                                                      dim_out=DIM_HIST,
-                                                     dim_hidden=3 * [DIM_HIST])),
+                                                     dim_hidden=6 * [DIM_HIST])),
                                enc_params=MLP,
                                enc_params_params=dict(dim_in=len(PARAMS_INFO),
                                                       dim_out=DIM_BOTTLENECK,

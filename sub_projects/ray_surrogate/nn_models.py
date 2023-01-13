@@ -87,6 +87,14 @@ class SurrogateModel(LightningModule):
         batch['pred_y_lims'] = torch.stack([pred_y_lims_lo, pred_y_lims_hi], dim=-1)
         batch['pred_n_rays'] = batch['pred_hist'].sum(dim=1)
 
+        # # n_rays given
+        # batch['pred_hist'] = torch.clamp_min(self.dec_hist(bottleneck), 0.0)
+        # batch['pred_hist'] = batch['pred_hist'] / batch['pred_hist'].sum(dim=1, keepdim=True) * \
+        #                      batch['tar_n_rays'].unsqueeze(-1)
+        # batch['pred_x_lims'] = torch.stack([pred_x_lims_lo, pred_x_lims_hi], dim=-1)
+        # batch['pred_y_lims'] = torch.stack([pred_y_lims_lo, pred_y_lims_hi], dim=-1)
+        # batch['pred_n_rays'] = batch['pred_hist'].sum(dim=1)
+
         # # lims + n_rays given
         # batch['pred_hist'] = torch.clamp_min(self.dec_hist(bottleneck), 0.0)
         # batch['pred_hist'] = batch['pred_hist'] / batch['pred_hist'].sum(dim=1, keepdim=True) * \

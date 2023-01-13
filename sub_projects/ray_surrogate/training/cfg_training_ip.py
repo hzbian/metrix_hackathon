@@ -19,7 +19,7 @@ from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
 from sub_projects.ray_surrogate.nn_models import MLP, SurrogateModel
 from sub_projects.ray_surrogate.losses import SurrogateLoss
 
-from cfg_params_es import *
+from cfg_params_ip import *
 
 # --- Global ---
 
@@ -28,7 +28,7 @@ from cfg_params_es import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'es_v1_nothing_given'
+RUN_ID = 'ip_v1_n_rays_given_long'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -42,12 +42,12 @@ TRAINING_SEED = 42
 # --- Dataset ---
 H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
 PARAMS_KEY = '1e5/params'
-HIST_KEY = '1e5/ray_output/Exit Slit/hist_small'
+HIST_KEY = '1e5/ray_output/ImagePlane/hist_small'
 
 DATASET_N_RAYS = RayDataset(
     h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
     nested_groups=False,
-    sub_groups=['1e5/ray_output/Exit Slit/hist_small/n_rays'],
+    sub_groups=['1e5/ray_output/ImagePlane/hist_small/n_rays'],
     transform=None)
 N_RAYS = [item for idx, item in tqdm(enumerate(DataLoader(DATASET_N_RAYS,
                                                           shuffle=False,
@@ -65,9 +65,9 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 150
+MAX_EPOCHS = 300
 FRAC_TRAIN_SAMPLES = 0.25
-FRAC_VAL_SAMPLES = 0.05
+FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
@@ -109,8 +109,7 @@ LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=1,
                                  sinkhorn_standardize_lims=True,
                                  sinkhorn_weight=1.0,
                                  mae_lims_weight=0.0,
-                                 mae_hist_weight=0.0,
-                                 mae_n_rays_weight=1.0))
+                                 mae_hist_weight=0.0))
 VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
@@ -134,7 +133,7 @@ else:
                                net_bottleneck=MLP,
                                net_bottleneck_params=dict(dim_in=DIM_BOTTLENECK,
                                                           dim_out=DIM_BOTTLENECK,
-                                                          dim_hidden=6 * [DIM_BOTTLENECK]),
+                                                          dim_hidden=3 * [DIM_BOTTLENECK]),
                                net_lims=(MLP, MLP),
                                net_lims_params=(dict(dim_in=2,
                                                      dim_out=DIM_BOTTLENECK,
@@ -149,10 +148,10 @@ else:
                                net_hist=(MLP, MLP),
                                net_hist_params=(dict(dim_in=DIM_HIST,
                                                      dim_out=DIM_BOTTLENECK,
-                                                     dim_hidden=6 * [DIM_HIST]),
+                                                     dim_hidden=3 * [DIM_HIST]),
                                                 dict(dim_in=DIM_BOTTLENECK,
                                                      dim_out=DIM_HIST,
-                                                     dim_hidden=6 * [DIM_HIST])),
+                                                     dim_hidden=3 * [DIM_HIST])),
                                enc_params=MLP,
                                enc_params_params=dict(dim_in=len(PARAMS_INFO),
                                                       dim_out=DIM_BOTTLENECK,
