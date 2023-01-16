@@ -14,7 +14,7 @@ from ray_nn.data.transform import SurrogatePreparation
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
 
-from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback
+from sub_projects.ray_surrogate.callbacks import LogPredictionsCallback, SurrogateLossScheduler
 from sub_projects.ray_surrogate.nn_models import MLP, SurrogateModel
 from sub_projects.ray_surrogate.losses import SurrogateLoss
 
@@ -27,7 +27,7 @@ from cfg_params_all import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'ip_v1_nothing_given_full_data_rerun'
+RUN_ID = 'ip_v1_n_rays_given'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -53,7 +53,7 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                     hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 150
+MAX_EPOCHS = 300
 FRAC_TRAIN_SAMPLES = 0.15
 FRAC_VAL_SAMPLES = 0.025
 BATCH_SIZE_TRAIN = 256
@@ -92,13 +92,13 @@ VAL_DATALOADER = CombinedLoader(
 # --- Loss & Validation Metrics ---
 LOSS_FUNC = (SurrogateLoss, dict(sinkhorn_p=1,
                                  sinkhorn_blur=0.05,
-                                 sinkhorn_normalize=True,
+                                 sinkhorn_normalize=False,
                                  sinkhorn_n_rays_weighting=False,
                                  sinkhorn_standardize_lims=True,
                                  sinkhorn_weight=1.0,
                                  mae_lims_weight=0.0,
                                  mae_hist_weight=0.0,
-                                 mae_n_rays_weight=1e-3))
+                                 mae_n_rays_weight=0.0))
 VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
@@ -108,7 +108,8 @@ SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.98}
 
 # --- Callbacks ---
 CALLBACKS = [
-    LogPredictionsCallback(num_plots=50, overwrite_epoch=False)
+    LogPredictionsCallback(num_plots=50, overwrite_epoch=False),
+    # SurrogateLossScheduler(epoch=20)
 ]
 
 # --- Surrogate Model ---

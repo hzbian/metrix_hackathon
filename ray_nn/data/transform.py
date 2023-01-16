@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import torch
 
@@ -25,6 +25,61 @@ class Select(torch.nn.Module):
                 new_element = torch.tensor(batch[key]).float().unsqueeze(-1)
             outputs.append(new_element)
         return tuple(outputs)
+
+
+class SurrogateModelPreparation:
+
+    def __init__(self,
+                 planes_info: Dict[str, Tuple[List[str], List[str]]],
+                 params_key: str,
+                 params_info: Dict[str, Tuple[float, float]],
+                 hist_subsampler: HistSubsampler):
+        super().__init__()
+        self.planes_info = planes_info
+        self.params_key = params_key
+        self.params_info = params_info
+        self.hist_subsampler = hist_subsampler
+
+    def __call__(self, data):
+        params = self._process_params(data[self.params_key])
+
+        out = {}
+        for plane, (hist_keys, param_names) in self.planes_info.items():
+            out[plane] = {}
+            out[plane]['params'] = torch.zeros(len(params))
+            out[plane]['params'][:len(param_names)] = torch.tensor([params[name] for name in param_names])
+
+            hist = torch.stack([torch.tensor(data[key]['histogram']) for key in hist_keys], dim=0)
+            hist = self.hist_subsampler(hist)
+            x_lims = torch.stack([torch.tensor(data[key]['x_lims']) for key in hist_keys], dim=0)
+            y_lims = torch.stack([torch.tensor(data[key]['y_lims']) for key in hist_keys], dim=0)
+            n_rays = torch.stack([torch.tensor(data[key]['n_rays']) for key in hist_keys], dim=0)
+
+            self._process_zero_hist(hist, x_lims, y_lims, n_rays)
+
+            out[plane].update(dict(tar_hist=hist.to(torch.get_default_dtype()),
+                                   tar_x_lims=x_lims.to(torch.get_default_dtype()),
+                                   tar_y_lims=y_lims.to(torch.get_default_dtype()),
+                                   tar_n_rays=n_rays.to(torch.get_default_dtype())))
+        return out
+
+    def _process_zero_hist(self,
+                           hist: torch.Tensor,
+                           x_lims: torch.Tensor,
+                           y_lims: torch.Tensor,
+                           n_rays: torch.Tensor) -> None:
+        idx_zeros = (n_rays == 0)
+        hist[idx_zeros, ...] = 0.0
+        hist[idx_zeros, 0, 0] = 1.0
+        x_lims[idx_zeros, 0] = x_lims[idx_zeros, 1] = y_lims[idx_zeros, 0] = y_lims[idx_zeros, 1] = 10.0
+        n_rays[idx_zeros] = 1.0
+
+    def _process_params(self, params: Dict[str, float]) -> Dict[str, float]:
+        params_processed = {}
+        for key, (lo, hi) in self.params_info.items():
+            value = params[key]
+            params_processed[key] = 2.0 * (value - lo) / (hi - lo + 1e-8) - 1.0
+        return params_processed
 
 
 class SurrogatePreparation:

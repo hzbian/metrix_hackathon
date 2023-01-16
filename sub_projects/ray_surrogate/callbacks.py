@@ -7,9 +7,12 @@ import wandb
 
 import numpy as np
 import torch
-from pytorch_lightning import Callback
+from pytorch_lightning import Callback, Trainer
 
 from matplotlib import pyplot as plt
+
+from sub_projects.ray_surrogate.losses import SurrogateLoss
+from sub_projects.ray_surrogate.nn_models import SurrogateModel
 
 
 class LogPredictionsCallback(Callback):
@@ -123,6 +126,27 @@ class LogPredictionsCallback(Callback):
         plt.close(fig)
 
         return out
+
+
+class SurrogateLossScheduler(Callback):
+
+    def __init__(self, epoch: int):
+        self.epoch = epoch
+
+    def on_train_epoch_start(self, trainer: Trainer, pl_module: SurrogateModel) -> None:
+        loss_func: SurrogateLoss = pl_module.loss_func
+        if trainer.current_epoch <= self.epoch:
+            loss_func.sinkhorn_weight = 0.0
+            loss_func.mae_hist_weight = 0.0
+            loss_func.mae_lims_weight = 0.0
+            loss_func.mae_n_rays_weight = 1.0
+            print("Fitting mae_n_rays_weight")
+        else:
+            loss_func.sinkhorn_weight = 1.0
+            loss_func.mae_hist_weight = 0.0
+            loss_func.mae_lims_weight = 0.0
+            loss_func.mae_n_rays_weight = 0.0
+            print("Fitting sinkhorn_weight")
 
 
 class MemoryManagementCallback(Callback):
