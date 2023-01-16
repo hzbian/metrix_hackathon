@@ -25,10 +25,10 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 import wandb
 import matplotlib.pyplot as plt
 import numpy as np
-
+import time
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
-           name='17-parameter-surrogate-multiscale',
+           name='1-parameter-rayui-test',
            mode='online',  # 'disabled' or 'online'
            )
 
@@ -123,17 +123,13 @@ criterion = SinkhornLoss(normalize_weights=False, p=1, backend='online')
 
 # optimize only some params
 params = param_func()
-fixed = ['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
+fixed = params.keys() - ['U41_318eV.translationYerror'] #['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
 
-#['E2.translationZerror', 'E2.rotationYerror', 'M1_Cylinder.translationYerror',
-         #                'ASBL.translationXerror']  # , , 'ASBL.totalWidth', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.translationXerror'] #
 # Out[3]: odict_keys(['U41_318eV.numberRays', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror'])
 for key in params:
     old_param = params[key]
     if isinstance(old_param, MutableParameter) and key in fixed:
         params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
-print(params)
 
 
 def plot_data(pc_supp: torch.Tensor, pc_weights=None):
@@ -162,37 +158,35 @@ def ray_output_to_tensor(ray_output):
 
 
 def loss(trial_params, engine, secret_sample_rays, param_container):
-    if not isinstance(trial_params,
-                      RayParameterContainer):  # len(trial_params) > 1:#isinstance(next(iter(trial_params.keys())), int):
-        trial_params_first_key = min(trial_params.keys())
-        param_container_list = []
+    begin_total_time = time.time()
+    trial_params_first_key = min(trial_params.keys())
+    param_container_list = []
 
-        for i in range(trial_params_first_key, trial_params_first_key + len(trial_params)):
-            for param_key in trial_params[trial_params_first_key].keys():
-                param_container.__setitem__(param_key, NumericalParameter(trial_params[i][param_key]))
-            param_container_list.append(param_container.copy())
-        param_container = param_container_list
-    else:
-        for k, v in trial_params.items():
-            param_container.__setitem__(k, NumericalParameter(v))
-        param_container = [param_container]
-    print("Before execution")
+    for i in range(trial_params_first_key, trial_params_first_key + len(trial_params)):
+        for param_key in trial_params[trial_params_first_key].keys():
+            param_container.__setitem__(param_key, NumericalParameter(trial_params[i][param_key]))
+        param_container_list.append(param_container.copy())
+    param_container = param_container_list
+    begin_time = time.time()
+    print("parameter container", param_container)
     output = engine.run(param_container)
-    print("After execution")
-    if isinstance(output, list):
-        return {key + trial_params_first_key: calculate_loss(secret_sample_rays, element) for key, element in
-                enumerate(output)}
-    return calculate_loss(secret_sample_rays, output)
+    print("Execution took ", time.time() - begin_time, "s")
+    if not isinstance(output, list):
+        output = [output]
+    output_loss = {key + trial_params_first_key: calculate_loss(secret_sample_rays, element) for key, element in
+            enumerate(output)}
+    print("Total took", time.time() - begin_total_time, "s")
+    return output_loss
 
 
 def calculate_loss(y, y_hat):
-    print("Before loss")
+    begin_time = time.time()
     y = ray_output_to_tensor(y).cuda()
     y_hat = ray_output_to_tensor(y_hat).cuda()
     if y_hat.shape[0] == 0:
         y_hat = torch.ones((1, 2)) * -1
     loss_out = criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0], torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
-    print("After loss")
+    print("Loss took ", time.time() - begin_time, "s")
     image = wandb.Image(plot_data(y_hat))
     image_2 = wandb.Image(plot_data(y))
     wandb.log({"loss": loss_out.cpu(), "ray_count": y_hat.shape[0], "plot": image, "plot2": image_2})
@@ -238,13 +232,10 @@ ax_client.create_experiment(
 
 for i in range(1000):
     trials_to_evaluate = ax_client.get_next_trials(max_trials=10)
-    #if i > 34:
-    #    print(i)
     results = loss(trials_to_evaluate[0], engine, secret_sample_rays, params)
 
-    if isinstance(trials_to_evaluate, list):
-        for trial_index in results:
-            ax_client.complete_trial(trial_index, results[trial_index])
+    for trial_index in results:
+        ax_client.complete_trial(trial_index, results[trial_index])
 
 best_parameters, metrics = ax_client.get_best_parameters()
 
