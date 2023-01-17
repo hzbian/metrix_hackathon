@@ -119,11 +119,11 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-criterion = SinkhornLoss(normalize_weights=False, p=1, backend='online')
+criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online')
 
 # optimize only some params
 params = param_func()
-fixed = params.keys() - ['U41_318eV.translationYerror'] #['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
+fixed = params.keys() - ['U41_318eV.translationXerror'] #['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
 
 # Out[3]: odict_keys(['U41_318eV.numberRays', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror'])
 for key in params:
@@ -168,18 +168,17 @@ def loss(trial_params, engine, secret_sample_rays, param_container):
         param_container_list.append(param_container.copy())
     param_container = param_container_list
     begin_time = time.time()
-    print("parameter container", param_container)
     output = engine.run(param_container)
     print("Execution took ", time.time() - begin_time, "s")
     if not isinstance(output, list):
         output = [output]
-    output_loss = {key + trial_params_first_key: calculate_loss(secret_sample_rays, element) for key, element in
+    output_loss = {key + trial_params_first_key: calculate_loss(secret_sample_rays, element, key + trial_params_first_key) for key, element in
             enumerate(output)}
     print("Total took", time.time() - begin_total_time, "s")
     return output_loss
 
 
-def calculate_loss(y, y_hat):
+def calculate_loss(y, y_hat, epoch):
     begin_time = time.time()
     y = ray_output_to_tensor(y).cuda()
     y_hat = ray_output_to_tensor(y_hat).cuda()
@@ -187,9 +186,14 @@ def calculate_loss(y, y_hat):
         y_hat = torch.ones((1, 2)) * -1
     loss_out = criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0], torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
     print("Loss took ", time.time() - begin_time, "s")
-    image = wandb.Image(plot_data(y_hat))
-    image_2 = wandb.Image(plot_data(y))
-    wandb.log({"loss": loss_out.cpu(), "ray_count": y_hat.shape[0], "plot": image, "plot2": image_2})
+    log_dict = {"epoch": epoch, "loss": loss_out.cpu(), "ray_count": y_hat.shape[0]}
+    if epoch % 100 == 0:
+        image = wandb.Image(plot_data(y_hat))
+        log_dict = {**log_dict, **{"plot": image}}
+    if epoch == 0:
+        target = wandb.Image(plot_data(y))
+        log_dict = {**log_dict, **{"target": target}}
+    wandb.log(log_dict)
     return loss_out.item()
 
 
