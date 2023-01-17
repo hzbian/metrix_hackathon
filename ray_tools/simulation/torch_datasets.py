@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import h5py
 
+import numpy as np
 from torch.utils.data import Dataset
 
 from .data_tools import h5_to_dict
@@ -26,7 +27,9 @@ class RayDataset(Dataset):
                  sub_groups: List[str],
                  nested_groups: bool = False,
                  transform: Callable = None):
-        self.h5_files = h5_files
+        # np-array may help to avoid a memory leak
+        # https://github.com/pytorch/pytorch/issues/13246#issuecomment-905703662
+        self.h5_files = np.array(h5_files, dtype=np.str)
         self.sub_groups = sub_groups
         self.nested_groups = nested_groups
         self.transform = transform
@@ -50,6 +53,10 @@ class RayDataset(Dataset):
                 self.get_identifier[idx_total] = [idx_h5, idx_sample]
                 idx_total += 1
 
+        # np-array may help to avoid a memory leak
+        # https://github.com/pytorch/pytorch/issues/13246#issuecomment-905703662
+        self.get_identifier = np.array([self.get_identifier[idx] for idx in range(idx_total)], dtype=np.str)
+
         self._n_samples_total = sum(self._n_samples)
 
         for h5_file_obj in self.h5_files_obj:
@@ -67,7 +74,7 @@ class RayDataset(Dataset):
 
         # retrieve correct sample in corresponding h5-file
         idx_h5, idx_sample = self.get_identifier[idx]
-        h5_file_obj = h5py.File(deepcopy(self.h5_files[idx_h5]), "r", libver='latest')
+        h5_file_obj = h5py.File(self.h5_files[int(idx_h5)], "r", libver='latest')
         sample_grp: h5py.Group = h5_file_obj[idx_sample]
 
         data = {}
