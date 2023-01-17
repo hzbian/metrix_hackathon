@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import itertools
 
 import torch
+from torch.utils.data import WeightedRandomSampler, DataLoader
 from pytorch_lightning.trainer.supporters import CombinedLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset
@@ -12,12 +13,12 @@ from ray_tools.simulation.torch_datasets import RayDataset
 from ray_nn.data.transform import SurrogateModelPreparation
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
-from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor, PlaneMutator
+from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor
 from ray_nn.nn.models import SurrogateModel
 from ray_nn.nn.backbones import TransformerBackbone
 from ray_nn.metrics.geometric import SurrogateLoss
 
-from cfg_params_im2im import *
+from cfg_params_direct import *
 
 # --- Global ---
 
@@ -26,7 +27,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'im2im_sg'
+RUN_ID = 'direct_v1'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -34,13 +35,13 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 1
+GPU_ID = 0
 TRAINING_SEED = 42
 
 # --- Dataset ---
-H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
+H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_enhance_final')
 
-PLANES_SUB = ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating"]
+PLANES_SUB = ["ImagePlane"]
 N_PLANES = len(PLANES_SUB)
 PLANES_INFO_SUB = {plane: PLANES_INFO[plane] for plane in PLANES_SUB}
 HIST_KEYS = list(itertools.chain(*[PLANES_INFO[plane][0] for plane in PLANES_SUB]))
@@ -57,11 +58,11 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
 # --- Dataloaders ---
 MAX_EPOCHS = 100
 FRAC_TRAIN_SAMPLES = 1.0
-FRAC_VAL_SAMPLES = 1.0
+FRAC_VAL_SAMPLES = 0.1
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
-DL_NUM_WORKERS = 10
+DL_NUM_WORKERS = 25
 NUM_SANITY_VAL_STEPS = 0
 SEED_TRAIN_DATA = 43
 SEED_DATA_SPLIT = 44
@@ -79,15 +80,15 @@ data_module.setup()
 TRAIN_DATALOADER = data_module.train_dataloader()
 VAL_DATALOADER = CombinedLoader(
     OrderedDict([('reference', data_module.val_dataloader()),
-                 # ('many rays', DataLoader(DATASET,
-                 #                          sampler=WeightedRandomSampler(
-                 #                              weights=N_RAYS,
-                 #                              num_samples=5000,
-                 #                              replacement=False),
-                 #                          batch_size=BATCH_SIZE_VAL,
-                 #                          num_workers=DL_NUM_WORKERS,
-                 #                          pin_memory=False if DEVICE == 'cpu' else True,
-                 #                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
+                 ('many rays', DataLoader(DATASET,
+                                          sampler=WeightedRandomSampler(
+                                              weights=N_RAYS,
+                                              num_samples=5000,
+                                              replacement=False),
+                                          batch_size=BATCH_SIZE_VAL,
+                                          num_workers=DL_NUM_WORKERS,
+                                          pin_memory=False if DEVICE == 'cpu' else True,
+                                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
                  ]),
     mode="max_size_cycle")
 
@@ -108,12 +109,8 @@ SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.97}
 
 # --- Callbacks ---
 CALLBACKS = []
-CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=5, overwrite_epoch=True) for plane in PLANES_SUB]
+CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=25, overwrite_epoch=True) for plane in PLANES_SUB]
 CALLBACKS += [MemoryMonitor()]
-# CALLBACKS += [PlaneMutator(mutator_planes=[["U41_318eV", "ASBL"],
-#                                            ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating"],
-#                                            ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating", "Exit Slit"]],
-#                            mutator_epochs=[0, 10, 20])]
 
 # --- Surrogate Model ---
 if RESUME_RUN:

@@ -1,6 +1,5 @@
 from typing import List, Callable, Any, Dict
 from tqdm import tqdm, trange
-from copy import deepcopy
 
 import h5py
 
