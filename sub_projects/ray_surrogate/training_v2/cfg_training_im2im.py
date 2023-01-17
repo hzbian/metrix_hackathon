@@ -45,7 +45,6 @@ N_PLANES = len(PLANES_SUB)
 PLANES_INFO_SUB = {plane: PLANES_INFO[plane] for plane in PLANES_SUB}
 HIST_KEYS = list(itertools.chain(*[PLANES_INFO[plane][0] for plane in PLANES_SUB]))
 
-N_RAYS = torch.load('/scratch/metrix-hackathon/datasets/metrix_simulation/n_rays_ray_enhance_final.pt')
 DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdir(H5_PATH) if file.endswith('.h5')],
                      nested_groups=False,
                      sub_groups=[PARAMS_KEY] + HIST_KEYS,
@@ -78,27 +77,17 @@ data_module.setup()
 
 TRAIN_DATALOADER = data_module.train_dataloader()
 VAL_DATALOADER = CombinedLoader(
-    OrderedDict([('reference', data_module.val_dataloader()),
-                 # ('many rays', DataLoader(DATASET,
-                 #                          sampler=WeightedRandomSampler(
-                 #                              weights=N_RAYS,
-                 #                              num_samples=5000,
-                 #                              replacement=False),
-                 #                          batch_size=BATCH_SIZE_VAL,
-                 #                          num_workers=DL_NUM_WORKERS,
-                 #                          pin_memory=False if DEVICE == 'cpu' else True,
-                 #                          pin_memory_device=f'{DEVICE}:{GPU_ID}'))
-                 ]),
+    OrderedDict([('reference', data_module.val_dataloader())]),
     mode="max_size_cycle")
 
 # --- Loss & Validation Metrics ---
-LOSS_FUNC = ({plane: SurrogateLoss for plane in PLANES_SUB},
+LOSS_FUNC = ({plane: SurrogateLoss for plane in PLANES},
              {plane: dict(sinkhorn_p=1,
                           sinkhorn_blur=0.05,
                           sinkhorn_normalize='weights2',
                           sinkhorn_standardize_lims=True,
                           total_weight=1.0,
-                          n_rays_loss_weight=0.0) for plane in PLANES_SUB})
+                          n_rays_loss_weight=0.0) for plane in PLANES})
 VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
@@ -119,8 +108,8 @@ CALLBACKS += [MemoryMonitor()]
 if RESUME_RUN:
     SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RUN_PATH, 'last.ckpt'))
 else:
-    n_hist_layers = [len(PLANES_INFO_SUB[plane][0]) for plane in PLANES_SUB]
-    BACKBONE = ({plane: TransformerBackbone for plane in PLANES_SUB},
+    n_hist_layers = [len(PLANES_INFO[plane][0]) for plane in PLANES]
+    BACKBONE = ({plane: TransformerBackbone for plane in PLANES},
                 {plane: dict(hist_dim=(32, 32),
                              n_hist_layers_inp=n_hist_layers[idx - 1] if idx > 0 else n_hist_layers[idx],
                              n_hist_layers_out=n_hist_layers[idx],
@@ -128,10 +117,10 @@ else:
                              transformer_dim=1024,
                              transformer_mlp_dim=2048,
                              transformer_heads=4,
-                             transformer_layers=3) for idx, plane in enumerate(PLANES_SUB)})
+                             transformer_layers=3) for idx, plane in enumerate(PLANES)})
 
     SURROGATE = SurrogateModel(
-        planes=PLANES_SUB,
+        planes=PLANES,
         backbone=BACKBONE[0],
         backbone_params=BACKBONE[1],
         use_prev_plane_pred=True,  # TODO: add config param
@@ -142,3 +131,5 @@ else:
         scheduler=SCHEDULER[0],
         scheduler_params=SCHEDULER[1],
         val_metrics=VAL_METRICS)
+
+    SURROGATE.planes = PLANES_SUB
