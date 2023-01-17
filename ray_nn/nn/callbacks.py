@@ -1,12 +1,17 @@
+from typing import List
+
+import psutil
 from collections import defaultdict
 
 import wandb
 
 import numpy as np
 import torch
-from pytorch_lightning import Callback
+from pytorch_lightning import Callback, Trainer, LightningModule
 
 from matplotlib import pyplot as plt
+
+from .models import SurrogateModel
 
 
 class ImagePlaneCallback(Callback):
@@ -31,7 +36,7 @@ class ImagePlaneCallback(Callback):
         if outputs["out"]:
             batch = outputs["out"]
             batch = {k: v.detach().cpu() for k, v in batch[self.plane].items()}
-            bs = batch['params'].shape[0]
+            bs = min(batch['params'].shape[0], self.num_plots)
             self.train_data_cur += [
                 [trainer.current_epoch,
                  wandb.Image(self.plot_data(hist=batch['pred_hist'][idx, 0, ...],
@@ -51,7 +56,7 @@ class ImagePlaneCallback(Callback):
         for dl_name, dl_batch in outputs["out"].items():
             if dl_batch:
                 dl_batch = {k: v.detach().cpu() for k, v in dl_batch[self.plane].items()}
-                bs = dl_batch['params'].shape[0]
+                bs = min(dl_batch['params'].shape[0], self.num_plots)
                 self.val_data_cur[dl_name] += [
                     [trainer.current_epoch,
                      wandb.Image(self.plot_data(hist=dl_batch['pred_hist'][idx, 0, ...],
@@ -121,3 +126,33 @@ class ImagePlaneCallback(Callback):
         plt.close(fig)
 
         return out
+
+
+class PlaneMutator(Callback):
+
+    def __init__(self, mutator_planes: List[List[str]], mutator_epochs: List[int]):
+        self.mutator_planes = mutator_planes
+        self.mutator_epochs = mutator_epochs
+
+    def on_train_epoch_start(self, trainer: Trainer, pl_module: SurrogateModel) -> None:
+        planes_ = self.mutator_planes[0]
+        for idx, planes in enumerate(self.mutator_planes):
+            if trainer.current_epoch >= self.mutator_epochs[idx]:
+                planes_ = planes
+        pl_module.planes = planes_
+        print('Currently used planes:', pl_module.planes)
+
+
+class MemoryMonitor(Callback):
+
+    def on_train_epoch_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        # trainer.train_dataloader.reset()
+        # trainer.val_dataloaders[0].reset()
+        # print('Dataloaders reset...')
+        print('RAM used before train epoch (GB):', psutil.virtual_memory()[3] / (1024 * 1024 * 1024))
+
+    def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        print('RAM used after train epoch (GB):', psutil.virtual_memory()[3] / (1024 * 1024 * 1024))
+
+    def on_validation_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        print('RAM used after val epoch (GB):', psutil.virtual_memory()[3] / (1024 * 1024 * 1024))

@@ -39,9 +39,9 @@ class SurrogateModel(LightningModule):
         for idx, plane in enumerate(self.planes):
             inp_params = batch[plane]['params']
             if idx == 0 or not self.use_prev_plane_pred:
-                inp_hist = torch.zeros_like(batch[plane]['tar_hist'])
-                inp_x_lims = torch.zeros_like(batch[plane]['tar_x_lims'])
-                inp_y_lims = torch.zeros_like(batch[plane]['tar_y_lims'])
+                inp_hist = torch.randn_like(batch[plane]['tar_hist'])
+                inp_x_lims = torch.randn_like(batch[plane]['tar_x_lims'])
+                inp_y_lims = torch.randn_like(batch[plane]['tar_y_lims'])
             else:
                 inp_hist = batch[self.planes[idx - 1]]['pred_hist']
                 inp_x_lims = batch[self.planes[idx - 1]]['pred_x_lims']
@@ -78,17 +78,17 @@ class SurrogateModel(LightningModule):
         return {"loss": loss_total, "out": out}
 
     def validation_step(self, batch: Dict[str, Dict[str, torch.Tensor]], batch_idx: int):
-        out = {}
-        for dl_name, dl_batch in batch.items():
-            loss, dl_batch = self._process_batch(dl_batch)
-            loss_total = torch.stack(list(loss.values())).sum()
+        with torch.no_grad():
+            out = {}
+            for dl_name, dl_batch in batch.items():
+                loss, dl_batch = self._process_batch(dl_batch)
+                loss_total = torch.stack(list(loss.values())).sum()
 
-            bs = dl_batch[self.planes[0]]['params'].shape[0]
-            self.log(f"val/loss/{dl_name}", loss_total.item(), batch_size=bs)
-            for plane in self.planes:
-                self.log(f"val/loss/{dl_name}/{plane}", loss[plane].item(), batch_size=bs)
+                bs = dl_batch[self.planes[0]]['params'].shape[0]
+                self.log(f"val/loss/{dl_name}", loss_total.item(), batch_size=bs)
+                for plane in self.planes:
+                    self.log(f"val/loss/{dl_name}/{plane}", loss[plane].item(), batch_size=bs)
 
-            with torch.no_grad():
                 for metric, metric_func in self.val_metrics:
                     for plane in self.planes:
                         self.log(f"val/metrics/{dl_name}/{metric}/{plane}",
