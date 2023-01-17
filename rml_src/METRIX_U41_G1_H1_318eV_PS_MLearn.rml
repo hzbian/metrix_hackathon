@@ -14,11 +14,11 @@
     <param id="horDiv" enabled="T">0.078</param>
     <param id="verDivDistribution" comment="gaussian (sigma)" enabled="T">1</param>
     <param id="verDiv" enabled="T">0.04</param>
-    <param id="alignmentError" comment="No" enabled="T">1</param>
-    <param id="translationXerror" enabled="F">0</param>
-    <param id="translationYerror" enabled="F">0</param>
-    <param id="rotationXerror" enabled="F">0</param>
-    <param id="rotationYerror" enabled="F">0</param>
+    <param id="alignmentError" comment="Yes" enabled="T">0</param>
+    <param id="translationXerror" enabled="T">0</param>
+    <param id="translationYerror" enabled="T">0</param>
+    <param id="rotationXerror" enabled="T">0</param>
+    <param id="rotationYerror" enabled="T">0</param>
     <param id="energyDistributionType" comment="Values" enabled="T">1</param>
     <param id="photonEnergyDistributionFile" absolute="" enabled="F"></param>
     <param id="photonEnergy" enabled="T">318</param>
