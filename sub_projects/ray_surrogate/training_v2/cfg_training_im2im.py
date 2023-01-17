@@ -1,13 +1,11 @@
 import os, sys
 
-sys.path.insert(0, '../../../')
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 from collections import OrderedDict
 import itertools
 
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader
 from pytorch_lightning.trainer.supporters import CombinedLoader
 
 from ray_tools.simulation.torch_datasets import RayDataset
@@ -15,7 +13,7 @@ from ray_tools.simulation.torch_datasets import RayDataset
 from ray_nn.data.transform import SurrogateModelPreparation
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
-from ray_nn.nn.callbacks import ImagePlaneCallback
+from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor, PlaneMutator
 from ray_nn.nn.models import SurrogateModel
 from ray_nn.nn.backbones import TransformerBackbone
 from ray_nn.metrics.geometric import SurrogateLoss
@@ -29,7 +27,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'im2im_debug_p2'
+RUN_ID = 'im2im_sg'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -37,13 +35,13 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 0
+GPU_ID = 1
 TRAINING_SEED = 42
 
 # --- Dataset ---
 H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
 
-PLANES_SUB = ["U41_318eV", "ASBL"]
+PLANES_SUB = ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating"]
 N_PLANES = len(PLANES_SUB)
 PLANES_INFO_SUB = {plane: PLANES_INFO[plane] for plane in PLANES_SUB}
 HIST_KEYS = list(itertools.chain(*[PLANES_INFO[plane][0] for plane in PLANES_SUB]))
@@ -58,13 +56,13 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                          hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 10
+MAX_EPOCHS = 100
 FRAC_TRAIN_SAMPLES = 1.0
 FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
-DL_NUM_WORKERS = 25
+DL_NUM_WORKERS = 10
 NUM_SANITY_VAL_STEPS = 0
 SEED_TRAIN_DATA = 43
 SEED_DATA_SPLIT = 44
@@ -96,7 +94,7 @@ VAL_DATALOADER = CombinedLoader(
 
 # --- Loss & Validation Metrics ---
 LOSS_FUNC = ({plane: SurrogateLoss for plane in PLANES_SUB},
-             {plane: dict(sinkhorn_p=2,
+             {plane: dict(sinkhorn_p=1,
                           sinkhorn_blur=0.05,
                           sinkhorn_normalize='weights2',
                           sinkhorn_standardize_lims=True,
@@ -107,10 +105,16 @@ MONITOR_VAL_LOSS = 'val/loss/reference'
 
 # --- Optimization ---
 OPTIMIZER = (torch.optim.Adam, {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4})
-SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.98})
+SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.97})
 
 # --- Callbacks ---
-CALLBACKS = [ImagePlaneCallback(plane=plane, num_plots=20, overwrite_epoch=True) for plane in PLANES_SUB]
+CALLBACKS = []
+CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=5, overwrite_epoch=True) for plane in PLANES_SUB]
+CALLBACKS += [MemoryMonitor()]
+# CALLBACKS += [PlaneMutator(mutator_planes=[["U41_318eV", "ASBL"],
+#                                            ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating"],
+#                                            ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating", "Exit Slit"]],
+#                            mutator_epochs=[0, 10, 20])]
 
 # --- Surrogate Model ---
 if RESUME_RUN:
