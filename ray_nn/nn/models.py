@@ -61,6 +61,22 @@ class SurrogateModel(LightningModule):
 
         return batch
 
+    def freeze(self, planes: List[str] = None):
+        planes = self.planes if planes is None else planes
+        for plane in planes:
+            for p in self.backbone[plane].parameters():
+                p.requires_grad = False
+            for p in self.loss_func[plane].parameters():
+                p.requires_grad = False
+
+    def unfreeze(self, planes: List[str] = None):
+        planes = self.planes if planes is None else [planes]
+        for plane in planes:
+            for p in self.backbone[plane].parameters():
+                p.requires_grad = True
+            for p in self.loss_func[plane].parameters():
+                p.requires_grad = True
+
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
         loss, batch = self._process_batch(batch)
         loss_total = torch.stack(list(loss.values())).sum()

@@ -103,11 +103,15 @@ class SurrogateLoss(nn.Module):
                                                        tar_x_lims.flatten(end_dim=1),
                                                        tar_y_lims.flatten(end_dim=1))
 
-        loss = self.total_weight * self.loss_sinkhorn(inp1=pred_pc_supp,
-                                                      inp2=tar_pc_supp,
-                                                      weights1=pred_pc_weights,
-                                                      weights2=tar_pc_weights)
+        if self.total_weight > 0.0:
+            loss = self.total_weight * self.loss_sinkhorn(inp1=pred_pc_supp,
+                                                          inp2=tar_pc_supp,
+                                                          weights1=pred_pc_weights,
+                                                          weights2=tar_pc_weights)
+        else:
+            loss = torch.tensor(0.0, device=batch['tar_n_rays'].device)
 
-        loss = loss + self.n_rays_loss_weight * (batch['pred_n_rays'] - batch['tar_n_rays']).abs().mean()
+        if self.n_rays_loss_weight > 0.0:
+            loss = loss + self.n_rays_loss_weight * (batch['pred_n_rays'] - batch['tar_n_rays']).abs().mean()
 
         return loss
