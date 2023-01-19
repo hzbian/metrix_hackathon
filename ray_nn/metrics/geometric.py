@@ -67,7 +67,8 @@ class SurrogateLoss(nn.Module):
                  sinkhorn_normalize: bool = False,
                  sinkhorn_standardize_lims: bool = False,
                  total_weight: float = 1.0,
-                 n_rays_loss_weight: float = 0.0) -> None:
+                 n_rays_loss_weight: float = 0.0,
+                 hist_zero_loss_weight: float = 0.0) -> None:
         super().__init__()
         self.loss_sinkhorn = SinkhornLoss(p=sinkhorn_p,
                                           blur=sinkhorn_blur,
@@ -78,6 +79,8 @@ class SurrogateLoss(nn.Module):
 
         self.total_weight = total_weight
         self.n_rays_loss_weight = n_rays_loss_weight
+        self.hist_zero_loss_weight = hist_zero_loss_weight
+        self.hist_zero_loss = nn.BCELoss(reduction='mean')
 
         self._hist_to_pc = HistToPointCloud()
 
@@ -86,7 +89,7 @@ class SurrogateLoss(nn.Module):
         tar_x_lims, tar_y_lims = batch['tar_x_lims'].clone(), batch['tar_y_lims'].clone()
 
         if self.sinkhorn_standardize_lims:
-            idx_nonzero = batch['tar_n_rays'] > 0.0
+            idx_nonzero = batch['tar_n_rays'] > 1.0
 
             tar_x_scale = (tar_x_lims[idx_nonzero][:, 1] - tar_x_lims[idx_nonzero][:, 0]).abs().mean()
             tar_y_scale = (tar_y_lims[idx_nonzero][:, 1] - tar_y_lims[idx_nonzero][:, 0]).abs().mean()
@@ -114,4 +117,18 @@ class SurrogateLoss(nn.Module):
         if self.n_rays_loss_weight > 0.0:
             loss = loss + self.n_rays_loss_weight * (batch['pred_n_rays'] - batch['tar_n_rays']).abs().mean()
 
+        if self.hist_zero_loss_weight > 0.0:
+            hist_zero_labels = (batch['tar_n_rays'] < 2.0).to(torch.get_default_dtype())
+            loss = loss + self.hist_zero_loss_weight * self.hist_zero_loss(batch['pred_hist_zero_prob'],
+                                                                           hist_zero_labels)
+
+        return loss
+
+
+class HistZeroAccuracy(nn.Module):
+
+    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        hist_zero_tar = (batch['tar_n_rays'] < 2.0).to(torch.get_default_dtype())
+        hist_zero_pred = (batch['pred_hist_zero_prob'] > 0.5).to(torch.get_default_dtype())
+        loss = 1.0 - (hist_zero_pred - hist_zero_tar).abs().mean()
         return loss

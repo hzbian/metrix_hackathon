@@ -16,6 +16,8 @@ class SurrogateModel(LightningModule):
                  backbone_params: Dict[str, Dict],
                  loss_func: Dict[str, Type[SurrogateLoss]],
                  loss_func_params: Dict[str, Dict],
+                 hist_zero_classifier: Dict[str, Type[nn.Module]] = None,
+                 hist_zero_classifier_params: Dict[str, Dict] = None,
                  use_prev_plane_pred: bool = True,
                  optimizer: Type[Any] = torch.optim.Adam,
                  optimizer_params: Dict = {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4},
@@ -34,6 +36,13 @@ class SurrogateModel(LightningModule):
                                         for plane in self.planes})
         self.use_prev_plane_pred = use_prev_plane_pred
         self.val_metrics = val_metrics if val_metrics is not None else []
+
+        if hist_zero_classifier is not None:
+            self.hist_zero_classifier = nn.ModuleDict(
+                {plane: hist_zero_classifier[plane](**hist_zero_classifier_params[plane])
+                 for plane in self.planes})
+        else:
+            self.hist_zero_classifier = None
 
     def forward(self, batch: Dict[str, Dict[str, torch.Tensor]]) -> Dict[str, Dict[str, torch.Tensor]]:
         for idx, plane in enumerate(self.planes):
@@ -59,7 +68,30 @@ class SurrogateModel(LightningModule):
             batch[plane]['pred_y_lims'] = torch.stack([pred_y_lims_lo, pred_y_lims_hi], dim=-1)
             batch[plane]['pred_n_rays'] = batch[plane]['pred_hist'].sum(dim=[-2, -1])
 
+            if self.hist_zero_classifier is not None:
+                pred_hist_zero_prob = torch.sigmoid(self.hist_zero_classifier[plane](inp_params)).flatten(start_dim=1)
+                batch[plane]['pred_hist_zero_prob'] = pred_hist_zero_prob
+                hist_zero_idx = pred_hist_zero_prob > 0.5
+
+                hist_0, x_lims_0, y_lims_0, n_rays_0 = SurrogateModel._hist_zero_batch(batch[plane]['pred_hist'])
+                batch[plane]['pred_hist'][hist_zero_idx, ...] = hist_0[hist_zero_idx, ...]
+                batch[plane]['pred_x_lims'][hist_zero_idx, ...] = x_lims_0[hist_zero_idx, ...]
+                batch[plane]['pred_y_lims'][hist_zero_idx, ...] = y_lims_0[hist_zero_idx, ...]
+                batch[plane]['pred_n_rays'][hist_zero_idx, ...] = n_rays_0[hist_zero_idx, ...]
+
         return batch
+
+    @staticmethod
+    def _hist_zero_batch(hist_like: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+        # TODO: outsource
+        hist = torch.ones_like(hist_like).abs()
+        hist = hist / hist.sum(dim=[-2, -1], keepdim=True)
+        x_lims = torch.ones(hist_like.shape[0], hist_like.shape[1], 2, device=hist_like.device)
+        y_lims = torch.ones(hist_like.shape[0], hist_like.shape[1], 2, device=hist_like.device)
+        x_lims[:, :, 0] = y_lims[:, :, 0] = -1e-4
+        x_lims[:, :, 1] = y_lims[:, :, 1] = 1e-4
+        n_rays = hist.sum(dim=[-2, -1])
+        return hist, x_lims, y_lims, n_rays
 
     def freeze(self, planes: List[str] = None):
         planes = self.planes if planes is None else planes

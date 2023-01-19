@@ -68,11 +68,11 @@ class SurrogateModelPreparation:
                            x_lims: torch.Tensor,
                            y_lims: torch.Tensor,
                            n_rays: torch.Tensor) -> None:
-        idx_zeros = (n_rays == 0)
-        hist[idx_zeros, ...] = torch.randn_like(hist[idx_zeros, ...]).abs()
+        idx_zeros = (n_rays <= 1.0)
+        hist[idx_zeros, ...] = torch.ones_like(hist[idx_zeros, ...]).abs()
         hist[idx_zeros, ...] = hist[idx_zeros, ...] / hist[idx_zeros, ...].sum(dim=[-2, -1], keepdim=True)
-        x_lims[idx_zeros, 0] = y_lims[idx_zeros, 0] = -10.0
-        x_lims[idx_zeros, 1] = y_lims[idx_zeros, 1] = 10.0
+        x_lims[idx_zeros, 0] = y_lims[idx_zeros, 0] = -1e-4
+        x_lims[idx_zeros, 1] = y_lims[idx_zeros, 1] = 1e-4
         n_rays[idx_zeros] = hist[idx_zeros, ...].sum(dim=[-2, -1]).to(n_rays.dtype)
 
     def _process_params(self, params: Dict[str, float]) -> Dict[str, float]:
