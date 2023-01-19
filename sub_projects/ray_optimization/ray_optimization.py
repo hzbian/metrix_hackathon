@@ -1,23 +1,19 @@
 import sys
+from typing import List
+
 sys.path.insert(0, '../../')
 import os
 
-from ax.service.ax_client import AxClient
-
 import torch
-from collections import OrderedDict
 
-from ax import optimize
 from ax.service.ax_client import AxClient
 
-from ray_nn.data.transform import Select
 from ray_nn.metrics.geometric import SinkhornLoss
 
-
+from abc import ABCMeta, abstractmethod
 from sub_projects.ray_surrogate.ray_engine_surrogate import RayEngineSurrogate
 
-from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
-    GridParameter, build_parameter_grid
+from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter
 from ray_tools.base.utils import RandomGenerator
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import RayTransformConcat, ToDict
@@ -26,10 +22,182 @@ import wandb
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+from tqdm import trange
+import optuna
+
+class OptimizerBackend(metaclass=ABCMeta):
+    @abstractmethod
+    def optimizer_parameter_to_container_list(self, optimizer_parameter) -> List[RayParameterContainer]:
+        pass
+
+    @abstractmethod
+    def setup_optimization(self):
+        pass
+
+    @abstractmethod
+    def get_next_trials(self):
+        pass
+
+    def optimize(self, objective, iterations):
+        pass
+
+class OptimizerBackendOptuna(OptimizerBackend):
+    def __init__(self, all_parameters: RayParameterContainer):
+        self.all_parameters = all_parameters
+
+
+    def setup_optimization(self):
+           pass
+    def optuna_objective(self, objective):
+        for key, value in self.all_parameters.items():
+            if isinstance(value, MutableParameter):
+
+        x = [trial.suggest_float()
+
+    def optimize(self, objective, iterations):
+        study = optuna.create_study()
+        study.optimize(objective, n_trials=iterations)
+        return study.best_params
+
+class OptimizerBackendAx(OptimizerBackend):
+    def __init__(self, ax_client: AxClient, all_parameters: RayParameterContainer):
+        self.all_parameters = all_parameters
+        self.ax_client = ax_client
+
+    def optimizer_parameter_to_container_list(self, optimizer_parameter) -> List[RayParameterContainer]:
+        trial_params_first_key = min(optimizer_parameter.keys())
+        param_container_list = []
+
+        for i in range(trial_params_first_key, trial_params_first_key + len(optimizer_parameter)):
+            all_parameters_copy = self.all_parameters.copy()
+            for param_key in optimizer_parameter[trial_params_first_key].keys():
+                all_parameters_copy.__setitem__(param_key, NumericalParameter(optimizer_parameter[i][param_key]))
+            param_container_list.append(all_parameters_copy)
+        return param_container_list
+
+    def setup_optimization(self):
+        experiment_parameters = []
+        for key, value in self.all_parameters.items():
+            if isinstance(value, MutableParameter):
+                experiment_parameters.append(
+                    {"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
+
+        self.ax_client.create_experiment(
+            name="metrix_experiment",
+            parameters=experiment_parameters,
+            objective_name="metrix",
+            minimize=True,
+        )
+
+    def optimize(self, objective, iterations):
+        ranger = trange(iterations)
+        for _ in ranger:
+            optimization_time = time.time()
+            trials_to_evaluate = ax_client.get_next_trials(max_trials=10)[0]
+            print("Optimization took {:.2f}s".format(time.time() - optimization_time))
+            results = objective(trials_to_evaluate)
+
+            for trial_index in results:
+                ax_client.complete_trial(trial_index, results[trial_index])
+
+        best_parameters, metrics = ax_client.get_best_parameters()
+        return best_parameters, metrics
+
+
+class RayOptimizer:
+    def __init__(self, optimizer_backend: OptimizerBackend, criterion: torch.nn.Module, engine: RayEngine,
+                 target_engine: RayEngine = None, verbose=False):
+        self.optimizer_backend = optimizer_backend
+        self.target_engine = target_engine
+        self.engine = engine
+        self.criterion = criterion
+        if target_engine is None:
+            target_engine = engine
+        self.target_rays = target_engine.run(target_params)
+        self.optimizer_backend.setup_optimization()
+        self.evaluation_counter = 0
+        self.verbose = verbose
+
+    @staticmethod
+    def plot_data(pc_supp: torch.Tensor, pc_weights=None):
+        pc_supp = pc_supp.detach().cpu()
+
+        fig = plt.figure()
+        ax = fig.gca()
+        ax.scatter(pc_supp[:, 0], pc_supp[:, 1], s=2.0, c=pc_weights)
+
+        fig.canvas.draw()
+        image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        out = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        plt.close(fig)
+
+        return out
+
+    @staticmethod
+    def ray_output_to_tensor(ray_output):
+        if isinstance(ray_output, list):
+            return [RayOptimizer.ray_output_to_tensor(element) for element in ray_output]
+        x_loc = ray_output['ray_output'][exported_plane].x_loc
+        y_loc = ray_output['ray_output'][exported_plane].y_loc
+        x_loc = torch.tensor(x_loc)
+        y_loc = torch.tensor(y_loc)
+        return torch.vstack((x_loc, y_loc)).T
+
+    def evaluation_function(self, parameters):
+        if self.verbose:
+            begin_total_time = time.time()
+        ray_parameter_container_list = optimizer_backend.optimizer_parameter_to_container_list(parameters)
+
+        if self.verbose:
+            begin_execution_time = time.time()
+        output = engine.run(ray_parameter_container_list)
+        if self.verbose:
+            print("Execution took {:.2f}s".format(time.time() - begin_execution_time))
+        if not isinstance(output, list):
+            output = [output]
+        output_loss = {
+            key + self.evaluation_counter: self.calculate_loss(self.target_rays, element) for
+            key, element in
+            enumerate(output)}
+
+        log_dict = {} #"epoch": self.evaluation_counter, "loss": loss_out.cpu(), "ray_count": y_hat.shape[0]}
+        for key, value in output_loss.items():
+            log_dict["epoch"] = key
+            log_dict["loss"] = value
+            # ray count
+        if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter+len(output))]:
+            image = wandb.Image(self.plot_data(self.ray_output_to_tensor(output[0])))
+            log_dict = {**log_dict, **{"plot": image}}
+        if self.evaluation_counter == 0:
+            target = wandb.Image(self.plot_data(self.ray_output_to_tensor(self.target_rays)))
+            log_dict = {**log_dict, **{"target": target}}
+        wandb.log(log_dict)
+        self.evaluation_counter += len(ray_parameter_container_list)
+        if self.verbose:
+            print("Total took {:.2f}s".format(time.time() - begin_total_time))
+        return output_loss
+
+    def calculate_loss(self, y, y_hat):
+        if self.verbose:
+            begin_time = time.time()
+        y = self.ray_output_to_tensor(y).cuda()
+        y_hat = self.ray_output_to_tensor(y_hat).cuda()
+        if y_hat.shape[0] == 0:
+            y_hat = torch.ones((1, 2)) * -1
+        loss_out = criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0],
+                             torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
+        if self.verbose:
+            print("Loss took {:.2f}s".format(time.time() - begin_time))
+        return loss_out.item()
+
+    def optimize(self, iterations):
+        optimizer_backend.optimize(objective=self.evaluation_function, iterations=1000)
+       return best_parameters, metrics
+
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
            name='1-parameter-rayui-test',
-           mode='online',  # 'disabled' or 'online'
+           mode='disabled',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -46,38 +214,14 @@ transforms = [
         'raw': ToDict(),
     }),
 ]
-
+verbose = False
 engine = RayEngine(rml_basefile=rml_basefile,
                    exported_planes=[exported_plane],
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      ray_workdir=ray_workdir,
-                                                     verbose=True),
+                                                     verbose=verbose),
                    num_workers=-1,
                    as_generator=False)
-
-PARAMS_INFO = [
-    ('U41_318eV.translationXerror', (-0.25, 0.25)),
-    ('U41_318eV.translationYerror', (-0.25, 0.25)),
-    ('U41_318eV.rotationXerror', (-0.05, 0.05)),
-    ('U41_318eV.rotationYerror', (-0.05, 0.05)),
-    ('ASBL.totalWidth', (1.9, 2.1)),
-    ('ASBL.totalHeight', (0.9, 1.1)),
-    ('ASBL.translationXerror', (-0.2, 0.2)),
-    ('ASBL.translationYerror', (-0.2, 0.2)),
-    ('M1_Cylinder.radius', (174.06, 174.36)),
-    ('M1_Cylinder.rotationXerror', (-0.25, 0.25)),
-    ('M1_Cylinder.rotationYerror', (-1., 1.)),
-    ('M1_Cylinder.rotationZerror', (-1., 1.)),
-    ('M1_Cylinder.translationXerror', (-0.15, 0.15)),
-    ('M1_Cylinder.translationYerror', (-1., 1.)),
-    ('SphericalGrating.radius', (109741., 109841.)),
-    ('SphericalGrating.rotationYerror', (-1., 1.)),
-    ('SphericalGrating.rotationZerror', (-2.5, 2.5)),
-]
-
-nn_engine = RayEngineSurrogate(
-    ckpt_path='/scratch/meier/metrix_hackathon/sub_projects/ray_surrogate/training/results/sg_v1_nothing_given/best_val.ckpt',
-    params_info=PARAMS_INFO, hist_dim=1024, gpu_id=0)
 
 rg = RandomGenerator(seed=42)
 
@@ -121,95 +265,30 @@ param_func = lambda: RayParameterContainer([
 
 criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online')
 
-# optimize only some params
-params = param_func()
-fixed = params.keys() - ['U41_318eV.translationXerror'] #['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
+# optimize only some all_params
+all_params = param_func()
+fixed = all_params.keys() - [
+    'U41_318eV.translationXerror']  # ['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
 
 # Out[3]: odict_keys(['U41_318eV.numberRays', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror'])
-for key in params:
-    old_param = params[key]
+for key in all_params:
+    old_param = all_params[key]
     if isinstance(old_param, MutableParameter) and key in fixed:
-        params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+        all_params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
 
 
-def plot_data(pc_supp: torch.Tensor, pc_weights=None):
-    pc_supp = pc_supp.detach().cpu()
-
-    fig = plt.figure()
-    ax = fig.gca()
-    ax.scatter(pc_supp[:, 0], pc_supp[:, 1], s=2.0, c=pc_weights)
-
-    fig.canvas.draw()
-    image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    out = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    plt.close(fig)
-
-    return out
-
-
-def ray_output_to_tensor(ray_output):
-    if isinstance(ray_output, list):
-        return [ray_output_to_tensor(element) for element in ray_output]
-    x_loc = ray_output['ray_output'][exported_plane].x_loc
-    y_loc = ray_output['ray_output'][exported_plane].y_loc
-    x_loc = torch.tensor(x_loc)
-    y_loc = torch.tensor(y_loc)
-    return torch.vstack((x_loc, y_loc)).T
-
-
-def loss(trial_params, engine, secret_sample_rays, param_container):
-    begin_total_time = time.time()
-    trial_params_first_key = min(trial_params.keys())
-    param_container_list = []
-
-    for i in range(trial_params_first_key, trial_params_first_key + len(trial_params)):
-        for param_key in trial_params[trial_params_first_key].keys():
-            param_container.__setitem__(param_key, NumericalParameter(trial_params[i][param_key]))
-        param_container_list.append(param_container.copy())
-    param_container = param_container_list
-    begin_time = time.time()
-    output = engine.run(param_container)
-    print("Execution took ", time.time() - begin_time, "s")
-    if not isinstance(output, list):
-        output = [output]
-    output_loss = {key + trial_params_first_key: calculate_loss(secret_sample_rays, element, key + trial_params_first_key) for key, element in
-            enumerate(output)}
-    print("Total took", time.time() - begin_total_time, "s")
-    return output_loss
-
-
-def calculate_loss(y, y_hat, epoch):
-    begin_time = time.time()
-    y = ray_output_to_tensor(y).cuda()
-    y_hat = ray_output_to_tensor(y_hat).cuda()
-    if y_hat.shape[0] == 0:
-        y_hat = torch.ones((1, 2)) * -1
-    loss_out = criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0], torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
-    print("Loss took ", time.time() - begin_time, "s")
-    log_dict = {"epoch": epoch, "loss": loss_out.cpu(), "ray_count": y_hat.shape[0]}
-    if epoch % 100 == 0:
-        image = wandb.Image(plot_data(y_hat))
-        log_dict = {**log_dict, **{"plot": image}}
-    if epoch == 0:
-        target = wandb.Image(plot_data(y))
-        log_dict = {**log_dict, **{"target": target}}
-    wandb.log(log_dict)
-    return loss_out.item()
-
-
-secret_sample_params = RayParameterContainer()
-for key, value in params.items():
+target_params = RayParameterContainer()
+for key, value in all_params.items():
     if isinstance(value, MutableParameter):
         value = (value.value_lims[1] + value.value_lims[0]) / 2
     if isinstance(value, NumericalParameter):
         value = value.get_value()
-    secret_sample_params[key] = NumericalParameter(value)
+    target_params[key] = NumericalParameter(value)
 
-secret_sample_rays = engine.run(secret_sample_params)
 
-# secret_sample_params['E2.translationYerror'] = GridParameter(np.arange(-1,1,0.1))
+# target_params['E2.translationYerror'] = GridParameter(np.arange(-1,1,0.1))
 
-# output = engine.run(build_parameter_grid(secret_sample_params))
+# output = engine.run(build_parameter_grid(target_params))
 # for element in output:
 #    y_hat = ray_output_to_tensor(element)
 #
@@ -220,27 +299,11 @@ secret_sample_rays = engine.run(secret_sample_params)
 #    wandb.log({"loss": out, "ray_count": y_hat.shape[0]})
 
 ### Bayesian Optimization
-experiment_parameters = []
-for (key, value) in params.items():
-    if isinstance(value, MutableParameter):
-        experiment_parameters.append(
-            {"name": key, "type": "range", 'value_type': 'float', "bounds": list(value.value_lims)})
 
-ax_client = AxClient(early_stopping_strategy=None)
-ax_client.create_experiment(
-    name="metrix_experiment",
-    parameters=experiment_parameters,
-    objective_name="metrix",
-    minimize=True,
-)
+ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
-for i in range(1000):
-    trials_to_evaluate = ax_client.get_next_trials(max_trials=10)
-    results = loss(trials_to_evaluate[0], engine, secret_sample_rays, params)
+optimizer_backend = OptimizerBackendAx(ax_client, all_parameters=all_params)
+ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=criterion, engine=engine, verbose=verbose)
 
-    for trial_index in results:
-        ax_client.complete_trial(trial_index, results[trial_index])
-
-best_parameters, metrics = ax_client.get_best_parameters()
-
+best_parameters, metrics = ray_optimizer.optimize(iterations=1000)
 print(best_parameters, metrics)
