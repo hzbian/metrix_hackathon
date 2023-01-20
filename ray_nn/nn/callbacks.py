@@ -168,11 +168,13 @@ class HistNRaysAlternator(Callback):
             pl_module.unfreeze()
             for plane in pl_module.planes:
                 freeze(pl_module.n_rays_predictor[plane])
+                pl_module.loss_func[plane].sinkhorn_normalize = True
             print('Optimizing (normalized) histograms with fixed number of rays...')
         else:
             pl_module.freeze()
             for plane in pl_module.planes:
                 unfreeze(pl_module.n_rays_predictor[plane])
+                pl_module.loss_func[plane].sinkhorn_normalize = 'weights2'
             print('Optimizing number of rays with fixed histograms...')
 
 
