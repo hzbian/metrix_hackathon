@@ -11,7 +11,7 @@ from pytorch_lightning import Callback, Trainer, LightningModule
 
 from matplotlib import pyplot as plt
 
-from .models import SurrogateModel
+from .models import SurrogateModel, unfreeze, freeze
 
 
 class ImagePlaneCallback(Callback):
@@ -19,12 +19,15 @@ class ImagePlaneCallback(Callback):
     Callback to plot images with wandb.
     """
 
-    def __init__(self, plane: str, num_plots: int = 5, overwrite_epoch: bool = True):
+    def __init__(self, plane: str, num_plots: int = 5, overwrite_epoch: bool = True,
+                 show_tar_lims_axis: bool = True, show_tar_hist_vminmax: bool = True):
         super().__init__()
 
         self.plane = plane
         self.num_plots = num_plots
         self.overwrite_epoch = overwrite_epoch
+        self.show_tar_lims_axis = show_tar_lims_axis
+        self.show_tar_hist_vminmax = show_tar_hist_vminmax
 
         self.columns = ['epoch', 'pred_hist', 'tar_hist', 'pred_n_rays', 'tar_n_rays']
         self.train_data = []
@@ -42,9 +45,12 @@ class ImagePlaneCallback(Callback):
                  wandb.Image(self.plot_data(hist=batch['pred_hist'][idx, 0, ...],
                                             x_lims=batch['pred_x_lims'][idx, 0, ...],
                                             y_lims=batch['pred_y_lims'][idx, 0, ...],
-                                            x_lims_show=batch['tar_x_lims'][idx, 0, ...],
-                                            y_lims_show=batch['tar_y_lims'][idx, 0, ...],
-                                            hist_show=batch['tar_hist'][idx, 0, ...])),
+                                            x_lims_show=batch['tar_x_lims'][
+                                                idx, 0, ...] if self.show_tar_lims_axis else None,
+                                            y_lims_show=batch['tar_y_lims'][
+                                                idx, 0, ...] if self.show_tar_lims_axis else None,
+                                            hist_show=batch['tar_hist'][
+                                                idx, 0, ...] if self.show_tar_hist_vminmax else None)),
                  wandb.Image(self.plot_data(hist=batch['tar_hist'][idx, 0, ...],
                                             x_lims=batch['tar_x_lims'][idx, 0, ...],
                                             y_lims=batch['tar_y_lims'][idx, 0, ...])),
@@ -62,9 +68,12 @@ class ImagePlaneCallback(Callback):
                      wandb.Image(self.plot_data(hist=dl_batch['pred_hist'][idx, 0, ...],
                                                 x_lims=dl_batch['pred_x_lims'][idx, 0, ...],
                                                 y_lims=dl_batch['pred_y_lims'][idx, 0, ...],
-                                                x_lims_show=dl_batch['tar_x_lims'][idx, 0, ...],
-                                                y_lims_show=dl_batch['tar_y_lims'][idx, 0, ...],
-                                                hist_show=dl_batch['tar_hist'][idx, 0, ...])),
+                                                x_lims_show=dl_batch['tar_x_lims'][
+                                                    idx, 0, ...] if self.show_tar_lims_axis else None,
+                                                y_lims_show=dl_batch['tar_y_lims'][
+                                                    idx, 0, ...] if self.show_tar_lims_axis else None,
+                                                hist_show=dl_batch['tar_hist'][
+                                                    idx, 0, ...] if self.show_tar_hist_vminmax else None)),
                      wandb.Image(self.plot_data(hist=dl_batch['tar_hist'][idx, 0, ...],
                                                 x_lims=dl_batch['tar_x_lims'][idx, 0, ...],
                                                 y_lims=dl_batch['tar_y_lims'][idx, 0, ...])),
@@ -96,11 +105,17 @@ class ImagePlaneCallback(Callback):
             if self.overwrite_epoch:
                 self.val_data[dl_name] = []
 
-    def plot_data(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor,
-                  x_lims_show: torch.Tensor = None, y_lims_show: torch.Tensor = None,
-                  hist_show: torch.Tensor = None):
+    def plot_data(self,
+                  hist: torch.Tensor,
+                  x_lims: torch.Tensor,
+                  y_lims: torch.Tensor,
+                  x_lims_show: torch.Tensor = None,  # x-limits to be used to set xlim in axis
+                  y_lims_show: torch.Tensor = None,  # y-limits to be used to set ylim in axis
+                  hist_show: torch.Tensor = None,  # Histogram to be used to set vmin and vmax in imshow
+                  ):
         fig = plt.figure()
         ax = fig.gca()
+
         if hist_show is not None:
             vmin = torch.min(hist_show).item()
             vmax = torch.max(hist_show).item()
@@ -141,6 +156,24 @@ class PlaneMutator(Callback):
                 planes_ = planes
         pl_module.planes = planes_
         print('Currently used planes:', pl_module.planes)
+
+
+class HistNRaysAlternator(Callback):
+
+    def __init__(self, every_epoch: int):
+        self.every_epoch = every_epoch
+
+    def on_train_epoch_start(self, trainer: Trainer, pl_module: SurrogateModel) -> None:
+        if trainer.current_epoch % (2 * self.every_epoch) < self.every_epoch:
+            pl_module.unfreeze()
+            for plane in pl_module.planes:
+                freeze(pl_module.n_rays_predictor[plane])
+            print('Optimizing (normalized) histograms with fixed number of rays...')
+        else:
+            pl_module.freeze()
+            for plane in pl_module.planes:
+                unfreeze(pl_module.n_rays_predictor[plane])
+            print('Optimizing number of rays with fixed histograms...')
 
 
 class MemoryMonitor(Callback):
