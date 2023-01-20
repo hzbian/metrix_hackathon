@@ -10,7 +10,7 @@ from ax.service.ax_client import AxClient
 
 from ray_nn.metrics.geometric import SinkhornLoss
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, ABC
 from sub_projects.ray_surrogate.ray_engine_surrogate import RayEngineSurrogate
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter
@@ -24,40 +24,43 @@ import numpy as np
 import time
 from tqdm import trange
 import optuna
+from optuna.samplers import TPESampler
+
 
 class OptimizerBackend(metaclass=ABCMeta):
     @abstractmethod
-    def optimizer_parameter_to_container_list(self, optimizer_parameter) -> List[RayParameterContainer]:
-        pass
-
-    @abstractmethod
     def setup_optimization(self):
         pass
 
     @abstractmethod
-    def get_next_trials(self):
-        pass
-
     def optimize(self, objective, iterations):
         pass
+
 
 class OptimizerBackendOptuna(OptimizerBackend):
-    def __init__(self, all_parameters: RayParameterContainer):
+    def __init__(self, optuna_study, all_parameters: RayParameterContainer):
         self.all_parameters = all_parameters
-
+        self.optuna_study = optuna_study
 
     def setup_optimization(self):
-           pass
-    def optuna_objective(self, objective):
-        for key, value in self.all_parameters.items():
-            if isinstance(value, MutableParameter):
+        pass
 
-        x = [trial.suggest_float()
+    def optuna_objective(self, objective):
+        def output_objective(trial):
+            optimize_parameters = self.all_parameters.copy()
+            for key, value in optimize_parameters.items():
+                if isinstance(value, MutableParameter):
+                    optimize_parameters[key] = NumericalParameter(trial.suggest_float(key, value.value_lims[0],
+                                                                                      value.value_lims[1]))
+            output = objective(optimize_parameters)
+            return output[min(output.keys())]
+
+        return output_objective
 
     def optimize(self, objective, iterations):
-        study = optuna.create_study()
-        study.optimize(objective, n_trials=iterations)
-        return study.best_params
+        self.optuna_study.optimize(self.optuna_objective(objective), n_trials=iterations)
+        return self.optuna_study.best_params, {}
+
 
 class OptimizerBackendAx(OptimizerBackend):
     def __init__(self, ax_client: AxClient, all_parameters: RayParameterContainer):
@@ -95,7 +98,9 @@ class OptimizerBackendAx(OptimizerBackend):
             optimization_time = time.time()
             trials_to_evaluate = ax_client.get_next_trials(max_trials=10)[0]
             print("Optimization took {:.2f}s".format(time.time() - optimization_time))
-            results = objective(trials_to_evaluate)
+
+            ray_parameter_container_list = self.optimizer_parameter_to_container_list(trials_to_evaluate)
+            results = objective(ray_parameter_container_list)
 
             for trial_index in results:
                 ax_client.complete_trial(trial_index, results[trial_index])
@@ -146,11 +151,10 @@ class RayOptimizer:
     def evaluation_function(self, parameters):
         if self.verbose:
             begin_total_time = time.time()
-        ray_parameter_container_list = optimizer_backend.optimizer_parameter_to_container_list(parameters)
 
         if self.verbose:
             begin_execution_time = time.time()
-        output = engine.run(ray_parameter_container_list)
+        output = engine.run(parameters)
         if self.verbose:
             print("Execution took {:.2f}s".format(time.time() - begin_execution_time))
         if not isinstance(output, list):
@@ -160,19 +164,19 @@ class RayOptimizer:
             key, element in
             enumerate(output)}
 
-        log_dict = {} #"epoch": self.evaluation_counter, "loss": loss_out.cpu(), "ray_count": y_hat.shape[0]}
+        log_dict = {}  # "epoch": self.evaluation_counter, "loss": loss_out.cpu(), "ray_count": y_hat.shape[0]}
         for key, value in output_loss.items():
             log_dict["epoch"] = key
             log_dict["loss"] = value
             # ray count
-        if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter+len(output))]:
+        if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
             image = wandb.Image(self.plot_data(self.ray_output_to_tensor(output[0])))
             log_dict = {**log_dict, **{"plot": image}}
         if self.evaluation_counter == 0:
             target = wandb.Image(self.plot_data(self.ray_output_to_tensor(self.target_rays)))
             log_dict = {**log_dict, **{"target": target}}
         wandb.log(log_dict)
-        self.evaluation_counter += len(ray_parameter_container_list)
+        self.evaluation_counter += len(parameters)
         if self.verbose:
             print("Total took {:.2f}s".format(time.time() - begin_total_time))
         return output_loss
@@ -183,7 +187,7 @@ class RayOptimizer:
         y = self.ray_output_to_tensor(y).cuda()
         y_hat = self.ray_output_to_tensor(y_hat).cuda()
         if y_hat.shape[0] == 0:
-            y_hat = torch.ones((1, 2)) * -1
+            y_hat = torch.ones((1, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
         loss_out = criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0],
                              torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
         if self.verbose:
@@ -191,13 +195,14 @@ class RayOptimizer:
         return loss_out.item()
 
     def optimize(self, iterations):
-        optimizer_backend.optimize(objective=self.evaluation_function, iterations=1000)
-       return best_parameters, metrics
+        best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function, iterations=iterations)
+        return best_parameters, metrics
+
 
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
-           name='1-parameter-rayui-test',
-           mode='disabled',  # 'disabled' or 'online'
+           name='14-parameter-rayui-TPE',
+           mode='online',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -207,7 +212,7 @@ ray_workdir = os.path.join(root_dir, 'ray_workdir', 'optimization')
 
 n_rays = ['1e4']
 
-exported_plane = "Spherical Grating"
+exported_plane = "ImagePlane" #"Spherical Grating"
 
 transforms = [
     RayTransformConcat({
@@ -267,15 +272,14 @@ criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online')
 
 # optimize only some all_params
 all_params = param_func()
-fixed = all_params.keys() - [
-    'U41_318eV.translationXerror']  # ['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
+fixed = [] #all_params.keys()[]
+#   - [ 'U41_318eV.translationXerror']  # ['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
 
 # Out[3]: odict_keys(['U41_318eV.numberRays', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror'])
 for key in all_params:
     old_param = all_params[key]
     if isinstance(old_param, MutableParameter) and key in fixed:
         all_params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
 
 target_params = RayParameterContainer()
 for key, value in all_params.items():
@@ -284,7 +288,6 @@ for key, value in all_params.items():
     if isinstance(value, NumericalParameter):
         value = value.get_value()
     target_params[key] = NumericalParameter(value)
-
 
 # target_params['E2.translationYerror'] = GridParameter(np.arange(-1,1,0.1))
 
@@ -302,8 +305,11 @@ for key, value in all_params.items():
 
 ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
-optimizer_backend = OptimizerBackendAx(ax_client, all_parameters=all_params)
-ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=criterion, engine=engine, verbose=verbose)
+optimizer_backend_ax = OptimizerBackendAx(ax_client, all_parameters=all_params)
+
+optuna_study = optuna.create_study(sampler=TPESampler())
+optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study, all_parameters=all_params)
+ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criterion=criterion, engine=engine, verbose=verbose)
 
 best_parameters, metrics = ray_optimizer.optimize(iterations=1000)
 print(best_parameters, metrics)
