@@ -14,7 +14,6 @@ from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
 from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor
 from ray_nn.nn.models import SurrogateModel
-from ray_nn.nn.backbones import TransformerBackbone, MLP
 from ray_nn.metrics.geometric import SurrogateLoss, HistZeroAccuracy, NRaysAccuracy
 
 from cfg_params_im2im import *
@@ -26,7 +25,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'template_es_n_rays_known__reference'
+RUN_ID = 'template_es_n_rays_known__reference__final'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -34,7 +33,7 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 1
+GPU_ID = 0
 TRAINING_SEED = 42
 
 # --- Dataset ---
@@ -103,47 +102,15 @@ CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=20, overwrite_epoch=True
 CALLBACKS += [MemoryMonitor()]
 
 # --- Surrogate Model ---
-if RESUME_RUN:
-    SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RUN_PATH, 'last.ckpt'))
-else:
-    n_hist_layers = [len(PLANES_INFO[plane][0]) for plane in PLANES]
-    BACKBONE = ({plane: TransformerBackbone for plane in PLANES},
-                {plane: dict(hist_dim=(32, 32),
-                             n_hist_layers_inp=8,
-                             n_hist_layers_out=n_hist_layers[idx],
-                             param_dim=len(PARAMS_INFO),
-                             transformer_dim=1024,
-                             transformer_mlp_dim=2048,
-                             transformer_heads=4,
-                             transformer_layers=3,
-                             use_inp_template=True) for idx, plane in enumerate(PLANES)})
+SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RESULTS_PATH,
+                                                             'template_es_n_rays_known__reference__cont_v3',
+                                                             'last.ckpt'))
 
-    # N_RAYS_PREDICTOR = ({plane: MLP for plane in PLANES},
-    #                     {plane: dict(dim_in=len(PARAMS_INFO),
-    #                                  dim_hidden=5 * [256],
-    #                                  dim_out=n_hist_layers[idx]) for idx, plane in enumerate(PLANES)})
+SURROGATE.planes = PLANES_SUB
+for plane in PLANES_SUB:
+    SURROGATE.loss_func[plane].total_weight = 1.0
+    SURROGATE.loss_func[plane].lims_loss_weight = 0.0
+    SURROGATE.loss_func[plane].n_rays_loss_weight = 0.0
+    SURROGATE.loss_func[plane].hist_zero_loss_weight = 1.0
 
-    HIST_ZERO_CLASSIFIER = ({plane: MLP for plane in PLANES},
-                            {plane: dict(dim_in=len(PARAMS_INFO),
-                                         dim_hidden=5 * [256],
-                                         dim_out=1) for idx, plane in enumerate(PLANES)})
-
-    SURROGATE = SurrogateModel(
-        planes=PLANES,
-        backbone=BACKBONE[0],
-        backbone_params=BACKBONE[1],
-        use_prev_plane_pred=True,  # TODO: add config param
-        n_rays_known=True,
-        loss_func=LOSS_FUNC[0],
-        loss_func_params=LOSS_FUNC[1],
-        hist_zero_classifier=HIST_ZERO_CLASSIFIER[0],
-        hist_zero_classifier_params=HIST_ZERO_CLASSIFIER[1],
-        # n_rays_predictor=N_RAYS_PREDICTOR[0],
-        # n_rays_predictor_params=N_RAYS_PREDICTOR[1],
-        optimizer=OPTIMIZER[0],
-        optimizer_params=OPTIMIZER[1],
-        scheduler=SCHEDULER[0],
-        scheduler_params=SCHEDULER[1],
-        val_metrics=VAL_METRICS)
-
-    SURROGATE.planes = PLANES_SUB
+SURROGATE.unfreeze()

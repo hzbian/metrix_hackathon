@@ -12,7 +12,7 @@ from ray_tools.simulation.torch_datasets import RayDataset
 from ray_nn.data.transform import SurrogateModelPreparation
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
-from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor
+from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor, HistNRaysAlternator
 from ray_nn.nn.models import SurrogateModel
 from ray_nn.nn.backbones import TransformerBackbone, MLP
 from ray_nn.metrics.geometric import SurrogateLoss, HistZeroAccuracy, NRaysAccuracy
@@ -26,7 +26,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'template_es_n_rays_known__reference'
+RUN_ID = 'template_es__alternating'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -34,7 +34,7 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 1
+GPU_ID = 0
 TRAINING_SEED = 42
 
 # --- Dataset ---
@@ -54,7 +54,7 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                          hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 100
+MAX_EPOCHS = 150
 FRAC_TRAIN_SAMPLES = 1.0
 FRAC_VAL_SAMPLES = 1.0
 BATCH_SIZE_TRAIN = 256
@@ -84,7 +84,7 @@ VAL_DATALOADER = CombinedLoader(
 LOSS_FUNC = ({plane: SurrogateLoss for plane in PLANES},
              {plane: dict(sinkhorn_p=1,
                           sinkhorn_blur=0.05,
-                          sinkhorn_normalize='weights2',
+                          sinkhorn_normalize=True,
                           sinkhorn_standardize_lims=True,
                           total_weight=1.0,
                           lims_loss_weight=0.0,
@@ -99,8 +99,13 @@ SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.97}
 
 # --- Callbacks ---
 CALLBACKS = []
-CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=20, overwrite_epoch=True) for plane in PLANES_SUB]
+CALLBACKS += [ImagePlaneCallback(plane=plane,
+                                 num_plots=40,
+                                 overwrite_epoch=True,
+                                 show_tar_hist_vminmax=False,
+                                 show_tar_lims_axis=True) for plane in PLANES_SUB]
 CALLBACKS += [MemoryMonitor()]
+CALLBACKS += [HistNRaysAlternator(every_epoch=10)]
 
 # --- Surrogate Model ---
 if RESUME_RUN:
@@ -118,10 +123,10 @@ else:
                              transformer_layers=3,
                              use_inp_template=True) for idx, plane in enumerate(PLANES)})
 
-    # N_RAYS_PREDICTOR = ({plane: MLP for plane in PLANES},
-    #                     {plane: dict(dim_in=len(PARAMS_INFO),
-    #                                  dim_hidden=5 * [256],
-    #                                  dim_out=n_hist_layers[idx]) for idx, plane in enumerate(PLANES)})
+    N_RAYS_PREDICTOR = ({plane: MLP for plane in PLANES},
+                        {plane: dict(dim_in=len(PARAMS_INFO),
+                                     dim_hidden=5 * [256],
+                                     dim_out=n_hist_layers[idx]) for idx, plane in enumerate(PLANES)})
 
     HIST_ZERO_CLASSIFIER = ({plane: MLP for plane in PLANES},
                             {plane: dict(dim_in=len(PARAMS_INFO),
@@ -133,13 +138,13 @@ else:
         backbone=BACKBONE[0],
         backbone_params=BACKBONE[1],
         use_prev_plane_pred=True,  # TODO: add config param
-        n_rays_known=True,
+        n_rays_known=False,
         loss_func=LOSS_FUNC[0],
         loss_func_params=LOSS_FUNC[1],
         hist_zero_classifier=HIST_ZERO_CLASSIFIER[0],
         hist_zero_classifier_params=HIST_ZERO_CLASSIFIER[1],
-        # n_rays_predictor=N_RAYS_PREDICTOR[0],
-        # n_rays_predictor_params=N_RAYS_PREDICTOR[1],
+        n_rays_predictor=N_RAYS_PREDICTOR[0],
+        n_rays_predictor_params=N_RAYS_PREDICTOR[1],
         optimizer=OPTIMIZER[0],
         optimizer_params=OPTIMIZER[1],
         scheduler=SCHEDULER[0],

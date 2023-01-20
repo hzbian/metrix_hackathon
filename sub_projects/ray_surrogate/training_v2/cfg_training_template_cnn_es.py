@@ -14,7 +14,7 @@ from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
 from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor
 from ray_nn.nn.models import SurrogateModel
-from ray_nn.nn.backbones import TransformerBackbone, MLP
+from ray_nn.nn.backbones import CNNBackbone, MLP
 from ray_nn.metrics.geometric import SurrogateLoss, HistZeroAccuracy, NRaysAccuracy
 
 from cfg_params_im2im import *
@@ -26,7 +26,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'template_es_n_rays_known__reference'
+RUN_ID = 'template_es_cnn_n_rays_known'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -88,7 +88,7 @@ LOSS_FUNC = ({plane: SurrogateLoss for plane in PLANES},
                           sinkhorn_standardize_lims=True,
                           total_weight=1.0,
                           lims_loss_weight=0.0,
-                          n_rays_loss_weight=0.0,
+                          n_rays_loss_weight=1.0,
                           hist_zero_loss_weight=1.0) for plane in PLANES})
 VAL_METRICS = [('hist_zero_acc', HistZeroAccuracy()), ('n_rays_acc', NRaysAccuracy())]
 MONITOR_VAL_LOSS = 'val/loss/reference'
@@ -107,16 +107,19 @@ if RESUME_RUN:
     SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RUN_PATH, 'last.ckpt'))
 else:
     n_hist_layers = [len(PLANES_INFO[plane][0]) for plane in PLANES]
-    BACKBONE = ({plane: TransformerBackbone for plane in PLANES},
+    BACKBONE = ({plane: CNNBackbone for plane in PLANES},
                 {plane: dict(hist_dim=(32, 32),
-                             n_hist_layers_inp=8,
-                             n_hist_layers_out=n_hist_layers[idx],
                              param_dim=len(PARAMS_INFO),
-                             transformer_dim=1024,
-                             transformer_mlp_dim=2048,
-                             transformer_heads=4,
-                             transformer_layers=3,
-                             use_inp_template=True) for idx, plane in enumerate(PLANES)})
+                             n_hist_layers=n_hist_layers[idx],
+                             n_templates=8,
+                             param_emb_n_layers=5,
+                             param_emb_dim_hidden=128,
+                             param_emb_dim=1024,
+                             lims_n_layers=5,
+                             lims_dim_hidden=128,
+                             conv_n_layers=3,
+                             conv_n_channels=8,
+                             conv_kernel_size=3) for idx, plane in enumerate(PLANES)})
 
     # N_RAYS_PREDICTOR = ({plane: MLP for plane in PLANES},
     #                     {plane: dict(dim_in=len(PARAMS_INFO),

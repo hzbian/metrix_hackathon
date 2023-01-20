@@ -9,7 +9,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
-import cfg_training_template_es as CFG
+import cfg_training_template_es_allinone as CFG
 
 # --- Save all config files ---
 cfg_files = [CFG.__file__]

@@ -14,8 +14,8 @@ from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
 from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor
 from ray_nn.nn.models import SurrogateModel
-from ray_nn.nn.backbones import TransformerBackbone, MLP
-from ray_nn.metrics.geometric import SurrogateLoss, HistZeroAccuracy, NRaysAccuracy
+from ray_nn.nn.backbones import CNNBackbone, MLP
+from ray_nn.metrics.geometric import SurrogateLoss
 
 from cfg_params_im2im import *
 
@@ -26,7 +26,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'template_es_n_rays_known__reference'
+RUN_ID = 'template_sg_cnn'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -34,13 +34,13 @@ RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 1
+GPU_ID = 0
 TRAINING_SEED = 42
 
 # --- Dataset ---
 H5_PATH = os.path.join('/scratch/metrix-hackathon/datasets/metrix_simulation/ray_surrogate')
 
-PLANES_SUB = ["Exit Slit"]
+PLANES_SUB = ["U41_318eV", "ASBL", "M1-Cylinder", "Spherical Grating"]
 N_PLANES = len(PLANES_SUB)
 PLANES_INFO_SUB = {plane: PLANES_INFO[plane] for plane in PLANES_SUB}
 HIST_KEYS = list(itertools.chain(*[PLANES_INFO[plane][0] for plane in PLANES_SUB]))
@@ -87,10 +87,8 @@ LOSS_FUNC = ({plane: SurrogateLoss for plane in PLANES},
                           sinkhorn_normalize='weights2',
                           sinkhorn_standardize_lims=True,
                           total_weight=1.0,
-                          lims_loss_weight=0.0,
-                          n_rays_loss_weight=0.0,
-                          hist_zero_loss_weight=1.0) for plane in PLANES})
-VAL_METRICS = [('hist_zero_acc', HistZeroAccuracy()), ('n_rays_acc', NRaysAccuracy())]
+                          n_rays_loss_weight=0.0) for plane in PLANES})
+VAL_METRICS = []
 MONITOR_VAL_LOSS = 'val/loss/reference'
 
 # --- Optimization ---
@@ -99,7 +97,7 @@ SCHEDULER = (torch.optim.lr_scheduler.StepLR, {"step_size": 2000, "gamma": 0.97}
 
 # --- Callbacks ---
 CALLBACKS = []
-CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=20, overwrite_epoch=True) for plane in PLANES_SUB]
+CALLBACKS += [ImagePlaneCallback(plane=plane, num_plots=5, overwrite_epoch=True) for plane in PLANES_SUB]
 CALLBACKS += [MemoryMonitor()]
 
 # --- Surrogate Model ---
@@ -107,21 +105,19 @@ if RESUME_RUN:
     SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RUN_PATH, 'last.ckpt'))
 else:
     n_hist_layers = [len(PLANES_INFO[plane][0]) for plane in PLANES]
-    BACKBONE = ({plane: TransformerBackbone for plane in PLANES},
+    BACKBONE = ({plane: CNNBackbone for plane in PLANES},
                 {plane: dict(hist_dim=(32, 32),
-                             n_hist_layers_inp=8,
-                             n_hist_layers_out=n_hist_layers[idx],
                              param_dim=len(PARAMS_INFO),
-                             transformer_dim=1024,
-                             transformer_mlp_dim=2048,
-                             transformer_heads=4,
-                             transformer_layers=3,
-                             use_inp_template=True) for idx, plane in enumerate(PLANES)})
-
-    # N_RAYS_PREDICTOR = ({plane: MLP for plane in PLANES},
-    #                     {plane: dict(dim_in=len(PARAMS_INFO),
-    #                                  dim_hidden=5 * [256],
-    #                                  dim_out=n_hist_layers[idx]) for idx, plane in enumerate(PLANES)})
+                             n_hist_layers=n_hist_layers[idx],
+                             n_templates=8,
+                             param_emb_n_layers=5,
+                             param_emb_dim_hidden=128,
+                             param_emb_dim=1024,
+                             lims_n_layers=5,
+                             lims_dim_hidden=128,
+                             conv_n_layers=3,
+                             conv_n_channels=8,
+                             conv_kernel_size=3) for idx, plane in enumerate(PLANES)})
 
     HIST_ZERO_CLASSIFIER = ({plane: MLP for plane in PLANES},
                             {plane: dict(dim_in=len(PARAMS_INFO),
@@ -133,13 +129,8 @@ else:
         backbone=BACKBONE[0],
         backbone_params=BACKBONE[1],
         use_prev_plane_pred=True,  # TODO: add config param
-        n_rays_known=True,
         loss_func=LOSS_FUNC[0],
         loss_func_params=LOSS_FUNC[1],
-        hist_zero_classifier=HIST_ZERO_CLASSIFIER[0],
-        hist_zero_classifier_params=HIST_ZERO_CLASSIFIER[1],
-        # n_rays_predictor=N_RAYS_PREDICTOR[0],
-        # n_rays_predictor_params=N_RAYS_PREDICTOR[1],
         optimizer=OPTIMIZER[0],
         optimizer_params=OPTIMIZER[1],
         scheduler=SCHEDULER[0],
