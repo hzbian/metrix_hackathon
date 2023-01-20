@@ -28,12 +28,23 @@ class Select(torch.nn.Module):
 
 
 class SurrogateModelPreparation:
+    """
+    Transform to prepare data to work with :class:`ray_nn.nn.models.SurrogateModel`.
+    Histograms with no rays are processed in a special ways, see ``_process_zero_hist``.
+    :param planes_info: Dictionary with info about (image) planes to be considered in the surrogate model.
+        Key = names of planes / value[0] = dataset keys to one or more histograms corresponding to a plane /
+        value[1] = parameter names to be considered for a plane.
+    :param params_key: Dataset keys to all recorded parameters
+    :param params_info: Dictionary with info about all parameters to be considered. Key = parameter name /
+        value[0] = lower bound for parameter values / value[0] = upper bound for parameter values.
+    :param hist_subsampler: :class:`ray_nn.utils.ray_processing.HistSubsampler` to downsample raw histograms.
+    """
 
     def __init__(self,
                  planes_info: Dict[str, Tuple[List[str], List[str]]],
                  params_key: str,
                  params_info: Dict[str, Tuple[float, float]],
-                 hist_subsampler: HistSubsampler):
+                 hist_subsampler: HistSubsampler = None):
         super().__init__()
         self.planes_info = planes_info
         self.params_key = params_key
@@ -41,20 +52,25 @@ class SurrogateModelPreparation:
         self.hist_subsampler = hist_subsampler
 
     def __call__(self, data):
+        # normalize parameters to the interval [-1, 1] according to self.params_info
         params = self._process_params(data[self.params_key])
 
         out = {}
         for plane, (hist_keys, param_names) in self.planes_info.items():
+            # Add all parameters for this plane with zero padding to len(params)
             out[plane] = {}
             out[plane]['params'] = torch.zeros(len(params))
             out[plane]['params'][:len(param_names)] = torch.tensor([params[name] for name in param_names])
 
+            # Read all histograms and limits for this plane (e.g., multiple image plane layers)
             hist = torch.stack([torch.tensor(data[key]['histogram']) for key in hist_keys], dim=0)
-            hist = self.hist_subsampler(hist)
+            if self.hist_subsampler is not None:
+                hist = self.hist_subsampler(hist)
             x_lims = torch.stack([torch.tensor(data[key]['x_lims']) for key in hist_keys], dim=0)
             y_lims = torch.stack([torch.tensor(data[key]['y_lims']) for key in hist_keys], dim=0)
             n_rays = torch.stack([torch.tensor(data[key]['n_rays']) for key in hist_keys], dim=0)
 
+            # Replace all empty histograms with special histogram (with non-empty mass)
             self._process_zero_hist(hist, x_lims, y_lims, n_rays)
 
             out[plane].update(dict(tar_hist=hist.to(torch.get_default_dtype()),
@@ -68,6 +84,10 @@ class SurrogateModelPreparation:
                            x_lims: torch.Tensor,
                            y_lims: torch.Tensor,
                            n_rays: torch.Tensor) -> None:
+        """
+        Replaces all empty histograms with special histogram: use constant values in the square [-1e4, 1e4]^2 and
+        normalize them to have mass 1.
+        """
         idx_zeros = (n_rays <= 1.0)
         hist[idx_zeros, ...] = torch.ones_like(hist[idx_zeros, ...]).abs()
         hist[idx_zeros, ...] = hist[idx_zeros, ...] / hist[idx_zeros, ...].sum(dim=[-2, -1], keepdim=True)
@@ -76,14 +96,21 @@ class SurrogateModelPreparation:
         n_rays[idx_zeros] = hist[idx_zeros, ...].sum(dim=[-2, -1]).to(n_rays.dtype)
 
     def _process_params(self, params: Dict[str, float]) -> Dict[str, float]:
+        """
+        Normalize parameters to the interval [-1, 1] according to ``params_info``.
+        """
         params_processed = {}
         for key, (lo, hi) in self.params_info.items():
             value = params[key]
+            # The offset 1e-8 is to handle constant parameters (e.g., number of rays)
             params_processed[key] = 2.0 * (value - lo) / (hi - lo + 1e-8) - 1.0
         return params_processed
 
 
 class SurrogatePreparation:
+    """
+    Deprecated
+    """
 
     def __init__(self,
                  params_key: str,

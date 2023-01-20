@@ -5,6 +5,10 @@ from torch import nn
 
 
 class HistSubsampler(nn.Module):
+    """
+    Downsamples a (batch of) histogram by a given factor.
+    Downsampling is done by pooling such that the number of rays (sum of histogram) is preserved.
+    """
 
     def __init__(self, factor: int) -> None:
         super().__init__()
@@ -16,6 +20,13 @@ class HistSubsampler(nn.Module):
 
 
 class HistToPointCloud(nn.Module):
+    """
+    Converts a histogram into a point cloud.
+    Output is a tensor of shape [batch size, #pixels in hist, 2];
+    first dimension are x-coordinates and second are y-coordinates.
+    The ray coordinates are computed by a meshgrid according to the size of hist and given limits.
+    Each ray is endowed with a weights, which is the corresponding entry of the histogram.
+    """
 
     def __init__(self) -> None:
         super().__init__()

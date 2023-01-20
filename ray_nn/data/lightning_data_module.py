@@ -14,9 +14,9 @@ class DefaultDataModule(pl.LightningDataModule):
             batch_size_val: int = 32,
             split: List[float] = None,
             num_workers: int = 0,
-            on_gpu: str = None,
-            seed_split: int = None,
-            seed_train: int = None,
+            on_gpu: str = None,  # if on_gpu is not None, it should be the device to be used for pinning
+            seed_split: int = None,  # fixed seed to be used for random train-val-test split
+            seed_train: int = None,  # fixed seed to be used shuffle in train dataloader
     ):
         super().__init__()
         self.save_hyperparameters(ignore=['dataset'])
