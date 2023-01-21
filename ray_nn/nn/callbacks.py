@@ -8,6 +8,7 @@ import wandb
 import numpy as np
 import torch
 from pytorch_lightning import Callback, Trainer, LightningModule
+from pytorch_lightning.utilities.model_summary import ModelSummary
 
 from matplotlib import pyplot as plt
 
@@ -169,13 +170,24 @@ class HistNRaysAlternator(Callback):
             for plane in pl_module.planes:
                 freeze(pl_module.n_rays_predictor[plane])
                 pl_module.loss_func[plane].sinkhorn_normalize = True
+                pl_module.loss_func[plane].loss_sinkhorn.normalize_weights = True
+                pl_module.loss_func[plane].loss_sinkhorn.hist_zero_loss_weight = 1.0
             print('Optimizing (normalized) histograms with fixed number of rays...')
         else:
             pl_module.freeze()
             for plane in pl_module.planes:
                 unfreeze(pl_module.n_rays_predictor[plane])
                 pl_module.loss_func[plane].sinkhorn_normalize = 'weights2'
+                pl_module.loss_func[plane].loss_sinkhorn.normalize_weights = 'weights2'
+                pl_module.loss_func[plane].loss_sinkhorn.hist_zero_loss_weight = 0.0
             print('Optimizing number of rays with fixed histograms...')
+
+        for optim in trainer.optimizers:
+            optim.param_groups.clear()
+            optim.state.clear()
+            optim.add_param_group({'params': [p for p in pl_module.parameters() if p.requires_grad is True]})
+
+        print(ModelSummary(pl_module))
 
 
 class MemoryMonitor(Callback):

@@ -145,7 +145,7 @@ class TransformerBackbone(SurrogateBackbone):
             # use input from previous plane
             inp_hist = self.to_hist_embedding(inp_hist)
             inp_x_lims = self.to_x_lims_embedding(inp_x_lims)
-            inp_y_lims = self.to_x_lims_embedding(inp_y_lims)
+            inp_y_lims = self.to_y_lims_embedding(inp_y_lims)
 
         feat = self.transformer(torch.cat([inp_params, inp_hist, inp_x_lims, inp_y_lims], dim=0))
 

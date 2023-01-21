@@ -26,7 +26,7 @@ from cfg_params_im2im import *
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # --- Name & Paths ---
-RUN_ID = 'template_es__alternating'
+RUN_ID = 'template_es__alternating_min'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
@@ -137,7 +137,7 @@ else:
         planes=PLANES,
         backbone=BACKBONE[0],
         backbone_params=BACKBONE[1],
-        use_prev_plane_pred=True,  # TODO: add config param
+        use_prev_plane_pred=False,
         n_rays_known=False,
         loss_func=LOSS_FUNC[0],
         loss_func_params=LOSS_FUNC[1],
@@ -150,5 +150,7 @@ else:
         scheduler=SCHEDULER[0],
         scheduler_params=SCHEDULER[1],
         val_metrics=VAL_METRICS)
+
+    SURROGATE.freeze()
 
     SURROGATE.planes = PLANES_SUB
