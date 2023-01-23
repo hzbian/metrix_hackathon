@@ -156,7 +156,7 @@ class SurrogateLoss(nn.Module):
             # 0-1 label for empty histograms (1 = empty)
             hist_zero_labels = (batch['tar_n_rays'] < 2.0).to(torch.get_default_dtype())
             loss = loss + self.hist_zero_loss_weight * self.hist_zero_loss(batch['pred_hist_zero_prob'],
-                                                                           hist_zero_labels)
+                                                                           hist_zero_labels[:, 0:1, ...])
 
         return loss
 

@@ -143,7 +143,7 @@ class SurrogateModel(LightningModule):
                 # compute "probability" of histogram being empty
                 pred_hist_zero_prob = torch.sigmoid(self.hist_zero_classifier[plane](inp_params)).flatten(start_dim=1)
                 batch[plane]['pred_hist_zero_prob'] = pred_hist_zero_prob
-                hist_zero_idx = pred_hist_zero_prob > 0.5  # decision threshold
+                hist_zero_idx = (pred_hist_zero_prob > 0.5).flatten()  # decision threshold
 
                 # generate empty histograms and insert them where needed
                 hist_0, x_lims_0, y_lims_0, n_rays_0 = SurrogateModel._hist_zero_batch(batch[plane]['pred_hist'])

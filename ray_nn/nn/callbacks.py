@@ -161,11 +161,13 @@ class PlaneMutator(Callback):
 
 class HistNRaysAlternator(Callback):
 
-    def __init__(self, every_epoch: int):
+    def __init__(self, every_epoch: int, start_with_hist_fit: bool = True):
         self.every_epoch = every_epoch
+        self.start_with_hist_fit = start_with_hist_fit
 
     def on_train_epoch_start(self, trainer: Trainer, pl_module: SurrogateModel) -> None:
-        if trainer.current_epoch % (2 * self.every_epoch) < self.every_epoch:
+        if (self.start_with_hist_fit and trainer.current_epoch % (2 * self.every_epoch) < self.every_epoch) or \
+                (not self.start_with_hist_fit and trainer.current_epoch % (2 * self.every_epoch) >= self.every_epoch):
             pl_module.unfreeze()
             for plane in pl_module.planes:
                 freeze(pl_module.n_rays_predictor[plane])
