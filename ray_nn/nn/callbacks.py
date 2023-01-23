@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict, Any
 
 import psutil
 from collections import defaultdict
@@ -190,6 +190,13 @@ class HistNRaysAlternator(Callback):
             optim.add_param_group({'params': [p for p in pl_module.parameters() if p.requires_grad is True]})
 
         print(ModelSummary(pl_module))
+
+    def on_load_checkpoint(self, trainer: Trainer, pl_module: SurrogateModel,
+                           checkpoint: Dict[str, Any]) -> None:
+        # Hack to reset (possibly) non-matching optimizer states loaded from a checkpoint
+        optim = pl_module.configure_optimizers()[0][0]
+        checkpoint['optimizer_states'][0]['state'].clear()
+        checkpoint['optimizer_states'][0]['param_groups'] = optim.param_groups
 
 
 class MemoryMonitor(Callback):

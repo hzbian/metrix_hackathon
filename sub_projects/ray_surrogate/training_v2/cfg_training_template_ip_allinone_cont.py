@@ -117,7 +117,7 @@ CALLBACKS += [ImagePlaneCallback(plane=plane,
                                  show_tar_hist_vminmax=False,
                                  show_tar_lims_axis=True) for plane in PLANES_SUB]
 CALLBACKS += [MemoryMonitor()]
-CALLBACKS += [HistNRaysAlternator(every_epoch=10)]
+CALLBACKS += [HistNRaysAlternator(every_epoch=10, start_with_hist_fit=False)]
 
 # --- Surrogate Model ---
 if RESUME_RUN:
