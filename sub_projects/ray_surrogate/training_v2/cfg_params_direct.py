@@ -48,7 +48,7 @@ PARAMS_INFO_SEPARATE = {
     "ImagePlane": [('ImagePlane.distanceImagePlane', (990, 1010))]
 }
 
-LAYERS = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+LAYERS = [0]  # [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 PLANES_INFO = {}
 for idx, plane in enumerate(PLANES):
     PARAM_NAMES = []
