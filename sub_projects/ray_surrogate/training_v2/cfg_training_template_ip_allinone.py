@@ -14,7 +14,7 @@ from ray_nn.data.transform import SurrogateModelPreparation
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.utils.ray_processing import HistSubsampler
 from ray_nn.nn.callbacks import ImagePlaneCallback, MemoryMonitor, HistNRaysAlternator
-from ray_nn.nn.models import SurrogateModel
+from ray_nn.nn.models import SurrogateModel, freeze
 from ray_nn.nn.backbones import TransformerBackbone, MLP
 from ray_nn.metrics.geometric import SurrogateLoss, HistZeroAccuracy, NRaysAccuracy
 
@@ -31,11 +31,11 @@ RUN_ID = 'template_ip__alternating_min'
 RESULTS_PATH = 'results'
 RUN_PATH = os.path.join(RESULTS_PATH, RUN_ID)
 WANDB_ONLINE = True
-RESUME_RUN = True
+RESUME_RUN = False
 
 # --- Devices & Global Seed ---
 DEVICE = 'cuda'
-GPU_ID = 1
+GPU_ID = 0
 TRAINING_SEED = 42
 
 # --- Dataset ---
@@ -56,9 +56,9 @@ DATASET = RayDataset(h5_files=[os.path.join(H5_PATH, file) for file in os.listdi
                                                          hist_subsampler=HistSubsampler(factor=8)))
 
 # --- Dataloaders ---
-MAX_EPOCHS = 100
+MAX_EPOCHS = 35
 FRAC_TRAIN_SAMPLES = 1.0
-FRAC_VAL_SAMPLES = 1.0
+FRAC_VAL_SAMPLES = 0.2
 BATCH_SIZE_TRAIN = 256
 BATCH_SIZE_VAL = 256
 DATA_SPLIT = [0.95, 0.05, 0.00]
@@ -123,6 +123,7 @@ CALLBACKS += [HistNRaysAlternator(every_epoch=5)]
 if RESUME_RUN:
     SURROGATE = SurrogateModel.load_from_checkpoint(os.path.join(RUN_PATH, 'last.ckpt'))
     SURROGATE.planes = PLANES_SUB
+    freeze(SURROGATE)
 else:
     n_hist_layers = [len(PLANES_INFO[plane][0]) for plane in PLANES]
     BACKBONE = ({plane: TransformerBackbone for plane in PLANES},
