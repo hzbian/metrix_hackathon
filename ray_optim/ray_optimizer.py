@@ -8,7 +8,7 @@ from ax.service.ax_client import AxClient
 from matplotlib import pyplot as plt
 from tqdm import trange
 
-from ray_tools.base import RayOutput, RayTransform
+from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
 import wandb
@@ -45,7 +45,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
         return output_objective
 
     def optimize(self, objective, iterations):
-        self.optuna_study.optimize(self.optuna_objective(objective), n_trials=iterations)
+        self.optuna_study.optimize(self.optuna_objective(objective), n_trials=iterations, show_progress_bar=True)
         return self.optuna_study.best_params, {}
 
 
@@ -187,8 +187,9 @@ class RayOptimizer:
                 label='real parameters')
         ax.plot([param.get_value() for param in self.normalize_parameters(predicted_params).values()], 'm*', markersize=20,
                 label='predicted parameters')
-        ax.set_xticks(range(len(real_params)))
-        ax.set_xticklabels([param for param in real_params.keys()], rotation=90)
+        param_labels = [param_key for param_key, param_value in real_params.items() if isinstance(self.search_space[param_key], MutableParameter)]
+        ax.set_xticks(range(len(param_labels)))
+        ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
         return RayOptimizer.fig_to_image(fig)
 
@@ -226,7 +227,7 @@ class RayOptimizer:
                 self.plot_interval_best_loss = loss
                 self.plot_interval_best_params = parameters[epoch - self.evaluation_counter]
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
-                image = self.plot_data(self.plot_interval_best_rays)
+                image = self.plot_data(self.plot_interval_best_rays[0])
                 self.logging_backend.image("footprint", image)
                 parameter_comparison_image = self.plot_param_comparison(self.target_params,
                                                                         self.plot_interval_best_params)
@@ -247,8 +248,8 @@ class RayOptimizer:
     def calculate_loss(self, y, y_hat):
         y = self.ray_output_to_tensor(y).cuda()
         y_hat = self.ray_output_to_tensor(y_hat).cuda()
-        if y_hat.shape[1] == 0:
-            y_hat = torch.ones((y_hat.shape[0], 1, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
+        if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
+            y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
         loss_out = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
                                   torch.ones_like(y_hat[..., 1]))
         loss = loss_out.mean().item()

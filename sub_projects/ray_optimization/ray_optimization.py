@@ -20,8 +20,8 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
-           name='34-parameter-rayui-TPE',
-           mode='disabled',  # 'disabled' or 'online'
+           name='34-parameter-rayui-TPE-12-Layer-LongRun',
+           mode='online',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -117,7 +117,7 @@ optuna_study = optuna.create_study(sampler=TPESampler(), pruner=optuna.pruners.H
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study, search_space=all_params)
 ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criterion=criterion, engine=engine,
                              log_times=True, exported_plane=exported_plane, search_space=all_params,
-                             target_params=target_params, transforms=MultiLayer([-5., 0., 5]),
+                             target_params=target_params, transforms=MultiLayer([-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False),
                              logging_backend=WandbLoggingBackend())
 
 best_parameters, metrics = ray_optimizer.optimize(iterations=10000)
