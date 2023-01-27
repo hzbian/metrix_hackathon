@@ -139,6 +139,10 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
             dict_copy[key] = param.clone()
         return dict_copy
 
+    def perturb(self, perturbation_dict: Dict[Union[str, XmlElement], RayParameter]):
+        for k, v in perturbation_dict.items():
+            self[k] += v.get_value()
+
     def to_value_dict(self) -> Dict[str, Any]:
         """
         Converts container into an ordinary dictionary with values.

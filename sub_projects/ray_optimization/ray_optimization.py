@@ -21,7 +21,7 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_optimization',
            name='34-parameter-rayui-TPE-12-Layer-LongRun',
-           mode='online',  # 'disabled' or 'online'
+           mode='disabled',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -33,11 +33,12 @@ n_rays = ['1e4']
 
 exported_plane = "ImagePlane"  # "Spherical Grating"
 
-transforms = [
-    RayTransformConcat({
-        'raw': ToDict(),
-    }),
-]
+# transforms = [
+#    RayTransformConcat({
+#        'raw': ToDict(),
+#    }),
+# ]
+transforms = MultiLayer([-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False)
 verbose = False
 engine = RayEngine(rml_basefile=rml_basefile,
                    exported_planes=[exported_plane],
@@ -117,8 +118,17 @@ optuna_study = optuna.create_study(sampler=TPESampler(), pruner=optuna.pruners.H
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study, search_space=all_params)
 ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criterion=criterion, engine=engine,
                              log_times=True, exported_plane=exported_plane, search_space=all_params,
-                             target_params=target_params, transforms=MultiLayer([-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False),
+                             transforms=transforms,
                              logging_backend=WandbLoggingBackend())
 
-best_parameters, metrics = ray_optimizer.optimize(iterations=10000)
-print(best_parameters, metrics)
+target_rays = engine.run(target_params, transforms=transforms)
+#best_parameters, metrics = ray_optimizer.optimize(target_rays, target_params=target_params, iterations=100)
+#print(best_parameters, metrics)
+target_configurations = [param_func() for _ in range(22)]
+
+offset = RayParameterContainer(
+    [(k, NumericalParameter(v.get_value() * rg.rg_random.uniform(0, 0.1))) for k, v in param_func().items() if isinstance(v, RandomParameter)])
+
+perturbed_configurations = target_configurations.copy()
+for configuration in perturbed_configurations:
+    configuration.perturb(offset)

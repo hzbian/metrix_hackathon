@@ -8,7 +8,7 @@ from ax.service.ax_client import AxClient
 from matplotlib import pyplot as plt
 from tqdm import trange
 
-from ray_tools.base import RayTransform
+from ray_tools.base import RayTransform, RayOutput
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
 import wandb
@@ -20,7 +20,7 @@ class OptimizerBackend(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def optimize(self, objective, iterations):
+    def optimize(self, objective, iterations, target_rays, target_params=None):
         pass
 
 
@@ -32,20 +32,21 @@ class OptimizerBackendOptuna(OptimizerBackend):
     def setup_optimization(self):
         pass
 
-    def optuna_objective(self, objective):
+    def optuna_objective(self, objective, target_rays, target_params=None):
         def output_objective(trial):
             optimize_parameters = self.search_space.copy()
             for key, value in optimize_parameters.items():
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(trial.suggest_float(key, value.value_lims[0],
                                                                                       value.value_lims[1]))
-            output = objective(optimize_parameters)
+            output = objective(optimize_parameters, target_rays=target_rays, target_params=target_params)
             return output[min(output.keys())]
 
         return output_objective
 
-    def optimize(self, objective, iterations):
-        self.optuna_study.optimize(self.optuna_objective(objective), n_trials=iterations, show_progress_bar=True)
+    def optimize(self, objective, iterations, target_rays, target_params=None):
+        self.optuna_study.optimize(self.optuna_objective(objective, target_rays, target_params), n_trials=iterations,
+                                   show_progress_bar=True)
         return self.optuna_study.best_params, {}
 
 
@@ -79,7 +80,7 @@ class OptimizerBackendAx(OptimizerBackend):
             minimize=True,
         )
 
-    def optimize(self, objective, iterations):
+    def optimize(self, objective, iterations, target_rays, target_params=None):
         ranger = trange(iterations)
         for _ in ranger:
             optimization_time = time.time()
@@ -87,7 +88,7 @@ class OptimizerBackendAx(OptimizerBackend):
             print("Optimization took {:.2f}s".format(time.time() - optimization_time))
 
             ray_parameter_container_list = self.optimizer_parameter_to_container_list(trials_to_evaluate)
-            results = objective(ray_parameter_container_list)
+            results = objective(ray_parameter_container_list, target_rays, target_params=target_params)
 
             for trial_index in results:
                 self.ax_client.complete_trial(trial_index, results[trial_index])
@@ -131,20 +132,14 @@ class WandbLoggingBackend(LoggingBackend):
 class RayOptimizer:
     def __init__(self, optimizer_backend: OptimizerBackend, criterion: torch.nn.Module, exported_plane: str,
                  engine: RayEngine, search_space: RayParameterContainer,
-                 target_params: Union[RayParameterContainer, Iterable[RayParameterContainer]],
                  logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
-                 target_engine: RayEngine = None, log_times=False):
+                 log_times=False):
         self.optimizer_backend = optimizer_backend
-        self.target_engine = target_engine
         self.engine = engine
         self.criterion = criterion
         self.exported_plane = exported_plane
         self.search_space = search_space
-        self.target_params = target_params
-        if target_engine is None:
-            target_engine = engine
         self.transforms = transforms
-        self.target_rays = target_engine.run(target_params, transforms=transforms)
         self.logging_backend = logging_backend
         self.optimizer_backend.setup_optimization()
         self.evaluation_counter = 0
@@ -181,13 +176,18 @@ class RayOptimizer:
                                                                                          value.value_lims[0]))
         return normalized_parameters
 
-    def plot_param_comparison(self, real_params: RayParameterContainer, predicted_params: RayParameterContainer):
+    def plot_param_comparison(self, predicted_params: RayParameterContainer,
+                              real_params: Optional[RayParameterContainer] = None):
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-        ax.plot([param.get_value() for param in self.normalize_parameters(real_params).values()], 'bo', markersize=20,
-                label='real parameters')
-        ax.plot([param.get_value() for param in self.normalize_parameters(predicted_params).values()], 'm*', markersize=20,
+        if real_params is not None:
+            ax.plot([param.get_value() for param in self.normalize_parameters(real_params).values()], 'bo',
+                    markersize=20,
+                    label='real parameters')
+        ax.plot([param.get_value() for param in self.normalize_parameters(predicted_params).values()], 'm*',
+                markersize=20,
                 label='predicted parameters')
-        param_labels = [param_key for param_key, param_value in real_params.items() if isinstance(self.search_space[param_key], MutableParameter)]
+        param_labels = [param_key for param_key, param_value in real_params.items() if
+                        isinstance(self.search_space[param_key], MutableParameter)]
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
@@ -202,7 +202,7 @@ class RayOptimizer:
             y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
             return torch.stack((x_locs, y_locs), -1)
 
-    def evaluation_function(self, parameters):
+    def evaluation_function(self, parameters, target_rays, target_params=None):
         begin_total_time: float = time.time() if self.log_times else None
         if not isinstance(parameters, list):
             parameters = [parameters]
@@ -216,7 +216,7 @@ class RayOptimizer:
 
         begin_loss_time: float = time.time() if self.log_times else None
         output_loss = {
-            key + self.evaluation_counter: self.calculate_loss(self.target_rays, element) for
+            key + self.evaluation_counter: self.calculate_loss(target_rays, element) for
             key, element in enumerate(output)}
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
@@ -229,16 +229,15 @@ class RayOptimizer:
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
                 image = self.plot_data(self.plot_interval_best_rays[0])
                 self.logging_backend.image("footprint", image)
-                parameter_comparison_image = self.plot_param_comparison(self.target_params,
-                                                                        self.plot_interval_best_params)
+                parameter_comparison_image = self.plot_param_comparison(self.plot_interval_best_params, target_params)
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
                 self.plot_interval_best_loss = float('inf')
 
             if self.evaluation_counter == 0:
-                target_tensor = self.ray_output_to_tensor(self.target_rays)
+                target_tensor = self.ray_output_to_tensor(target_rays)
                 for counter, target_tensor_sample in enumerate(target_tensor):
                     target_image = self.plot_data(target_tensor_sample)
-                    self.logging_backend.image("target_footprint_"+str(counter), target_image)
+                    self.logging_backend.image("target_footprint_" + str(counter), target_image)
             if self.log_times:
                 self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
         self.logging_backend.log()
@@ -258,7 +257,9 @@ class RayOptimizer:
             self.plot_interval_best_rays = y_hat
         return loss, y_hat.shape[1]
 
-    def optimize(self, iterations):
+    def optimize(self, target_rays: Union[Dict, Iterable[Dict], List[Dict]], iterations: int,
+                 target_params: Optional[RayParameterContainer] = None):
         best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function,
-                                                                   iterations=iterations)
+                                                                   iterations=iterations, target_rays=target_rays,
+                                                                   target_params=target_params)
         return best_parameters, metrics
