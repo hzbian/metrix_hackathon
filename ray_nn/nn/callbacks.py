@@ -184,6 +184,8 @@ class HistNRaysAlternator(Callback):
                 pl_module.loss_func[plane].loss_sinkhorn.hist_zero_loss_weight = 0.0
             print('Optimizing number of rays with fixed histograms...')
 
+        # This update can be important, e.g., if the optimizer has weight decay (which would also affect
+        # parameters with requires_grad=True)
         for optim in trainer.optimizers:
             optim.param_groups.clear()
             optim.state.clear()
