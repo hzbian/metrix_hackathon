@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import time
-from typing import List, Iterable, Union
+from typing import List, Iterable, Union, Dict, Optional
 
 import numpy as np
 import torch
@@ -8,7 +8,7 @@ from ax.service.ax_client import AxClient
 from matplotlib import pyplot as plt
 from tqdm import trange
 
-from ray_tools.base import RayOutput
+from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
 import wandb
@@ -45,7 +45,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
         return output_objective
 
     def optimize(self, objective, iterations):
-        self.optuna_study.optimize(self.optuna_objective(objective), n_trials=iterations)
+        self.optuna_study.optimize(self.optuna_objective(objective), n_trials=iterations, show_progress_bar=True)
         return self.optuna_study.best_params, {}
 
 
@@ -132,7 +132,8 @@ class RayOptimizer:
     def __init__(self, optimizer_backend: OptimizerBackend, criterion: torch.nn.Module, exported_plane: str,
                  engine: RayEngine, search_space: RayParameterContainer,
                  target_params: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-                 logging_backend: LoggingBackend, target_engine: RayEngine = None, log_times=False):
+                 logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
+                 target_engine: RayEngine = None, log_times=False):
         self.optimizer_backend = optimizer_backend
         self.target_engine = target_engine
         self.engine = engine
@@ -142,7 +143,8 @@ class RayOptimizer:
         self.target_params = target_params
         if target_engine is None:
             target_engine = engine
-        self.target_rays = target_engine.run(target_params)
+        self.transforms = transforms
+        self.target_rays = target_engine.run(target_params, transforms=transforms)
         self.logging_backend = logging_backend
         self.optimizer_backend.setup_optimization()
         self.evaluation_counter = 0
@@ -181,30 +183,31 @@ class RayOptimizer:
 
     def plot_param_comparison(self, real_params: RayParameterContainer, predicted_params: RayParameterContainer):
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-        ax.plot(np.array([param.get_value() for param in self.normalize_parameters(real_params).values()]), 'bo', markersize=20,
+        ax.plot([param.get_value() for param in self.normalize_parameters(real_params).values()], 'bo', markersize=20,
                 label='real parameters')
-        ax.plot(np.array([param.get_value() for param in self.normalize_parameters(predicted_params).values()]), 'm*', markersize=20,
+        ax.plot([param.get_value() for param in self.normalize_parameters(predicted_params).values()], 'm*', markersize=20,
                 label='predicted parameters')
-        ax.set_xticks(range(len(real_params)))
-        ax.set_xticklabels([param for param in real_params.keys()], rotation=90)
+        param_labels = [param_key for param_key, param_value in real_params.items() if isinstance(self.search_space[param_key], MutableParameter)]
+        ax.set_xticks(range(len(param_labels)))
+        ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
         return RayOptimizer.fig_to_image(fig)
 
-    def ray_output_to_tensor(self, ray_output: Union[List, RayOutput]):
-        if isinstance(ray_output, list):
-            return [RayOptimizer.ray_output_to_tensor(self, element) for element in ray_output]
-        x_loc = ray_output['ray_output'][self.exported_plane].x_loc
-        y_loc = ray_output['ray_output'][self.exported_plane].y_loc
-        x_loc = torch.tensor(x_loc)
-        y_loc = torch.tensor(y_loc)
-        return torch.vstack((x_loc, y_loc)).T
+    def ray_output_to_tensor(self, ray_output: Union[Dict, List[Dict], Iterable[Dict]]):
+        if not isinstance(ray_output, Dict):
+            return [self.ray_output_to_tensor(element) for element in ray_output]
+        else:
+            rays: dict = ray_output['ray_output'][self.exported_plane]
+            x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
+            y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
+            return torch.stack((x_locs, y_locs), -1)
 
     def evaluation_function(self, parameters):
         begin_total_time: float = time.time() if self.log_times else None
         if not isinstance(parameters, list):
             parameters = [parameters]
         begin_execution_time: float = time.time() if self.log_times else None
-        output = self.engine.run(parameters)
+        output = self.engine.run(parameters, transforms=self.transforms)
         if not isinstance(output, list):
             output = [output]
 
@@ -214,8 +217,7 @@ class RayOptimizer:
         begin_loss_time: float = time.time() if self.log_times else None
         output_loss = {
             key + self.evaluation_counter: self.calculate_loss(self.target_rays, element) for
-            key, element in
-            enumerate(output)}
+            key, element in enumerate(output)}
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
 
@@ -225,15 +227,18 @@ class RayOptimizer:
                 self.plot_interval_best_loss = loss
                 self.plot_interval_best_params = parameters[epoch - self.evaluation_counter]
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
-                image = self.plot_data(self.plot_interval_best_rays)
+                image = self.plot_data(self.plot_interval_best_rays[0])
                 self.logging_backend.image("footprint", image)
                 parameter_comparison_image = self.plot_param_comparison(self.target_params,
                                                                         self.plot_interval_best_params)
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
+                self.plot_interval_best_loss = float('inf')
 
             if self.evaluation_counter == 0:
-                target_image = self.plot_data(self.ray_output_to_tensor(self.target_rays))
-                self.logging_backend.image("target_footprint", target_image)
+                target_tensor = self.ray_output_to_tensor(self.target_rays)
+                for counter, target_tensor_sample in enumerate(target_tensor):
+                    target_image = self.plot_data(target_tensor_sample)
+                    self.logging_backend.image("target_footprint_"+str(counter), target_image)
             if self.log_times:
                 self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
         self.logging_backend.log()
@@ -243,15 +248,15 @@ class RayOptimizer:
     def calculate_loss(self, y, y_hat):
         y = self.ray_output_to_tensor(y).cuda()
         y_hat = self.ray_output_to_tensor(y_hat).cuda()
-        if y_hat.shape[0] == 0:
-            y_hat = torch.ones((1, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
-        loss_out = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[:, 1]) / y.shape[0],
-                                  torch.ones_like(y_hat[:, 1]) / y_hat.shape[0])
-        loss = loss_out.item()
+        if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
+            y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
+        loss_out = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
+                                  torch.ones_like(y_hat[..., 1]))
+        loss = loss_out.mean().item()
 
         if loss < self.plot_interval_best_loss:
             self.plot_interval_best_rays = y_hat
-        return loss, y_hat.shape[0]
+        return loss, y_hat.shape[1]
 
     def optimize(self, iterations):
         best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function,
