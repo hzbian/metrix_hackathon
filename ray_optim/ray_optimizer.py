@@ -10,7 +10,7 @@ from tqdm import trange
 
 from ray_tools.base import RayTransform, RayOutput
 from ray_tools.base.engine import RayEngine
-from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
+from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RayParameter
 import wandb
 
 
@@ -187,7 +187,7 @@ class RayOptimizer:
                 markersize=20,
                 label='predicted parameters')
         param_labels = [param_key for param_key, param_value in real_params.items() if
-                        isinstance(self.search_space[param_key], MutableParameter)]
+                        isinstance(self.optimizer_backend.search_space[param_key], MutableParameter)]
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
@@ -263,3 +263,7 @@ class RayOptimizer:
                                                                    iterations=iterations, target_rays=target_rays,
                                                                    target_params=target_params)
         return best_parameters, metrics
+
+    def find_offsets(self, perturbed_parameters: list[RayParameterContainer[str, RayParameter]], iterations: int):
+
+        return None

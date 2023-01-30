@@ -1,5 +1,6 @@
 import sys
 import os
+from typing import List
 
 import wandb
 import optuna
@@ -12,7 +13,8 @@ from ray_optim.ray_optimizer import OptimizerBackendAx, OptimizerBackendOptuna, 
 
 from ray_nn.metrics.geometric import SinkhornLoss
 
-from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter
+from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
+    RayParameter
 from ray_tools.base.utils import RandomGenerator
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import RayTransformConcat, ToDict, MultiLayer
@@ -124,11 +126,13 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criteri
 target_rays = engine.run(target_params, transforms=transforms)
 #best_parameters, metrics = ray_optimizer.optimize(target_rays, target_params=target_params, iterations=100)
 #print(best_parameters, metrics)
-target_configurations = [param_func() for _ in range(22)]
+target_parameters = [param_func() for _ in range(22)]
 
 offset = RayParameterContainer(
     [(k, NumericalParameter(v.get_value() * rg.rg_random.uniform(0, 0.1))) for k, v in param_func().items() if isinstance(v, RandomParameter)])
 
-perturbed_configurations = target_configurations.copy()
-for configuration in perturbed_configurations:
+perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = target_parameters.copy()
+for configuration in perturbed_parameters:
     configuration.perturb(offset)
+
+ray_optimizer.find_offsets(perturbed_parameters=perturbed_parameters, iterations=100)

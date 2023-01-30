@@ -141,7 +141,8 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
 
     def perturb(self, perturbation_dict: Dict[Union[str, XmlElement], RayParameter]):
         for k, v in perturbation_dict.items():
-            self[k] += v.get_value()
+            if isinstance(self[k], NumericalParameter) and isinstance(v, NumericalParameter):
+                self[k].value += v.get_value()
 
     def to_value_dict(self) -> Dict[str, Any]:
         """
