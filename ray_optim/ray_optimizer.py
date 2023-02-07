@@ -20,7 +20,7 @@ class OptimizerBackend(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def optimize(self, objective, iterations, target_rays, search_space, target_params=None):
+    def optimize(self, objective, iterations, target_rays, search_space, target_params=None, perturbed_parameters=None):
         pass
 
 
@@ -31,21 +31,24 @@ class OptimizerBackendOptuna(OptimizerBackend):
     def setup_optimization(self):
         pass
 
-    def optuna_objective(self, objective, target_rays, search_space, target_params=None):
+    def optuna_objective(self, objective, target_rays, search_space, target_params=None, perturbed_parameters=None):
         def output_objective(trial):
             optimize_parameters = search_space.copy()
             for key, value in optimize_parameters.items():
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(trial.suggest_float(key, value.value_lims[0],
                                                                                       value.value_lims[1]))
-            output = objective(optimize_parameters, target_rays=target_rays, target_params=target_params)
+            output = objective(optimize_parameters, target_rays=target_rays, target_params=target_params,
+                               perturbed_parameters_list=perturbed_parameters)
             return output[min(output.keys())]
 
         return output_objective
 
-    def optimize(self, objective, iterations, target_rays, search_space, target_params=None):
-        self.optuna_study.optimize(self.optuna_objective(objective, target_rays, search_space, target_params), n_trials=iterations,
-                                   show_progress_bar=True)
+    def optimize(self, objective, iterations, target_rays, search_space, target_params=None, perturbed_parameters=None):
+        self.optuna_study.optimize(
+            self.optuna_objective(objective, target_rays, search_space, target_params, perturbed_parameters),
+            n_trials=iterations,
+            show_progress_bar=True)
         return self.optuna_study.best_params, {}
 
 
@@ -79,7 +82,7 @@ class OptimizerBackendAx(OptimizerBackend):
             minimize=True,
         )
 
-    def optimize(self, objective, iterations, target_rays, search_space, target_params=None):
+    def optimize(self, objective, iterations, target_rays, search_space, target_params=None, perturbed_parameters=None):
         ranger = trange(iterations)
         for _ in ranger:
             optimization_time = time.time()
@@ -176,7 +179,8 @@ class RayOptimizer:
         return normalized_parameters
 
     def plot_param_comparison(self, predicted_params: RayParameterContainer,
-                              real_params: Optional[RayParameterContainer] = None, omit_labels: Optional[List[str]] = None):
+                              real_params: Optional[RayParameterContainer] = None,
+                              omit_labels: Optional[List[str]] = None):
         if omit_labels is None:
             omit_labels = []
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
@@ -202,10 +206,18 @@ class RayOptimizer:
             y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
             return torch.stack((x_locs, y_locs), -1)
 
-    def evaluation_function(self, parameters, target_rays, target_params=None):
+    def evaluation_function(self, parameters, target_rays, target_params=None, perturbed_parameters_list: Optional[List[RayParameterContainer]]=None):
         begin_total_time: float = time.time() if self.log_times else None
         if not isinstance(parameters, list):
             parameters = [parameters]
+
+        if perturbed_parameters_list is not None:
+            evaluation_parameters = perturbed_parameters_list.copy()  # maybe dangerous!
+            for i, perturbed_parameters in enumerate(perturbed_parameters_list):
+                for k, v in parameters[0].items():
+                    evaluation_parameters[i][k] = NumericalParameter(perturbed_parameters[k].get_value() - v.get_value())
+            parameters = evaluation_parameters
+
         begin_execution_time: float = time.time() if self.log_times else None
         output = self.engine.run(parameters, transforms=self.transforms)
         if not isinstance(output, list):
@@ -215,11 +227,15 @@ class RayOptimizer:
             self.logging_backend.add_to_log({"execution_time": time.time() - begin_execution_time})
 
         begin_loss_time: float = time.time() if self.log_times else None
-        output_loss = {
-            key + self.evaluation_counter: self.calculate_loss(target_rays, element) for
-            key, element in enumerate(output)}
+
+        output_loss_list = self.calculate_loss_from_output(output, target_rays)
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
+
+        sum_loss = 0.
+        for output_loss in output_loss_list:
+            for epoch, (loss, ray_count) in output_loss.items():
+                sum_loss += loss
 
         for epoch, (loss, ray_count) in output_loss.items():
             self.logging_backend.add_to_log({"epoch": epoch, "loss": loss, "ray_count": ray_count})
@@ -244,10 +260,13 @@ class RayOptimizer:
         self.evaluation_counter += len(output)
         return {epoch: loss for epoch, (loss, _) in output_loss.items()}
 
-    def offset_evaluation_function(self, perturbed_parameters: RayParameterContainer, offsets: RayParameterContainer):
-           evaluation_parameters = perturbed_parameters.copy()
-           for k,v in perturbed_parameters.items():
-               evaluation_parameters[k] = perturbed_parameters[k].get_value() - offsets[k].get_value()
+    def calculate_loss_from_output(self, output, target_rays):
+        if isinstance(output, List):
+            return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in enumerate(output)]
+        output_loss = {
+            key + self.evaluation_counter: self.calculate_loss(target_rays, element) for
+            key, element in enumerate(output)}
+        return output_loss
 
     def calculate_loss(self, y, y_hat):
         y = self.ray_output_to_tensor(y).cuda()
@@ -266,9 +285,15 @@ class RayOptimizer:
                  target_params: Optional[RayParameterContainer] = None):
         best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function,
                                                                    iterations=iterations, target_rays=target_rays,
-                                                                   search_space=search_space, target_params=target_params)
+                                                                   search_space=search_space,
+                                                                   target_params=target_params)
         return best_parameters, metrics
 
-    def find_offsets(self, target_rays: List[Dict], perturbed_parameters: list[RayParameterContainer[str, RayParameter]], search_space, iterations: int):
-        best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function, iterations=iterations, target_rays=target_rays, search_space=search_space, target_params=target_params)
+    def find_offsets(self, target_rays: List[Dict],
+                     perturbed_parameters: list[RayParameterContainer[str, RayParameter]], search_space,
+                     iterations: int):
+        best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function,
+                                                                   iterations=iterations, target_rays=target_rays,
+                                                                   search_space=search_space,
+                                                                   perturbed_parameters=perturbed_parameters)
         return best_parameters, metrics
