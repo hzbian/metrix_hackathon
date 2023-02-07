@@ -8,7 +8,7 @@ from ax.service.ax_client import AxClient
 from matplotlib import pyplot as plt
 from tqdm import trange
 
-from ray_tools.base import RayTransform, RayOutput
+from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RayParameter
 import wandb
@@ -20,21 +20,20 @@ class OptimizerBackend(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def optimize(self, objective, iterations, target_rays, target_params=None):
+    def optimize(self, objective, iterations, target_rays, search_space, target_params=None):
         pass
 
 
 class OptimizerBackendOptuna(OptimizerBackend):
-    def __init__(self, optuna_study, search_space: RayParameterContainer):
-        self.search_space = search_space
+    def __init__(self, optuna_study):
         self.optuna_study = optuna_study
 
     def setup_optimization(self):
         pass
 
-    def optuna_objective(self, objective, target_rays, target_params=None):
+    def optuna_objective(self, objective, target_rays, search_space, target_params=None):
         def output_objective(trial):
-            optimize_parameters = self.search_space.copy()
+            optimize_parameters = search_space.copy()
             for key, value in optimize_parameters.items():
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(trial.suggest_float(key, value.value_lims[0],
@@ -44,8 +43,8 @@ class OptimizerBackendOptuna(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective, iterations, target_rays, target_params=None):
-        self.optuna_study.optimize(self.optuna_objective(objective, target_rays, target_params), n_trials=iterations,
+    def optimize(self, objective, iterations, target_rays, search_space, target_params=None):
+        self.optuna_study.optimize(self.optuna_objective(objective, target_rays, search_space, target_params), n_trials=iterations,
                                    show_progress_bar=True)
         return self.optuna_study.best_params, {}
 
@@ -80,7 +79,7 @@ class OptimizerBackendAx(OptimizerBackend):
             minimize=True,
         )
 
-    def optimize(self, objective, iterations, target_rays, target_params=None):
+    def optimize(self, objective, iterations, target_rays, search_space, target_params=None):
         ranger = trange(iterations)
         for _ in ranger:
             optimization_time = time.time()
@@ -177,7 +176,9 @@ class RayOptimizer:
         return normalized_parameters
 
     def plot_param_comparison(self, predicted_params: RayParameterContainer,
-                              real_params: Optional[RayParameterContainer] = None):
+                              real_params: Optional[RayParameterContainer] = None, omit_labels: Optional[List[str]] = None):
+        if omit_labels is None:
+            omit_labels = []
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
         if real_params is not None:
             ax.plot([param.get_value() for param in self.normalize_parameters(real_params).values()], 'bo',
@@ -186,8 +187,7 @@ class RayOptimizer:
         ax.plot([param.get_value() for param in self.normalize_parameters(predicted_params).values()], 'm*',
                 markersize=20,
                 label='predicted parameters')
-        param_labels = [param_key for param_key, param_value in real_params.items() if
-                        isinstance(self.optimizer_backend.search_space[param_key], MutableParameter)]
+        param_labels = [param_key for param_key, param_value in real_params.items() if param_key not in omit_labels]
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
@@ -244,6 +244,11 @@ class RayOptimizer:
         self.evaluation_counter += len(output)
         return {epoch: loss for epoch, (loss, _) in output_loss.items()}
 
+    def offset_evaluation_function(self, perturbed_parameters: RayParameterContainer, offsets: RayParameterContainer):
+           evaluation_parameters = perturbed_parameters.copy()
+           for k,v in perturbed_parameters.items():
+               evaluation_parameters[k] = perturbed_parameters[k].get_value() - offsets[k].get_value()
+
     def calculate_loss(self, y, y_hat):
         y = self.ray_output_to_tensor(y).cuda()
         y_hat = self.ray_output_to_tensor(y_hat).cuda()
@@ -257,13 +262,13 @@ class RayOptimizer:
             self.plot_interval_best_rays = y_hat
         return loss, y_hat.shape[1]
 
-    def optimize(self, target_rays: Union[Dict, Iterable[Dict], List[Dict]], iterations: int,
+    def optimize(self, target_rays: Union[Dict, Iterable[Dict], List[Dict]], iterations: int, search_space,
                  target_params: Optional[RayParameterContainer] = None):
         best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function,
                                                                    iterations=iterations, target_rays=target_rays,
-                                                                   target_params=target_params)
+                                                                   search_space=search_space, target_params=target_params)
         return best_parameters, metrics
 
-    def find_offsets(self, perturbed_parameters: list[RayParameterContainer[str, RayParameter]], iterations: int):
-
-        return None
+    def find_offsets(self, target_rays: List[Dict], perturbed_parameters: list[RayParameterContainer[str, RayParameter]], search_space, iterations: int):
+        best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function, iterations=iterations, target_rays=target_rays, search_space=search_space, target_params=target_params)
+        return best_parameters, metrics
