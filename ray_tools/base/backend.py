@@ -13,6 +13,8 @@ import docker
 import docker.errors
 import docker.types
 
+import podman
+
 import h5py
 import numpy as np
 import pandas as pd
@@ -175,6 +177,140 @@ class RayBackendDockerRAYUI(RayBackend):
                                                    y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float32),
                                                    z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float32),
                                                    energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float32))
+
+        # remove sub-workdir
+        shutil.rmtree(run_workdir)
+
+        toc = time.perf_counter()
+        if self.verbose:
+            print(f'Run ID {run_id}: Ray-UI output from {os.path.basename(rml_workfile)}' +
+                  f' successfully generated in {toc - tic:.2f}s')
+
+        return ray_output
+
+class RayBackendPodmanRAYUI(RayBackend):
+    """
+    Creates a Ray-UI backend within a docker container.
+    :param docker_image: Tag of docker image to be used.
+    :param ray_workdir: Local directory where temporary RML-files and exports are processed.
+    :param docker_container_name: Name of corresponding docker container (``docker_image`` + '_backend' is None)
+    :param max_retry: Number of retries if Ray-UI fails.
+    :param verbose: Show detailed outputs.
+    """
+
+    def __init__(self,
+                 docker_image: str,
+                 ray_workdir: str,
+                 docker_container_name: str = None,
+                 max_retry: int = 1000,
+                 verbose=True) -> None:
+        super().__init__()
+        self.docker_image = docker_image
+        self.ray_workdir = os.path.abspath(ray_workdir)
+        self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + '_backend'
+        self.max_retry = max_retry
+        self.verbose = verbose
+
+        # Ray-UI workdir in docker container
+        self._rayui_workdir = '/opt/ray-ui-workdir'
+
+        self.client = docker.from_env()
+        self.client = podman.PodmanClient(base_url="unix:////run/user/1003/podman/podman.sock")
+
+        # if container already exists, stop and remove it
+        try:
+            self.docker_container = self.client.containers.get(self.docker_container_name)
+            print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
+            self.docker_container.stop()
+            try:
+                self.docker_container.remove()
+            except docker.errors.APIError:
+                pass
+        except docker.errors.NotFound:
+            pass
+
+        # create local Ray-UI workdir (should be done before mounting docker directory below)
+        os.makedirs(self.ray_workdir, exist_ok=True)
+
+        self.docker_container = self.client.containers.run(
+            self.docker_image,
+            name=self.docker_container_name,
+            volumes={self.ray_workdir: {'bind': self._rayui_workdir, 'mode': 'rw'}},  # mount Ray-UI workdir
+            detach=True,  # run in background
+            auto_remove=True,  # remove container after kill or stop
+        )
+
+    def kill(self):
+        """
+        Send kill signal to docker container.
+        """
+        try:
+            self.docker_container.kill()
+        except docker.errors.NotFound:
+            pass
+
+    def __del__(self):
+        self.kill()
+
+    def run(self,
+            raypyng_rml: RMLFile,
+            exported_planes: List[str],
+            run_id: str = None) -> Dict[str, RayOutput]:
+
+        # create random id if not given
+        if run_id is None:
+            run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
+
+        # create sub-workdir (required for multi-threading with Ray-UI)
+        run_workdir = os.path.join(self.ray_workdir, run_id)
+        os.makedirs(run_workdir, exist_ok=True)
+
+        tic = time.perf_counter()
+
+        # create RML-file for this run
+        rml_workfile = os.path.join(run_workdir, 'workfile.rml')
+        raypyng_rml.write(rml_workfile)
+
+        # get corresponding RML-file for in docker container
+        docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile))
+
+        # argument for planes to be exported
+        cmd_exported_planes = " ".join("\"" + plane + "\"" for plane in exported_planes)
+        # run Ray-UI background mode in docker and retry if it failes
+        for run in range(self.max_retry + 1):
+            self.docker_container.exec_run(
+                cmd=f"python /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
+            )
+            retry = False
+            # fail indicator: any required CSV-file is missing
+            for exported_plane in exported_planes:
+                if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')):
+                    retry = True
+            if not retry:
+                break
+            else:
+                print(f"Run {run + 1} failed. Retry ...")
+
+        # extract Ray-UI output from CSV-files and create RayOutput instances
+        ray_output = {}
+        for exported_plane in exported_planes:
+            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')
+
+            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c',
+                                     usecols=[exported_plane + '_OX', exported_plane + '_OY',
+                                              exported_plane + '_OZ',
+                                              exported_plane + '_DX', exported_plane + '_DY',
+                                              exported_plane + '_DZ',
+                                              exported_plane + '_EN', exported_plane + '_PL'])
+
+            ray_output[exported_plane] = RayOutput(
+                x_loc=raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float32),
+                y_loc=raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float32),
+                z_loc=raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float32),
+                x_dir=raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float32),
+                y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float32),
+                z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float32),
+                energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float32))
 
         # remove sub-workdir
         shutil.rmtree(run_workdir)
