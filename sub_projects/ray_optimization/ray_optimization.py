@@ -7,7 +7,8 @@ from ax.service.ax_client import AxClient
 from optuna.samplers import TPESampler
 
 sys.path.insert(0, '../../')
-from ray_optim.ray_optimizer import OptimizerBackendAx, OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend
+from ray_optim.ray_optimizer import OptimizerBackendAx, OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
+    OffsetOptimizationTarget
 
 from ray_nn.metrics.geometric import SinkhornLoss
 
@@ -19,9 +20,9 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
 wandb.init(entity='hzb-aos',
-           project='metrix_hackathon_optimization',
-           name='34-parameter-rayui-TPE-12-Layer-LongRun',
-           mode='disabled',  # 'disabled' or 'online'
+           project='metrix_hackathon_offsets',
+           name='34-parameter-rayui-TPE-12-Layer',
+           mode='online',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -117,26 +118,31 @@ optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 optuna_study = optuna.create_study(sampler=TPESampler(), pruner=optuna.pruners.HyperbandPruner())
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
 ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criterion=criterion, engine=engine,
-                             log_times=True, exported_plane=exported_plane, search_space=all_params,
+                             log_times=True, exported_plane=exported_plane,
                              transforms=transforms,
                              logging_backend=WandbLoggingBackend())
 
 target_rays = engine.run(target_params, transforms=transforms)
-best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
-                                                  iterations=100)
+# best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
+#                                                  iterations=100)
 # print(best_parameters, metrics)
 target_parameters = [param_func() for _ in range(22)]
 
-offset = RayParameterContainer(
-    [(k, NumericalParameter(v.get_value() * rg.rg_random.uniform(-0.1, 0.1))) for k, v in param_func().items() if
-     isinstance(v, RandomParameter)])
+offset_search_space = lambda: RayParameterContainer(
+    [(k, RandomParameter(
+        value_lims=(-0.1 * (v.value_lims[1] - v.value_lims[0]), 0.1 * (v.value_lims[1] - v.value_lims[0])), rg=rg)) for
+     k, v in
+     param_func().items() if isinstance(v, RandomParameter)]
+)
 
+offset = offset_search_space()
 perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = target_parameters.copy()
 for configuration in perturbed_parameters:
     configuration.perturb(offset)
 
-offset_search_space = RayParameterContainer(
-    [(k, RandomParameter(value_lims=(-0.1*(v.value_lims[1]-v.value_lims[0]), 0.1*(v.value_lims[1]-v.value_lims[0])))) for k, v in param_func().items() if isinstance(v, RandomParameter)]
-)
 offset_target_rays = engine.run(perturbed_parameters, transforms=transforms)
-ray_optimizer.find_offsets(perturbed_parameters=perturbed_parameters, search_space=offset_search_space, target_rays=offset_target_rays, iterations=100)
+offset_optimization_target = OffsetOptimizationTarget(target_rays=offset_target_rays, target_offset=offset,
+                                                      search_space=offset_search_space(),
+                                                      perturbed_parameters=perturbed_parameters)
+
+ray_optimizer.optimize(optimization_target=offset_optimization_target, iterations=1000)
