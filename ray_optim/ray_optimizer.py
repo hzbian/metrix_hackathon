@@ -182,8 +182,9 @@ class RayOptimizer:
         plt.axis('off')
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
-                axs[i, j].scatter(line[:,0], line[:,1], s=2.0, c=pc_weights)
-
+                axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0, c=pc_weights)
+                axs[i, j].yaxis.set_major_locator(plt.NullLocator())
+                axs[i, j].xaxis.set_major_locator(plt.NullLocator())
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -278,7 +279,7 @@ class RayOptimizer:
 
             if self.evaluation_counter == 0:
                 target_tensor = self.ray_output_to_tensor(optimization_target.target_rays)
-                target_image = self.plot_data([i for i in target_tensor])
+                target_image = self.plot_data(target_tensor)
                 self.logging_backend.image("target_footprint", target_image)
             if self.log_times:
                 self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
