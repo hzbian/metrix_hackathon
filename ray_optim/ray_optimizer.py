@@ -222,7 +222,8 @@ class RayOptimizer:
 
     def ray_output_to_tensor(self, ray_output: Union[Dict, List[Dict], Iterable[Dict]]):
         if not isinstance(ray_output, Dict):
-            return [self.ray_output_to_tensor(element) for element in ray_output]
+            #output_list = [self.ray_output_to_tensor(element).transpose(0, 1) for element in ray_output]
+            return [self.ray_output_to_tensor(element) for element in ray_output] #torch.nn.utils.rnn.pad_sequence(output_list, batch_first=True, padding_value=0.0).transpose(1,2)
         else:
             rays: dict = ray_output['ray_output'][self.exported_plane]
             x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
@@ -254,17 +255,12 @@ class RayOptimizer:
 
         begin_loss_time: float = time.time() if self.log_times else None
 
-        output_loss_list = self.calculate_loss_from_output(output, optimization_target.target_rays)
+        output_loss_dict = self.calculate_loss_from_output(output, optimization_target.target_rays)
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
 
-        sum_loss = 0.
-        for output_loss in output_loss_list:
-            for epoch, (loss, ray_count) in output_loss.items():
-                sum_loss += loss
-
-        for epoch, (loss, ray_count) in output_loss_list[0].items():
-            self.logging_backend.add_to_log({"epoch": epoch, "loss": loss, "ray_count": ray_count})
+        for epoch, (loss, ray_count) in output_loss_dict.items():
+            self.logging_backend.add_to_log({"epoch": epoch, "loss": loss.mean(), "ray_count": ray_count.mean()})
             if loss < self.plot_interval_best_loss:
                 self.plot_interval_best_loss = loss
                 self.plot_interval_best_params = initial_parameters[epoch - self.evaluation_counter]
@@ -285,7 +281,7 @@ class RayOptimizer:
                 self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
         self.logging_backend.log()
         self.evaluation_counter += len(output)
-        return {epoch: loss for epoch, (loss, _) in output_loss.items()}
+        return {epoch: loss for epoch, (loss, _) in output_loss_dict.items()}
 
     def calculate_loss_from_output(self, output, target_rays):
         if isinstance(output, List):
@@ -294,26 +290,34 @@ class RayOptimizer:
         if 'param_container_dict' in output.keys():
             output = [output]
         output_loss = {
-            key + self.evaluation_counter: self.calculate_loss(target_rays, element) for
+            key + self.evaluation_counter: self.calculate_loss_epoch(element, target_rays) for
             key, element in enumerate(output)}
         return output_loss
 
-    def calculate_loss(self, y, y_hat):
-        y = self.ray_output_to_tensor(y).cuda()
+    def calculate_loss_epoch(self, output, target_rays):
+        output = self.ray_output_to_tensor(output)
+        target_rays = self.ray_output_to_tensor(target_rays)
+        num_rays = torch.tensor([element.shape[1] for element in target_rays], dtype=target_rays[0].dtype, device=target_rays[0].device)
+        losses = torch.stack([self.calculate_loss(output[i], target_rays[i]) for i in range(len(output))])
+        return num_rays, losses
+
+    def calculate_loss(self, y: torch.Tensor, y_hat: torch.Tensor):
+        y = y.cuda()
 
         if y.shape[1] == 0 or y.shape[1] == 1:
             y = torch.ones((y.shape[0], 2, 2), device=y.device, dtype=y.dtype) * -2
 
-        y_hat = self.ray_output_to_tensor(y_hat).cuda()
+        y_hat = y_hat.cuda()
         if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
             y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
         loss_out = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
                                   torch.ones_like(y_hat[..., 1]))
-        loss = loss_out.mean().item()
+        #loss = loss_out.mean().item()
+        loss = loss_out
 
-        if loss < self.plot_interval_best_loss:
-            self.plot_interval_best_rays = y_hat
-        return loss, y_hat.shape[1]
+#        if loss < self.plot_interval_best_loss:
+#            self.plot_interval_best_rays = y_hat
+        return loss
 
     def optimize(self, iterations: int, optimization_target: OptimizationTarget):
         self.optimizer_backend.setup_optimization()

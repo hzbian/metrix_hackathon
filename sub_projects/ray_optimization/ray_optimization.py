@@ -22,7 +22,7 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
            name='34-parameter-rayui-TPE-12-Layer',
-           mode='online',  # 'disabled' or 'online'
+           mode='disabled',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -89,7 +89,7 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online')
+criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online', reduction=None)
 
 # optimize only some all_params
 all_params = param_func()
