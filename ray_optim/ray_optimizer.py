@@ -179,7 +179,6 @@ class RayOptimizer:
     def plot_data(pc_supp: list[torch.Tensor], pc_weights: bool = None) -> np.array:
         pc_supp = [v.detach().cpu() for v in pc_supp]
         fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False)
-        plt.axis('off')
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
                 axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0, c=pc_weights)
@@ -247,25 +246,24 @@ class RayOptimizer:
 
         begin_execution_time: float = time.time() if self.log_times else None
         output = self.engine.run(parameters, transforms=self.transforms)
-        if not isinstance(output, list):
-            output = [output]
-
         if self.log_times:
             self.logging_backend.add_to_log({"execution_time": time.time() - begin_execution_time})
 
-        begin_loss_time: float = time.time() if self.log_times else None
+        if not isinstance(output, list):
+            output = [output]
 
+        begin_loss_time: float = time.time() if self.log_times else None
         output_loss_dict = self.calculate_loss_from_output(output, optimization_target.target_rays)
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
 
         for epoch, (loss, ray_count) in output_loss_dict.items():
             self.logging_backend.add_to_log({"epoch": epoch, "loss": loss.mean(), "ray_count": ray_count.mean()})
-            if loss < self.plot_interval_best_loss:
-                self.plot_interval_best_loss = loss
+            if loss.mean() < self.plot_interval_best_loss:
+                self.plot_interval_best_loss = loss.mean()
                 self.plot_interval_best_params = initial_parameters[epoch - self.evaluation_counter]
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
-                image = self.plot_data([self.plot_interval_best_rays])
+                image = self.plot_data(self.plot_interval_best_rays)
                 self.logging_backend.image("footprint", image)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best_params,
                                                                         search_space=optimization_target.search_space,
@@ -275,31 +273,44 @@ class RayOptimizer:
 
             if self.evaluation_counter == 0:
                 target_tensor = self.ray_output_to_tensor(optimization_target.target_rays)
+                if isinstance(target_tensor, torch.Tensor):
+                    target_tensor = [target_tensor]
                 target_image = self.plot_data(target_tensor)
                 self.logging_backend.image("target_footprint", target_image)
-            if self.log_times:
-                self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
-        self.logging_backend.log()
+        if self.log_times:
+            self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
+            self.logging_backend.log()
         self.evaluation_counter += len(output)
-        return {epoch: loss for epoch, (loss, _) in output_loss_dict.items()}
+        return {epoch: loss.mean().item() for epoch, (loss, _) in output_loss_dict.items()}
 
     def calculate_loss_from_output(self, output, target_rays):
+        #if isinstance(output, List):
+        #    return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in
+        #            enumerate(output)]
+        if isinstance(output, dict):
+            if 'ray_output' in output.keys():
+                output = [output]
+
+        if isinstance(target_rays, dict):
+            if 'ray_output' in target_rays.keys():
+                target_rays = [target_rays]
+
         if isinstance(output, List):
-            return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in
-                    enumerate(output)]
-        if 'param_container_dict' in output.keys():
-            output = [output]
+            output = {0: output}
+
         output_loss = {
             key + self.evaluation_counter: self.calculate_loss_epoch(element, target_rays) for
-            key, element in enumerate(output)}
+            key, element in enumerate(output.values())}
         return output_loss
 
     def calculate_loss_epoch(self, output, target_rays):
         output = self.ray_output_to_tensor(output)
         target_rays = self.ray_output_to_tensor(target_rays)
-        num_rays = torch.tensor([element.shape[1] for element in target_rays], dtype=target_rays[0].dtype, device=target_rays[0].device)
-        losses = torch.stack([self.calculate_loss(output[i], target_rays[i]) for i in range(len(output))])
-        return num_rays, losses
+        num_rays = torch.tensor([element.shape[1] for element in output], dtype=target_rays[0].dtype, device=target_rays[0].device)
+        losses = torch.stack([self.calculate_loss(target_rays[i], output[i]) for i in range(len(output))])
+        if losses.mean() < self.plot_interval_best_loss:
+            self.plot_interval_best_rays = output
+        return losses, num_rays
 
     def calculate_loss(self, y: torch.Tensor, y_hat: torch.Tensor):
         y = y.cuda()
@@ -310,13 +321,10 @@ class RayOptimizer:
         y_hat = y_hat.cuda()
         if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
             y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
-        loss_out = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
+        loss = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
                                   torch.ones_like(y_hat[..., 1]))
-        #loss = loss_out.mean().item()
-        loss = loss_out
+        loss = torch.tensor((y.shape[1] - y_hat.shape[1]) ** 2 / 2)
 
-#        if loss < self.plot_interval_best_loss:
-#            self.plot_interval_best_rays = y_hat
         return loss
 
     def optimize(self, iterations: int, optimization_target: OptimizationTarget):
