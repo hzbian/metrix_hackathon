@@ -21,7 +21,7 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
-           name='34-parameter-rayui-TPE-12-Layer',
+           name='1-parameter-rayui-TPE-12-Layer-1BL',
            mode='online',  # 'disabled' or 'online'
            )
 
@@ -39,7 +39,7 @@ exported_plane = "ImagePlane"  # "Spherical Grating"
 #        'raw': ToDict(),
 #    }),
 # ]
-transforms = MultiLayer([-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False)
+transforms = MultiLayer([0], copy_directions=False) #MultiLayer([-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False)
 verbose = False
 engine = RayEngine(rml_basefile=rml_basefile,
                    exported_planes=[exported_plane],
@@ -93,10 +93,17 @@ criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online', re
 
 # optimize only some all_params
 all_params = param_func()
-fixed = []
-#   - [ 'U41_318eV.translationXerror']  # ['U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
+fixed = ['U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror',
+         'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror',
+         'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror',
+         'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror',
+         'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror',
+         'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA',
+         'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror',
+         'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror',
+         'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
+fixed = fixed[1:]
 
-# Out[3]: odict_keys(['U41_318eV.numberRays', 'U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318eV.rotationXerror', 'U41_318eV.rotationYerror', 'ASBL.totalWidth', 'ASBL.totalHeight', 'ASBL.translationXerror', 'ASBL.translationYerror', 'M1_Cylinder.radius', 'M1_Cylinder.rotationXerror', 'M1_Cylinder.rotationYerror', 'M1_Cylinder.rotationZerror', 'M1_Cylinder.translationXerror', 'M1_Cylinder.translationYerror', 'SphericalGrating.radius', 'SphericalGrating.rotationYerror', 'SphericalGrating.rotationZerror', 'ExitSlit.totalHeight', 'ExitSlit.translationZerror', 'ExitSlit.rotationZerror', 'E1.longHalfAxisA', 'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror', 'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror', 'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror'])
 for key in all_params:
     old_param = all_params[key]
     if isinstance(old_param, MutableParameter) and key in fixed:
@@ -122,17 +129,18 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criteri
                              transforms=transforms,
                              logging_backend=WandbLoggingBackend())
 
-target_rays = engine.run(target_params, transforms=transforms)
+# target_rays = engine.run(target_params, transforms=transforms)
 # best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
 #                                                  iterations=100)
 # print(best_parameters, metrics)
 target_parameters = [param_func() for _ in range(22)]
+target_parameters = [target_parameters[6]]
 
 offset_search_space = lambda: RayParameterContainer(
     [(k, RandomParameter(
         value_lims=(-0.1 * (v.value_lims[1] - v.value_lims[0]), 0.1 * (v.value_lims[1] - v.value_lims[0])), rg=rg)) for
      k, v in
-     param_func().items() if isinstance(v, RandomParameter)]
+     all_params.items() if isinstance(v, RandomParameter)]
 )
 
 offset = offset_search_space()

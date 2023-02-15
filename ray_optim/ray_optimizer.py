@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import wandb
 from ax.service.ax_client import AxClient
+
 from matplotlib import pyplot as plt
 from optuna import Study
 from tqdm import trange
@@ -13,6 +14,8 @@ from tqdm import trange
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
+
+plt.switch_backend('Agg')
 
 
 class OptimizationTarget:
@@ -203,6 +206,7 @@ class RayOptimizer:
         if omit_labels is None:
             omit_labels = []
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
+        ax.set_ylim([0., 1.])
         if real_params is not None:
             ax.plot([param.get_value() for param in self.normalize_parameters(real_params, search_space).values()],
                     'bo',
@@ -221,8 +225,9 @@ class RayOptimizer:
 
     def ray_output_to_tensor(self, ray_output: Union[Dict, List[Dict], Iterable[Dict]]):
         if not isinstance(ray_output, Dict):
-            #output_list = [self.ray_output_to_tensor(element).transpose(0, 1) for element in ray_output]
-            return [self.ray_output_to_tensor(element) for element in ray_output] #torch.nn.utils.rnn.pad_sequence(output_list, batch_first=True, padding_value=0.0).transpose(1,2)
+            # output_list = [self.ray_output_to_tensor(element).transpose(0, 1) for element in ray_output]
+            return [self.ray_output_to_tensor(element) for element in
+                    ray_output]  # torch.nn.utils.rnn.pad_sequence(output_list, batch_first=True, padding_value=0.0).transpose(1,2)
         else:
             rays: dict = ray_output['ray_output'][self.exported_plane]
             x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
@@ -243,6 +248,7 @@ class RayOptimizer:
                     evaluation_parameters[i][k] = NumericalParameter(
                         perturbed_parameters[k].get_value() - v.get_value())
             parameters = evaluation_parameters
+            print(parameters)
 
         begin_execution_time: float = time.time() if self.log_times else None
         output = self.engine.run(parameters, transforms=self.transforms)
@@ -284,7 +290,7 @@ class RayOptimizer:
         return {epoch: loss.mean().item() for epoch, (loss, _) in output_loss_dict.items()}
 
     def calculate_loss_from_output(self, output, target_rays):
-        #if isinstance(output, List):
+        # if isinstance(output, List):
         #    return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in
         #            enumerate(output)]
         if isinstance(output, dict):
@@ -306,7 +312,8 @@ class RayOptimizer:
     def calculate_loss_epoch(self, output, target_rays):
         output = self.ray_output_to_tensor(output)
         target_rays = self.ray_output_to_tensor(target_rays)
-        num_rays = torch.tensor([element.shape[1] for element in output], dtype=target_rays[0].dtype, device=target_rays[0].device)
+        num_rays = torch.tensor([element.shape[1] for element in output], dtype=target_rays[0].dtype,
+                                device=target_rays[0].device)
         losses = torch.stack([self.calculate_loss(target_rays[i], output[i]) for i in range(len(output))])
         if losses.mean() < self.plot_interval_best_loss:
             self.plot_interval_best_rays = output
@@ -322,8 +329,8 @@ class RayOptimizer:
         if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
             y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
         loss = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
-                                  torch.ones_like(y_hat[..., 1]))
-        loss = torch.tensor((y.shape[1] - y_hat.shape[1]) ** 2 / 2)
+                              torch.ones_like(y_hat[..., 1]))
+        # loss = torch.tensor((y.shape[1] - y_hat.shape[1]) ** 2 / 2)
 
         return loss
 
