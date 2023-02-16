@@ -21,7 +21,7 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
-           name='1-parameter-rayui-TPE-12-Layer-1BL',
+           name='10-parameter-rayui-TPE-12-Layer',
            mode='online',  # 'disabled' or 'online'
            )
 
@@ -39,7 +39,8 @@ exported_plane = "ImagePlane"  # "Spherical Grating"
 #        'raw': ToDict(),
 #    }),
 # ]
-transforms = MultiLayer([0], copy_directions=False) #MultiLayer([-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False)
+#transforms = MultiLayer([0], copy_directions=False)
+transforms = MultiLayer([-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False)
 verbose = False
 engine = RayEngine(rml_basefile=rml_basefile,
                    exported_planes=[exported_plane],
@@ -102,7 +103,7 @@ fixed = ['U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318e
          'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror',
          'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror',
          'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
-fixed = fixed[1:]
+fixed = []
 
 for key in all_params:
     old_param = all_params[key]
@@ -134,7 +135,7 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criteri
 #                                                  iterations=100)
 # print(best_parameters, metrics)
 target_parameters = [param_func() for _ in range(22)]
-target_parameters = [target_parameters[6]]
+#target_parameters = [target_parameters[6]]
 
 offset_search_space = lambda: RayParameterContainer(
     [(k, RandomParameter(

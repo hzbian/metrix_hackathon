@@ -31,7 +31,7 @@ class OffsetOptimizationTarget(OptimizationTarget):
                  perturbed_parameters: List[RayParameterContainer],
                  target_offset: Optional[RayParameterContainer] = None):
         super().__init__(target_rays, search_space, target_offset)
-        self.perturbed_parameters = perturbed_parameters
+        self.perturbed_parameters: List[RayParameterContainer] = perturbed_parameters
 
 
 class OptimizerBackend(metaclass=ABCMeta):
@@ -239,16 +239,15 @@ class RayOptimizer:
         if not isinstance(parameters, list):
             parameters = [parameters]
 
-        initial_parameters = parameters.copy()
+        initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
-            evaluation_parameters = optimization_target.perturbed_parameters.copy()  # maybe dangerous!
+            evaluation_parameters = [element.copy() for element in optimization_target.perturbed_parameters]
             for i, perturbed_parameters in enumerate(optimization_target.perturbed_parameters):
                 for k, v in parameters[0].items():
                     evaluation_parameters[i][k] = NumericalParameter(
                         perturbed_parameters[k].get_value() - v.get_value())
             parameters = evaluation_parameters
-            print(parameters)
 
         begin_execution_time: float = time.time() if self.log_times else None
         output = self.engine.run(parameters, transforms=self.transforms)
