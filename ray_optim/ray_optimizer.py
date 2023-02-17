@@ -179,14 +179,25 @@ class RayOptimizer:
         return image_from_plot
 
     @staticmethod
-    def plot_data(pc_supp: list[torch.Tensor], pc_weights: bool = None) -> np.array:
+    def plot_data(pc_supp: list[torch.Tensor], pc_weights: Optional[list[torch.Tensor]] = None) -> np.array:
         pc_supp = [v.detach().cpu() for v in pc_supp]
+        pc_weights = None if pc_weights is None else [v.detach().cpu() for v in pc_weights]
         fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False)
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
-                axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0, c=pc_weights)
+                axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0, c=pc_weights[i][j])
                 axs[i, j].yaxis.set_major_locator(plt.NullLocator())
                 axs[i, j].xaxis.set_major_locator(plt.NullLocator())
+        return RayOptimizer.fig_to_image(fig)
+
+    @staticmethod
+    def compensation_plot(pc_supp: list[torch.Tensor], target: list[torch.Tensor]) -> np.array:
+        pc_supp = [v.detach().cpu() for v in pc_supp]
+        target = [v.detach().cpu() for v in target]
+        fig, axs = plt.subplots(2, len(pc_supp), squeeze=False)
+        for i, data in enumerate(pc_supp):
+            axs[0, i].scatter(data[0, :, 0], data[0, :, 1], s=2.0)
+            axs[0, i].scatter(target[i, 0, :, 0], target[i, 0, :, 1], s=2.0)
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -225,9 +236,8 @@ class RayOptimizer:
 
     def ray_output_to_tensor(self, ray_output: Union[Dict, List[Dict], Iterable[Dict]]):
         if not isinstance(ray_output, Dict):
-            # output_list = [self.ray_output_to_tensor(element).transpose(0, 1) for element in ray_output]
             return [self.ray_output_to_tensor(element) for element in
-                    ray_output]  # torch.nn.utils.rnn.pad_sequence(output_list, batch_first=True, padding_value=0.0).transpose(1,2)
+                    ray_output]
         else:
             rays: dict = ray_output['ray_output'][self.exported_plane]
             x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
