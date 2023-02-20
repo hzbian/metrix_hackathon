@@ -185,7 +185,7 @@ class RayOptimizer:
         fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False)
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
-                axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0, c=pc_weights[i][j])
+                axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0)
                 axs[i, j].yaxis.set_major_locator(plt.NullLocator())
                 axs[i, j].xaxis.set_major_locator(plt.NullLocator())
         return RayOptimizer.fig_to_image(fig)
@@ -196,8 +196,15 @@ class RayOptimizer:
         target = [v.detach().cpu() for v in target]
         fig, axs = plt.subplots(2, len(pc_supp), squeeze=False)
         for i, data in enumerate(pc_supp):
-            axs[0, i].scatter(data[0, :, 0], data[0, :, 1], s=2.0)
-            axs[0, i].scatter(target[i, 0, :, 0], target[i, 0, :, 1], s=2.0)
+            axs[0, i].scatter(target[i][0, :, 0], target[i][0, :, 1], s=2.0)
+            axs[0, i].xaxis.set_major_locator(plt.NullLocator())
+            axs[0, i].yaxis.set_major_locator(plt.NullLocator())
+            xlim, ylim = axs[0, i].get_xlim(), axs[0, i].get_ylim()
+            axs[1, i].scatter(data[0, :, 0], data[0, :, 1], s=2.0)
+            axs[1, i].set_xlim(xlim)
+            axs[1, i].set_ylim(ylim)
+            axs[1, i].xaxis.set_major_locator(plt.NullLocator())
+            axs[1, i].yaxis.set_major_locator(plt.NullLocator())
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -280,6 +287,8 @@ class RayOptimizer:
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
                 image = self.plot_data(self.plot_interval_best_rays)
                 self.logging_backend.image("footprint", image)
+                compensation_image = self.compensation_plot(self.plot_interval_best_rays, self.ray_output_to_tensor(optimization_target.target_rays))
+                self.logging_backend.image("compensation", compensation_image)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best_params,
                                                                         search_space=optimization_target.search_space,
                                                                         real_params=optimization_target.target_params)
