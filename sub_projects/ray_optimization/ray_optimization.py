@@ -1,6 +1,7 @@
 import os
 import sys
 
+import torch
 import optuna
 import wandb
 from ax.service.ax_client import AxClient
@@ -34,12 +35,14 @@ n_rays = ['1e4']
 
 exported_plane = "ImagePlane"  # "Spherical Grating"
 
+multi_objective = True
+
 # transforms = [
 #    RayTransformConcat({
 #        'raw': ToDict(),
 #    }),
 # ]
-#transforms = MultiLayer([0], copy_directions=False)
+# transforms = MultiLayer([0], copy_directions=False)
 transforms = MultiLayer([-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30], copy_directions=False)
 verbose = False
 engine = RayEngine(rml_basefile=rml_basefile,
@@ -90,7 +93,31 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-criterion = SinkhornLoss(normalize_weights='weights1', p=1, backend='online', reduction=None)
+sinkhorn_function = SinkhornLoss(normalize_weights='weights1', p=1, backend='online', reduction=None)
+
+
+def sinkhorn_loss(y: torch.Tensor, y_hat: torch.Tensor):
+    y = y.cuda()
+
+    if y.shape[1] == 0 or y.shape[1] == 1:
+        y = torch.ones((y.shape[0], 2, 2), device=y.device, dtype=y.dtype) * -2
+
+    y_hat = y_hat.cuda()
+    if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
+        y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
+    loss = sinkhorn_function(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
+                             torch.ones_like(y_hat[..., 1]))
+    # loss = torch.tensor((y.shape[1] - y_hat.shape[1]) ** 2 / 2)
+
+    return loss
+
+
+def multi_objective_loss(y: torch.Tensor, y_hat: torch.Tensor):
+    y = y.cuda()
+    y_hat = y_hat.cuda()
+    ray_count_loss = (y.shape[1] - y.shape[2]) ** 2 / 2
+    return sinkhorn_loss(y, y_hat), ray_count_loss
+
 
 # optimize only some all_params
 all_params = param_func()
@@ -123,8 +150,12 @@ ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
 optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
-optuna_study = optuna.create_study(sampler=TPESampler(), pruner=optuna.pruners.HyperbandPruner())
+directions = ['minimize', 'minimize'] if multi_objective else None
+optuna_study = optuna.create_study(directions=directions, sampler=TPESampler(), pruner=optuna.pruners.HyperbandPruner())
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
+
+criterion = multi_objective_loss if multi_objective else sinkhorn_loss
+
 ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criterion=criterion, engine=engine,
                              log_times=True, exported_plane=exported_plane,
                              transforms=transforms,
@@ -135,7 +166,7 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criteri
 #                                                  iterations=100)
 # print(best_parameters, metrics)
 target_parameters = [param_func() for _ in range(22)]
-#target_parameters = [target_parameters[6]]
+# target_parameters = [target_parameters[6]]
 
 offset_search_space = lambda: RayParameterContainer(
     [(k, RandomParameter(

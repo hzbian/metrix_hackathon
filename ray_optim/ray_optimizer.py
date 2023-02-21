@@ -154,12 +154,12 @@ class WandbLoggingBackend(LoggingBackend):
 
 
 class RayOptimizer:
-    def __init__(self, optimizer_backend: OptimizerBackend, criterion: torch.nn.Module, exported_plane: str,
+    def __init__(self, optimizer_backend: OptimizerBackend, criterion, exported_plane: str,
                  engine: RayEngine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
                  log_times: bool = False):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: RayEngine = engine
-        self.criterion: torch.nn.Module = criterion
+        self.criterion = criterion
         self.exported_plane: str = exported_plane
         self.transforms: Optional[RayTransform] = transforms
         self.logging_backend: LoggingBackend = logging_backend
@@ -332,25 +332,21 @@ class RayOptimizer:
         target_rays = self.ray_output_to_tensor(target_rays)
         num_rays = torch.tensor([element.shape[1] for element in output], dtype=target_rays[0].dtype,
                                 device=target_rays[0].device)
-        losses = torch.stack([self.calculate_loss(target_rays[i], output[i]) for i in range(len(output))])
-        if losses.mean() < self.plot_interval_best_loss:
+        losses = [self.criterion(target_rays[i], output[i]) for i in range(len(output))]
+        if isinstance(losses[0], tuple):
+            output_losses = []
+            for i in range(len(losses[0])):
+                output_losses.append(torch.stack([loss[i] for loss in losses]))
+            losses = output_losses
+        else:
+            losses = torch.stack(losses)
+
+        if isinstance(losses, List):
+            loss_mean = torch.tensor([loss.mean() for loss in losses]).mean()
+            if losses.mean() < self.plot_interval_best_loss:
             self.plot_interval_best_rays = output
         return losses, num_rays
 
-    def calculate_loss(self, y: torch.Tensor, y_hat: torch.Tensor):
-        y = y.cuda()
-
-        if y.shape[1] == 0 or y.shape[1] == 1:
-            y = torch.ones((y.shape[0], 2, 2), device=y.device, dtype=y.dtype) * -2
-
-        y_hat = y_hat.cuda()
-        if y_hat.shape[1] == 0 or y_hat.shape[1] == 1:
-            y_hat = torch.ones((y_hat.shape[0], 2, 2), device=y_hat.device, dtype=y_hat.dtype) * -1
-        loss = self.criterion(y.contiguous(), y_hat.contiguous(), torch.ones_like(y[..., 1]),
-                              torch.ones_like(y_hat[..., 1]))
-        # loss = torch.tensor((y.shape[1] - y_hat.shape[1]) ** 2 / 2)
-
-        return loss
 
     def optimize(self, iterations: int, optimization_target: OptimizationTarget):
         self.optimizer_backend.setup_optimization()
