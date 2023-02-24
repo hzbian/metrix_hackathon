@@ -279,15 +279,16 @@ class RayOptimizer:
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
 
-        for epoch, (loss, ray_count) in output_loss_dict.items():
-            self.logging_backend.add_to_log({"epoch": epoch, "loss": loss.mean(), "ray_count": ray_count.mean()})
-            if loss.mean() < self.plot_interval_best_loss:
-                self.plot_interval_best_loss = loss.mean()
+        for epoch, (loss, ray_count, loss_mean) in output_loss_dict.items():
+            self.logging_backend.add_to_log({"epoch": epoch, "loss": loss_mean, "ray_count": ray_count.mean()})
+            if loss_mean < self.plot_interval_best_loss:
+                self.plot_interval_best_loss = loss_mean
                 self.plot_interval_best_params = initial_parameters[epoch - self.evaluation_counter]
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
                 image = self.plot_data(self.plot_interval_best_rays)
                 self.logging_backend.image("footprint", image)
-                compensation_image = self.compensation_plot(self.plot_interval_best_rays, self.ray_output_to_tensor(optimization_target.target_rays))
+                compensation_image = self.compensation_plot(self.plot_interval_best_rays,
+                                                            self.ray_output_to_tensor(optimization_target.target_rays))
                 self.logging_backend.image("compensation", compensation_image)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best_params,
                                                                         search_space=optimization_target.search_space,
@@ -305,7 +306,7 @@ class RayOptimizer:
             self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
             self.logging_backend.log()
         self.evaluation_counter += len(output)
-        return {epoch: loss.mean().item() for epoch, (loss, _) in output_loss_dict.items()}
+        return {epoch: loss_mean for epoch, (_, _, loss_mean) in output_loss_dict.items()}
 
     def calculate_loss_from_output(self, output, target_rays):
         # if isinstance(output, List):
@@ -336,17 +337,19 @@ class RayOptimizer:
         if isinstance(losses[0], tuple):
             output_losses = []
             for i in range(len(losses[0])):
-                output_losses.append(torch.stack([loss[i] for loss in losses]))
+                if isinstance(losses[0][i], torch.Tensor):
+                    output_losses.append(torch.stack([loss[i] for loss in losses]))
+                else:
+                    output_losses.append(torch.Tensor([loss[i] for loss in losses]))
             losses = output_losses
+            losses_mean = torch.tensor([loss.mean() for loss in losses]).mean().item()
         else:
             losses = torch.stack(losses)
+            losses_mean = losses.mean().item()
 
-        if isinstance(losses, List):
-            loss_mean = torch.tensor([loss.mean() for loss in losses]).mean()
-            if losses.mean() < self.plot_interval_best_loss:
+        if losses_mean < self.plot_interval_best_loss:
             self.plot_interval_best_rays = output
-        return losses, num_rays
-
+        return losses, num_rays, losses_mean
 
     def optimize(self, iterations: int, optimization_target: OptimizationTarget):
         self.optimizer_backend.setup_optimization()

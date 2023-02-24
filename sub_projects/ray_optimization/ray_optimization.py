@@ -23,7 +23,7 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
            name='10-parameter-rayui-TPE-12-Layer',
-           mode='online',  # 'disabled' or 'online'
+           mode='disabled',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
