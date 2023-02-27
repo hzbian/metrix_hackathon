@@ -61,7 +61,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
                                                                                       value.value_lims[1]))
 
             output = objective(optimize_parameters, optimization_target=optimization_target)
-            return output[min(output.keys())]
+            return tuple(value.mean().item() for value in output[min(output.keys())])
 
         return output_objective
 
@@ -306,7 +306,7 @@ class RayOptimizer:
             self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
             self.logging_backend.log()
         self.evaluation_counter += len(output)
-        return {epoch: loss_mean for epoch, (_, _, loss_mean) in output_loss_dict.items()}
+        return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
 
     def calculate_loss_from_output(self, output, target_rays):
         # if isinstance(output, List):
@@ -341,11 +341,11 @@ class RayOptimizer:
                     output_losses.append(torch.stack([loss[i] for loss in losses]))
                 else:
                     output_losses.append(torch.Tensor([loss[i] for loss in losses]))
-            losses = output_losses
+            losses = tuple(output_losses)
             losses_mean = torch.tensor([loss.mean() for loss in losses]).mean().item()
         else:
-            losses = torch.stack(losses)
-            losses_mean = losses.mean().item()
+            losses = torch.stack(losses),
+            losses_mean = losses[0].mean().item()
 
         if losses_mean < self.plot_interval_best_loss:
             self.plot_interval_best_rays = output

@@ -20,10 +20,11 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
+study_name = '34-parameter-rayui-CmaEs-12-Layer-cmaes'
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
-           name='10-parameter-rayui-TPE-12-Layer',
-           mode='disabled',  # 'disabled' or 'online'
+           name=study_name,
+           mode='online',  # 'disabled' or 'online'
            )
 
 root_dir = '../../'
@@ -35,7 +36,7 @@ n_rays = ['1e4']
 
 exported_plane = "ImagePlane"  # "Spherical Grating"
 
-multi_objective = True
+multi_objective = False
 
 # transforms = [
 #    RayTransformConcat({
@@ -115,7 +116,7 @@ def sinkhorn_loss(y: torch.Tensor, y_hat: torch.Tensor):
 def multi_objective_loss(y: torch.Tensor, y_hat: torch.Tensor):
     y = y.cuda()
     y_hat = y_hat.cuda()
-    ray_count_loss = (y.shape[1] - y.shape[2]) ** 2 / 2
+    ray_count_loss = (y.shape[1] - y_hat.shape[1]) ** 2 / 2
     return sinkhorn_loss(y, y_hat), ray_count_loss
 
 
@@ -151,7 +152,9 @@ ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
 directions = ['minimize', 'minimize'] if multi_objective else None
-optuna_study = optuna.create_study(directions=directions, sampler=TPESampler(), pruner=optuna.pruners.HyperbandPruner())
+sampler = optuna.samplers.CmaEsSampler()  # TPESampler()
+optuna_study = optuna.create_study(directions=directions, sampler=sampler, pruner=optuna.pruners.HyperbandPruner(),
+                                   storage="sqlite:////dev/shm/db.sqlite3", study_name=study_name)
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
 
 criterion = multi_objective_loss if multi_objective else sinkhorn_loss
