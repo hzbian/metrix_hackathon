@@ -4,11 +4,11 @@ import sys
 import torch
 import optuna
 import wandb
-from ax.service.ax_client import AxClient
+#from ax.service.ax_client import AxClient
 from optuna.samplers import TPESampler
 
 sys.path.insert(0, '../../')
-from ray_optim.ray_optimizer import OptimizerBackendAx, OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
+from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
     OffsetOptimizationTarget
 
 from ray_nn.metrics.geometric import SinkhornLoss
@@ -20,7 +20,7 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-study_name = '34-parameter-rayui-CmaEs-12-Layer-cmaes'
+study_name = '34-parameter-1.0-rayui-CmaEs-12-Layer-cmaes'
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
            name=study_name,
@@ -33,6 +33,7 @@ rml_basefile = os.path.join(root_dir, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLea
 ray_workdir = os.path.join(root_dir, 'ray_workdir', 'optimization')
 
 n_rays = ['1e4']
+max_deviation = 1.0
 
 exported_plane = "ImagePlane"  # "Spherical Grating"
 
@@ -147,9 +148,9 @@ for key, value in all_params.items():
     target_params[key] = NumericalParameter(value)
 
 # Bayesian Optimization
-ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
+#ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
-optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
+#optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
 directions = ['minimize', 'minimize'] if multi_objective else None
 sampler = optuna.samplers.CmaEsSampler()  # TPESampler()
@@ -173,7 +174,7 @@ target_parameters = [param_func() for _ in range(22)]
 
 offset_search_space = lambda: RayParameterContainer(
     [(k, RandomParameter(
-        value_lims=(-0.1 * (v.value_lims[1] - v.value_lims[0]), 0.1 * (v.value_lims[1] - v.value_lims[0])), rg=rg)) for
+        value_lims=(-max_deviation * (v.value_lims[1] - v.value_lims[0]), max_deviation * (v.value_lims[1] - v.value_lims[0])), rg=rg)) for
      k, v in
      all_params.items() if isinstance(v, RandomParameter)]
 )
