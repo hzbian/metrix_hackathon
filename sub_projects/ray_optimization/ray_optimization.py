@@ -4,7 +4,7 @@ import sys
 import torch
 import optuna
 import wandb
-#from ax.service.ax_client import AxClient
+# from ax.service.ax_client import AxClient
 from optuna.samplers import TPESampler
 
 sys.path.insert(0, '../../')
@@ -33,7 +33,7 @@ rml_basefile = os.path.join(root_dir, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLea
 ray_workdir = os.path.join(root_dir, 'ray_workdir', 'optimization')
 
 n_rays = ['1e4']
-max_deviation = 1.0
+max_deviation = 0.3
 
 exported_plane = "ImagePlane"  # "Spherical Grating"
 
@@ -148,14 +148,15 @@ for key, value in all_params.items():
     target_params[key] = NumericalParameter(value)
 
 # Bayesian Optimization
-#ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
+# ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
-#optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
+# optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
 directions = ['minimize', 'minimize'] if multi_objective else None
+storage_path = None  # "sqlite:////dev/shm/db.sqlite3"
 sampler = optuna.samplers.CmaEsSampler()  # TPESampler()
 optuna_study = optuna.create_study(directions=directions, sampler=sampler, pruner=optuna.pruners.HyperbandPruner(),
-                                   storage="sqlite:////dev/shm/db.sqlite3", study_name=study_name)
+                                   storage=storage_path, study_name=study_name)
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
 
 criterion = multi_objective_loss if multi_objective else sinkhorn_loss
@@ -174,19 +175,26 @@ target_parameters = [param_func() for _ in range(22)]
 
 offset_search_space = lambda: RayParameterContainer(
     [(k, RandomParameter(
-        value_lims=(-max_deviation * (v.value_lims[1] - v.value_lims[0]), max_deviation * (v.value_lims[1] - v.value_lims[0])), rg=rg)) for
+        value_lims=(
+            -max_deviation * (v.value_lims[1] - v.value_lims[0]), max_deviation * (v.value_lims[1] - v.value_lims[0])),
+        rg=rg)) for
      k, v in
      all_params.items() if isinstance(v, RandomParameter)]
 )
 
 offset = offset_search_space()
-perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = target_parameters.copy()
+perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in target_parameters]
 for configuration in perturbed_parameters:
     configuration.perturb(offset)
 
+print("target", target_parameters[0]['U41_318eV.translationXerror'].get_value())
+print("perturbed", perturbed_parameters[0]['U41_318eV.translationXerror'].get_value())
+
 offset_target_rays = engine.run(perturbed_parameters, transforms=transforms)
+target_rays_without_offset = engine.run(target_parameters, transforms=transforms)
 offset_optimization_target = OffsetOptimizationTarget(target_rays=offset_target_rays, target_offset=offset,
                                                       search_space=offset_search_space(),
-                                                      perturbed_parameters=perturbed_parameters)
+                                                      perturbed_parameters=perturbed_parameters,
+                                                      target_rays_without_offset=target_rays_without_offset)
 
 ray_optimizer.optimize(optimization_target=offset_optimization_target, iterations=1000)

@@ -29,9 +29,11 @@ class OptimizationTarget:
 class OffsetOptimizationTarget(OptimizationTarget):
     def __init__(self, target_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
                  perturbed_parameters: List[RayParameterContainer],
+                 target_rays_without_offset: Union[dict, Iterable[dict], List[dict]],
                  target_offset: Optional[RayParameterContainer] = None):
         super().__init__(target_rays, search_space, target_offset)
         self.perturbed_parameters: List[RayParameterContainer] = perturbed_parameters
+        self.target_rays_without_offset = target_rays_without_offset
 
 
 class OptimizerBackend(metaclass=ABCMeta):
@@ -191,20 +193,25 @@ class RayOptimizer:
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
-    def compensation_plot(pc_supp: list[torch.Tensor], target: list[torch.Tensor]) -> np.array:
+    def compensation_plot(pc_supp: list[torch.Tensor], target: list[torch.Tensor], without_offset: list[torch.Tensor]) -> np.array:
         pc_supp = [v.detach().cpu() for v in pc_supp]
         target = [v.detach().cpu() for v in target]
-        fig, axs = plt.subplots(2, len(pc_supp), squeeze=False)
+        fig, axs = plt.subplots(3, len(pc_supp), squeeze=False)
         for i, data in enumerate(pc_supp):
-            axs[0, i].scatter(target[i][0, :, 0], target[i][0, :, 1], s=2.0)
-            axs[0, i].xaxis.set_major_locator(plt.NullLocator())
-            axs[0, i].yaxis.set_major_locator(plt.NullLocator())
-            xlim, ylim = axs[0, i].get_xlim(), axs[0, i].get_ylim()
-            axs[1, i].scatter(data[0, :, 0], data[0, :, 1], s=2.0)
-            axs[1, i].set_xlim(xlim)
-            axs[1, i].set_ylim(ylim)
+            axs[1, i].scatter(target[i][0, :, 0], target[i][0, :, 1], s=2.0)
             axs[1, i].xaxis.set_major_locator(plt.NullLocator())
             axs[1, i].yaxis.set_major_locator(plt.NullLocator())
+            xlim, ylim = axs[1, i].get_xlim(), axs[1, i].get_ylim()
+            axs[0, i].scatter(without_offset[i][0, :, 0], without_offset[i][0, :, 1], s=2.0)
+            axs[0, i].xaxis.set_major_locator(plt.NullLocator())
+            axs[0, i].yaxis.set_major_locator(plt.NullLocator())
+            axs[0, i].set_xlim(xlim)
+            axs[0, i].set_ylim(ylim)
+            axs[2, i].scatter(data[0, :, 0], data[0, :, 1], s=2.0)
+            axs[2, i].set_xlim(xlim)
+            axs[2, i].set_ylim(ylim)
+            axs[2, i].xaxis.set_major_locator(plt.NullLocator())
+            axs[2, i].yaxis.set_major_locator(plt.NullLocator())
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -259,7 +266,7 @@ class RayOptimizer:
         initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
-            evaluation_parameters = [element.copy() for element in optimization_target.perturbed_parameters]
+            evaluation_parameters = [element.clone() for element in optimization_target.perturbed_parameters]
             for i, perturbed_parameters in enumerate(optimization_target.perturbed_parameters):
                 for k, v in parameters[0].items():
                     evaluation_parameters[i][k] = NumericalParameter(
@@ -287,9 +294,10 @@ class RayOptimizer:
             if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
                 image = self.plot_data(self.plot_interval_best_rays)
                 self.logging_backend.image("footprint", image)
-                compensation_image = self.compensation_plot(self.plot_interval_best_rays,
-                                                            self.ray_output_to_tensor(optimization_target.target_rays))
-                self.logging_backend.image("compensation", compensation_image)
+                if isinstance(optimization_target, OffsetOptimizationTarget):
+                    compensation_image = self.compensation_plot(self.plot_interval_best_rays,
+                                                            self.ray_output_to_tensor(optimization_target.target_rays), self.ray_output_to_tensor(optimization_target.target_rays_without_offset))
+                    self.logging_backend.image("compensation", compensation_image)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best_params,
                                                                         search_space=optimization_target.search_space,
                                                                         real_params=optimization_target.target_params)
