@@ -5,7 +5,7 @@ from typing import List, Iterable, Union, Dict, Optional, Callable
 import numpy as np
 import torch
 import wandb
-#from ax.service.ax_client import AxClient
+# from ax.service.ax_client import AxClient
 
 from matplotlib import pyplot as plt
 from optuna import Study
@@ -75,7 +75,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
         return self.optuna_study.best_params, {}
 
 
-#class optimizerbackendax(optimizerbackend):
+# class optimizerbackendax(optimizerbackend):
 #    def __init__(self, ax_client: axclient, search_space: rayparametercontainer):
 #        self.search_space = search_space
 #        self.ax_client = ax_client
@@ -170,6 +170,7 @@ class RayOptimizer:
         self.plot_interval_best_params: RayParameterContainer = RayParameterContainer()
         self.plot_interval_best_rays: Union[None, torch.Tensor] = None
         self.plot_interval_best_loss: float = float('inf')
+        self.plot_interval_best_epoch: int = 0
 
     @staticmethod
     def fig_to_image(fig: plt.Figure) -> np.array:
@@ -181,7 +182,8 @@ class RayOptimizer:
         return image_from_plot
 
     @staticmethod
-    def plot_data(pc_supp: list[torch.Tensor], pc_weights: Optional[list[torch.Tensor]] = None) -> np.array:
+    def plot_data(pc_supp: list[torch.Tensor], pc_weights: Optional[list[torch.Tensor]] = None,
+                  epoch: Optional[int] = None) -> np.array:
         pc_supp = [v.detach().cpu() for v in pc_supp]
         pc_weights = None if pc_weights is None else [v.detach().cpu() for v in pc_weights]
         fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False)
@@ -190,19 +192,22 @@ class RayOptimizer:
                 axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0)
                 axs[i, j].yaxis.set_major_locator(plt.NullLocator())
                 axs[i, j].xaxis.set_major_locator(plt.NullLocator())
+        if epoch is not None:
+            fig.suptitle('Epoch ' + str(epoch))
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
-    def compensation_plot(pc_supp: list[torch.Tensor], target: list[torch.Tensor], without_offset: list[torch.Tensor]) -> np.array:
-        pc_supp = [v.detach().cpu() for v in pc_supp]
+    def compensation_plot(compensated: list[torch.Tensor], target: list[torch.Tensor], without_compensation: list[torch.Tensor],
+                          epoch: Optional[int] = None) -> np.array:
+        compensated = [v.detach().cpu() for v in compensated]
         target = [v.detach().cpu() for v in target]
-        fig, axs = plt.subplots(3, len(pc_supp), squeeze=False)
-        for i, data in enumerate(pc_supp):
+        fig, axs = plt.subplots(3, len(compensated), squeeze=False)
+        for i, data in enumerate(compensated):
             axs[1, i].scatter(target[i][0, :, 0], target[i][0, :, 1], s=2.0)
             axs[1, i].xaxis.set_major_locator(plt.NullLocator())
             axs[1, i].yaxis.set_major_locator(plt.NullLocator())
             xlim, ylim = axs[1, i].get_xlim(), axs[1, i].get_ylim()
-            axs[0, i].scatter(without_offset[i][0, :, 0], without_offset[i][0, :, 1], s=2.0)
+            axs[0, i].scatter(without_compensation[i][0, :, 0], without_compensation[i][0, :, 1], s=2.0)
             axs[0, i].xaxis.set_major_locator(plt.NullLocator())
             axs[0, i].yaxis.set_major_locator(plt.NullLocator())
             axs[0, i].set_xlim(xlim)
@@ -212,6 +217,11 @@ class RayOptimizer:
             axs[2, i].set_ylim(ylim)
             axs[2, i].xaxis.set_major_locator(plt.NullLocator())
             axs[2, i].yaxis.set_major_locator(plt.NullLocator())
+        axs[0, 0].set_ylabel('w/o compensation')
+        axs[1, 0].set_ylabel('target')
+        axs[2, 0].set_ylabel('compensated')
+        if epoch is not None:
+            fig.suptitle('Epoch ' + str(epoch))
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -246,6 +256,7 @@ class RayOptimizer:
             ax.set_xticks(range(len(param_labels)))
             ax.set_xticklabels(param_labels, rotation=90)
             plt.subplots_adjust(bottom=0.3)
+        fig.suptitle('Epoch ' + str(self.plot_interval_best_epoch))
         return RayOptimizer.fig_to_image(fig)
 
     def ray_output_to_tensor(self, ray_output: Union[Dict, List[Dict], Iterable[Dict]]):
@@ -263,6 +274,7 @@ class RayOptimizer:
         if not isinstance(parameters, list):
             parameters = [parameters]
 
+        num_combinations = len(optimization_target.target_rays)  # TODO this might be adapted for multi arm
         initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
@@ -291,12 +303,15 @@ class RayOptimizer:
             if loss_mean < self.plot_interval_best_loss:
                 self.plot_interval_best_loss = loss_mean
                 self.plot_interval_best_params = initial_parameters[epoch - self.evaluation_counter]
-            if True in [i % 100 == 0 for i in range(self.evaluation_counter, self.evaluation_counter + len(output))]:
-                image = self.plot_data(self.plot_interval_best_rays)
+                self.plot_interval_best_epoch = epoch
+            if True in [i % 10 == 0 for i in
+                        range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)]:
+                image = self.plot_data(self.plot_interval_best_rays, epoch=self.plot_interval_best_epoch)
                 self.logging_backend.image("footprint", image)
                 if isinstance(optimization_target, OffsetOptimizationTarget):
-                    compensation_image = self.compensation_plot(self.plot_interval_best_rays,
-                                                            self.ray_output_to_tensor(optimization_target.target_rays), self.ray_output_to_tensor(optimization_target.target_rays_without_offset))
+                    compensation_image = self.compensation_plot(self.plot_interval_best_rays, self.ray_output_to_tensor(
+                        optimization_target.target_rays), self.ray_output_to_tensor(
+                        optimization_target.target_rays_without_offset), epoch=self.plot_interval_best_epoch)
                     self.logging_backend.image("compensation", compensation_image)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best_params,
                                                                         search_space=optimization_target.search_space,
@@ -313,7 +328,7 @@ class RayOptimizer:
         if self.log_times:
             self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
             self.logging_backend.log()
-        self.evaluation_counter += len(output)
+        self.evaluation_counter += len(output) // num_combinations
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
 
     def calculate_loss_from_output(self, output, target_rays):

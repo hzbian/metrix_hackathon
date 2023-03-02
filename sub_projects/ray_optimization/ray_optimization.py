@@ -20,7 +20,7 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-study_name = '34-parameter-1.0-rayui-CmaEs-12-Layer-cmaes'
+study_name = '34-parameter-0.1-rayui-TPE-12-Layer'
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
            name=study_name,
@@ -33,7 +33,7 @@ rml_basefile = os.path.join(root_dir, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLea
 ray_workdir = os.path.join(root_dir, 'ray_workdir', 'optimization')
 
 n_rays = ['1e4']
-max_deviation = 0.3
+max_deviation = 0.1
 
 exported_plane = "ImagePlane"  # "Spherical Grating"
 
@@ -132,7 +132,7 @@ fixed = ['U41_318eV.translationXerror', 'U41_318eV.translationYerror', 'U41_318e
          'E1.shortHalfAxisB', 'E1.rotationXerror', 'E1.rotationYerror', 'E1.rotationZerror', 'E1.translationYerror',
          'E1.translationZerror', 'E2.longHalfAxisA', 'E2.shortHalfAxisB', 'E2.rotationXerror', 'E2.rotationYerror',
          'E2.rotationZerror', 'E2.translationYerror', 'E2.translationZerror']
-fixed = []
+fixed = []#fixed[2:]
 
 for key in all_params:
     old_param = all_params[key]
@@ -153,8 +153,8 @@ for key, value in all_params.items():
 # optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
 directions = ['minimize', 'minimize'] if multi_objective else None
-storage_path = None  # "sqlite:////dev/shm/db.sqlite3"
-sampler = optuna.samplers.CmaEsSampler()  # TPESampler()
+storage_path = "sqlite:////dev/shm/db.sqlite3"
+sampler = TPESampler() #optuna.samplers.CmaEsSampler()  # TPESampler()
 optuna_study = optuna.create_study(directions=directions, sampler=sampler, pruner=optuna.pruners.HyperbandPruner(),
                                    storage=storage_path, study_name=study_name)
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
@@ -188,13 +188,14 @@ for configuration in perturbed_parameters:
     configuration.perturb(offset)
 
 print("target", target_parameters[0]['U41_318eV.translationXerror'].get_value())
+print("offset", offset['U41_318eV.translationXerror'].get_value())
 print("perturbed", perturbed_parameters[0]['U41_318eV.translationXerror'].get_value())
 
 offset_target_rays = engine.run(perturbed_parameters, transforms=transforms)
 target_rays_without_offset = engine.run(target_parameters, transforms=transforms)
 offset_optimization_target = OffsetOptimizationTarget(target_rays=offset_target_rays, target_offset=offset,
                                                       search_space=offset_search_space(),
-                                                      perturbed_parameters=perturbed_parameters,
+                                                      perturbed_parameters=target_parameters,
                                                       target_rays_without_offset=target_rays_without_offset)
 
 ray_optimizer.optimize(optimization_target=offset_optimization_target, iterations=1000)
