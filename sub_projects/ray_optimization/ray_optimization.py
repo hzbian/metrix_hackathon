@@ -20,7 +20,7 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-study_name = '34-parameter-0.1-rayui-TPE-12-Layer'
+study_name = '34-parameter-0.1-rayui-TPE-12-Layer-100-startup-trials-100-ei-samples'
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
            name=study_name,
@@ -154,7 +154,7 @@ for key, value in all_params.items():
 
 directions = ['minimize', 'minimize'] if multi_objective else None
 storage_path = "sqlite:////dev/shm/db.sqlite3"
-sampler = TPESampler() #optuna.samplers.CmaEsSampler()  # TPESampler()
+sampler = TPESampler(n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
 optuna_study = optuna.create_study(directions=directions, sampler=sampler, pruner=optuna.pruners.HyperbandPruner(),
                                    storage=storage_path, study_name=study_name)
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
