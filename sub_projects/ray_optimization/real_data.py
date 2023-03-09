@@ -1,3 +1,5 @@
+from typing import Tuple
+
 from PIL import Image, ImageChops
 import numpy as np
 import os
@@ -91,7 +93,27 @@ parameters = pd.read_csv(os.path.join(root_dir, 'parameters.csv'))
 
 black = Image.open(os.path.join(root_dir, black))
 
+
+class SampleWeightedHist(torch.nn.Module):
+    """
+    Converts a histogram into a point cloud.
+    Output is a tensor of shape [batch size, #pixels in hist, 2];
+    first dimension are x-coordinates and second are y-coordinates.
+    The ray coordinates are computed by a meshgrid according to the size of hist and given limits.
+    Each ray is endowed with a weights, which is the corresponding entry of the histogram.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int) -> Tuple[torch.Tensor, ...]:
+        rays_per_weights = num_rays / pc_weights.sum(dim=1)
+        out = torch.repeat_interleave(hist, (pc_weights * rays_per_weights).round().int()[0], dim=1)
+        return out
+
 transform = HistToPointCloud()
+transform_weight = SampleWeightedHist()
+
 for subdir, dirs, files in tqdm(os.walk(root_dir)):
     for file in files:
         if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
@@ -99,14 +121,24 @@ for subdir, dirs, files in tqdm(os.walk(root_dir)):
             sample = Image.open(path)
             sample = ImageChops.subtract(sample, black)
             sample = torchvision.transforms.ToTensor()(sample)
-            plt.imshow(sample)
+            #plt.imshow(sample[0])
             configuration_id = file[:3]
             sample_xy_dilation = xy_dilation[configuration_id]
             x_lims = torch.tensor((sample_xy_dilation[0], sample_xy_dilation[0]+768*1.6/1000)).unsqueeze(0)
             y_lims = torch.tensor((sample_xy_dilation[1], sample_xy_dilation[1]+576*1.6/1000)).unsqueeze(0)
             sample_parameters = parameters[configuration_id]
-            image = transform(sample, x_lims, y_lims)[0]
-            plt.scatter(x=image[:,0], y=image[:,1])
+            image, intensity = transform(sample, x_lims, y_lims)
+            #plt.scatter(x=image[0,:,0], y=image[0,:,1], c=intensity[0])
+#            plt.scatter(x=image[0,:,0], y=image[0,:,1], c=intensity[0].ceil())
+            quantile = torch.quantile(intensity[0], 0.9)
+            cleaned_indices = intensity[0] > 0.02
+            cleaned_intensity = intensity[0][cleaned_indices]
+
+            #plt.scatter(x=image[0,:,0][cleaned_indices], y=image[0,:,1][cleaned_indices], c=cleaned_intensity)
+            #plt.show()
+            scatter = transform_weight(hist=image[:,cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0), num_rays=1000)
+            plt.scatter(x=scatter[0,:,0], y=scatter[0,:,1])
+            plt.show()
             ##print(sample_parameters)
             #transform(sample, )
             # we should calculate x and y lims by inferring from xyshifts
