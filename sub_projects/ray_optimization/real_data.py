@@ -50,7 +50,6 @@ engine = RayEngine(rml_basefile=rml_basefile,
                    num_workers=-1,
                    as_generator=False)
 
-
 param_func = lambda: RayParameterContainer([
     (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e4)),
     (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=rg)),
@@ -111,41 +110,54 @@ class SampleWeightedHist(torch.nn.Module):
         out = torch.repeat_interleave(hist, (pc_weights * rays_per_weights).round().int()[0], dim=1)
         return out
 
+
 transform = HistToPointCloud()
 transform_weight = SampleWeightedHist()
 
+
+def pandas_to_param_container(input_pd, param_container: RayParameterContainer):
+    return RayParameterContainer
+
+
 for subdir, dirs, files in tqdm(os.walk(root_dir)):
+    measurement_name = os.path.basename(os.path.normpath(subdir))[:3]
+    if measurement_name not in parameters.keys():
+        continue
+    print(measurement_name)
+    print(parameters[measurement_name])
     for file in files:
         if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
             path = os.path.join(subdir, file)
+            print(file[:-4])
+            continue
             sample = Image.open(path)
             sample = ImageChops.subtract(sample, black)
             sample = torchvision.transforms.ToTensor()(sample)
-            #plt.imshow(sample[0])
+            # plt.imshow(sample[0])
             configuration_id = file[:3]
             sample_xy_dilation = xy_dilation[configuration_id]
-            x_lims = torch.tensor((sample_xy_dilation[0], sample_xy_dilation[0]+768*1.6/1000)).unsqueeze(0)
-            y_lims = torch.tensor((sample_xy_dilation[1], sample_xy_dilation[1]+576*1.6/1000)).unsqueeze(0)
+            x_lims = torch.tensor((sample_xy_dilation[0], sample_xy_dilation[0] + 768 * 1.6 / 1000)).unsqueeze(0)
+            y_lims = torch.tensor((sample_xy_dilation[1], sample_xy_dilation[1] + 576 * 1.6 / 1000)).unsqueeze(0)
             sample_parameters = parameters[configuration_id]
             image, intensity = transform(sample, x_lims, y_lims)
-            #plt.scatter(x=image[0,:,0], y=image[0,:,1], c=intensity[0])
-#            plt.scatter(x=image[0,:,0], y=image[0,:,1], c=intensity[0].ceil())
-            quantile = torch.quantile(intensity[0], 0.9)
+            # plt.scatter(x=image[0,:,0], y=image[0,:,1], c=intensity[0])
+            #            plt.scatter(x=image[0,:,0], y=image[0,:,1], c=intensity[0].ceil())
             cleaned_indices = intensity[0] > 0.02
             cleaned_intensity = intensity[0][cleaned_indices]
 
-            #plt.scatter(x=image[0,:,0][cleaned_indices], y=image[0,:,1][cleaned_indices], c=cleaned_intensity)
-            #plt.show()
-            scatter = transform_weight(hist=image[:,cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0), num_rays=1000)
-            plt.scatter(x=scatter[0,:,0], y=scatter[0,:,1])
+            # plt.scatter(x=image[0,:,0][cleaned_indices], y=image[0,:,1][cleaned_indices], c=cleaned_intensity)
+            # plt.show()
+            scatter = transform_weight(hist=image[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
+                                       num_rays=1000)
+            plt.scatter(x=scatter[0, :, 0], y=scatter[0, :, 1])
             plt.show()
             ##print(sample_parameters)
-            #transform(sample, )
+            # transform(sample, )
             # we should calculate x and y lims by inferring from xyshifts
 
             # put it to a histogram
 
             # get the according parameters
 
-            #save_path = os.path.splitext(path)[0]+'_out.bmp'
-            #DiffImage.save(save_path)
+            # save_path = os.path.splitext(path)[0]+'_out.bmp'
+            # DiffImage.save(save_path)
