@@ -1,11 +1,11 @@
 import unittest
 
-from ray_optim.ray_optimizer import OptimizerBackend
+from ray_tools.base.backend import RayBackend
 
 
-class RayOptimizerTest(unittest.TestCase):
+class RayBackendTest(unittest.TestCase):
 
-    def test_optimizer_backend(self, optimizer_backend: OptimizerBackend):
+    def test_optimizer_backend(self, optimizer_backend: RayBackend):
         self.assertEqual('foo'.upper(), 'FOO')
 
     def test_split(self):
