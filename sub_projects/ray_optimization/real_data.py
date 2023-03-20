@@ -78,7 +78,15 @@ class SampleWeightedHist(torch.nn.Module):
 
     def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int) -> Tuple[torch.Tensor, ...]:
         rays_per_weights = num_rays / pc_weights.sum(dim=1)
-        out = torch.repeat_interleave(hist, (pc_weights * rays_per_weights).round().int()[0], dim=1)
+        repetitions = (pc_weights * rays_per_weights).floor().int()[0]
+        residuum = (pc_weights * rays_per_weights)[0] - repetitions
+        _, ordered_indices = residuum.sort()
+        out = torch.repeat_interleave(hist, repetitions, dim=1)
+        still_required = num_rays - out.shape[1]
+        added_from_hist = hist[:, ordered_indices[:still_required]]
+        out = torch.hstack((out, added_from_hist))
+        if out.shape[1] != num_rays:
+            raise Exception("The amount of rays is %i but should be %i." % (out.shape[1], num_rays))
         return out
 
 
@@ -123,9 +131,9 @@ def import_data(real_data_dir, included_z_layers):
 
                 scatter = transform_weight(hist=image[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
                                            num_rays=1000)
-                ray_output = RayOutput(x_loc=scatter[0, :, 0].numpy(), y_loc=scatter[0, :, 1].numpy(),
-                                       z_loc=np.array([]), y_dir=np.array([]),
-                                       x_dir=np.array([]), z_dir=np.array([]), energy=np.array([]))
+                ray_output = RayOutput(x_loc=scatter[0, :, 0].float().numpy(), y_loc=scatter[0, :, 1].float().numpy(),
+                                       z_loc=np.array([], dtype=float), y_dir=np.array([], dtype=float),
+                                       x_dir=np.array([], dtype=float), z_dir=np.array([], dtype=float), energy=np.array([], dtype=float))
                 z_layer_id = file[:-4]
                 if int(z_layer_id) in included_z_layers:
                     z_direction_dict[z_layer_id] = ray_output
@@ -141,7 +149,7 @@ study_name = 'real_data_tpe'  # -100-startup-trials-100-ei-samples'
 wandb.init(entity='hzb-aos',
            project='metrix_hackathon_offsets',
            name=study_name,
-           mode='disabled',  # 'disabled' or 'online'
+           mode='online',  # 'disabled' or 'online'
            )
 
 sinkhorn_function = SinkhornLoss(normalize_weights='weights1', p=1, backend='online', reduction=None)
@@ -183,7 +191,7 @@ exported_plane = "ImagePlane"  # "Spherical Grating"
 multi_objective = False
 
 directions = ['minimize', 'minimize'] if multi_objective else None
-storage_path = None# "sqlite:////dev/shm/db.sqlite3"
+storage_path = "sqlite:////dev/shm/db.sqlite3"
 sampler = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
 optuna_study = optuna.create_study(directions=directions, sampler=sampler, pruner=optuna.pruners.HyperbandPruner(),
                                    storage=storage_path, study_name=study_name)
