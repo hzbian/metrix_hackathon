@@ -35,5 +35,6 @@ ENV PATH="/venv/bin:$PATH"
 
 ADD script_rayui_bg.py /opt/script_rayui_bg.py
 
+RUN sudo apt -y install xvfb
 
 ENTRYPOINT ["tail", "-f", "/dev/null"]
