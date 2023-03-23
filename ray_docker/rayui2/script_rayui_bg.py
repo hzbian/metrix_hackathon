@@ -24,7 +24,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     rml_workfile: str = args.rml_workfile
     exported_planes: List[str] = args.exported_planes
-    proc = subprocess.Popen('/opt/run.sh', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    proc = subprocess.Popen('/home/user/RAY/build/build-Ray-UI-Linux---Qt_6_4_0-GCC_64bit-Release/Ray-UI -b', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
     workdir = os.path.dirname(rml_workfile)
 
