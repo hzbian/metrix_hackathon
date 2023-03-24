@@ -1,20 +1,115 @@
 import unittest
 
-from ray_tools.base.backend import RayBackend
+from ray_tools.base.backend import RayBackend,RayBackendDockerRAYUI,RayBackendPodmanRAYUI
+from ray_tools.base.engine import RayEngine
+from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
+from ray_tools.base.utils import RandomGenerator
+from ray_tools.base.transform import Histogram, RayTransformConcat, MultiLayer
+
+
 
 
 class RayBackendTest(unittest.TestCase):
 
-    def test_optimizer_backend(self, optimizer_backend: RayBackend):
-        self.assertEqual('foo'.upper(), 'FOO')
 
-    def test_split(self):
-        s = 'hello world'
-        self.assertEqual(s.split(), ['hello', 'world'])
-        # check that s.split fails when the separator is not a string
-        with self.assertRaises(TypeError):
-            s.split(2)
+    def __init__(self, *args, **kwargs):
+        super(RayBackendTest, self).__init__( *args, **kwargs)
+        self.exported_planes = ["ImagePlane"]
+        self.n_rays = 100
 
+        self.rg = RandomGenerator(seed=42)
+        self.dist_layers = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+        self.transform = RayTransformConcat({
+            'ml': MultiLayer(dist_layers=self.dist_layers,
+                             copy_directions=False,
+                             transform=Histogram(n_bins=256)),
+            'hist': Histogram(n_bins=1024),
+
+        })
+    def test_output_type_single_output(self):
+
+
+        #For 1 Output the output should be a dictionary
+        n_examples = 1
+        engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+                           exported_planes=self.exported_planes,
+                           ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                             docker_container_name='ray-ui-service-test',
+                                                             ray_workdir='../../ray_workdir',
+                                                             verbose=True),
+                           num_workers=-1,
+                           as_generator=False)
+        param_func = lambda: RayParameterContainer([
+            (engine.template.U41_318eV.numberRays, NumericalParameter(value=self.n_rays)),
+            (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=self.rg))
+        ])
+        result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
+                            transforms={exported_plane: self.transform for exported_plane in self.exported_planes})
+        self.assertTrue(type(result) is dict)
+
+    def test_output_type_multiple_outputs(self):
+        ## For more than 1 output, the outputs should be a list of dictonaries
+        n_examples = 2
+        engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+                           exported_planes=self.exported_planes,
+                           ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                             docker_container_name='ray-ui-service-test',
+                                                             ray_workdir='../../ray_workdir',
+                                                             verbose=True),
+                           num_workers=-1,
+                           as_generator=False)
+        param_func = lambda: RayParameterContainer([
+            (engine.template.U41_318eV.numberRays, NumericalParameter(value=self.n_rays)),
+            (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=self.rg))
+        ])
+        result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
+                            transforms={exported_plane: self.transform for exported_plane in self.exported_planes})
+        self.assertTrue(type(result) is list)
+
+    def test_param_dic(self):
+        ## check if all parameters are contained in the output
+        n_examples = 2
+        engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+                           exported_planes=self.exported_planes,
+                           ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                             docker_container_name='ray-ui-service-test',
+                                                             ray_workdir='../../ray_workdir',
+                                                             verbose=True),
+                           num_workers=-1,
+                           as_generator=False)
+        param_func = lambda: RayParameterContainer([
+            (engine.template.U41_318eV.numberRays, NumericalParameter(value=self.n_rays)),
+            (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=self.rg))
+        ])
+        result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
+                            transforms={exported_plane: self.transform for exported_plane in self.exported_planes})
+        param_dic = result[1]['param_container_dict']
+        for key in param_func().to_value_dict().keys():
+            self.assertTrue(key in param_dic.keys())
+    def test_dist_layers(self):
+        ## Check if all distance layers are present
+        ## Also check if all  n_rays,x_lim and y_lim is present in each layer
+        n_examples = 2
+        engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+                           exported_planes=self.exported_planes,
+                           ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                             docker_container_name='ray-ui-service-test',
+                                                             ray_workdir='../../ray_workdir',
+                                                             verbose=True),
+                           num_workers=-1,
+                           as_generator=False)
+        param_func = lambda: RayParameterContainer([
+            (engine.template.U41_318eV.numberRays, NumericalParameter(value=self.n_rays)),
+            (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=self.rg))
+        ])
+        result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
+                            transforms={exported_plane: self.transform for exported_plane in self.exported_planes})
+        for dist in self.dist_layers:
+            self.assertTrue(str(dist) in result[0]['ray_output']['ImagePlane']['ml'].keys())
+            self.assertTrue('n_rays' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
+            self.assertTrue('x_lims' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
+            self.assertTrue('y_lims' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
+            self.assertTrue('histogram' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
 
 if __name__ == '__main__':
     unittest.main()
