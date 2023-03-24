@@ -141,7 +141,7 @@ class RayBackendDockerRAYUI(RayBackend):
         raypyng_rml.write(rml_workfile)
 
         # get corresponding RML-file for in docker container
-        docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile))
+        docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile)).replace("\\","/")
 
         # argument for planes to be exported
         cmd_exported_planes = " ".join("\"" + plane + "\"" for plane in exported_planes)
@@ -153,7 +153,7 @@ class RayBackendDockerRAYUI(RayBackend):
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
-                if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')):
+                if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\","/")):
                     retry = True
             if not retry:
                 break
@@ -163,7 +163,7 @@ class RayBackendDockerRAYUI(RayBackend):
         # extract Ray-UI output from CSV-files and create RayOutput instances
         ray_output = {}
         for exported_plane in exported_planes:
-            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')
+            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\","/")
 
             raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c',
                                      usecols=[exported_plane + '_OX', exported_plane + '_OY', exported_plane + '_OZ',
@@ -215,7 +215,8 @@ class RayBackendPodmanRAYUI(RayBackend):
         self._rayui_workdir = '/opt/ray-ui-workdir'
 
         self.client = docker.from_env()
-        self.client = podman.PodmanClient(base_url="unix:////run/user/1003/podman/podman.sock")
+        self.client = podman.PodmanClient(base_url='npipe:////./pipe/podman-machine-default')
+        #self.client = podman.PodmanClient(base_url="unix:////run/user/1003/podman/podman.sock")
 
         # if container already exists, stop and remove it
         try:
@@ -268,11 +269,11 @@ class RayBackendPodmanRAYUI(RayBackend):
         tic = time.perf_counter()
 
         # create RML-file for this run
-        rml_workfile = os.path.join(run_workdir, 'workfile.rml')
+        rml_workfile = os.path.join(run_workdir, 'workfile.rml').replace("\\","/")
         raypyng_rml.write(rml_workfile)
 
         # get corresponding RML-file for in docker container
-        docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile))
+        docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile)).replace("\\","/")
 
         # argument for planes to be exported
         cmd_exported_planes = " ".join("\"" + plane + "\"" for plane in exported_planes)
@@ -284,7 +285,7 @@ class RayBackendPodmanRAYUI(RayBackend):
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
-                if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')):
+                if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')).replace("\\","/"):
                     retry = True
             if not retry:
                 break
@@ -294,7 +295,7 @@ class RayBackendPodmanRAYUI(RayBackend):
         # extract Ray-UI output from CSV-files and create RayOutput instances
         ray_output = {}
         for exported_plane in exported_planes:
-            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv')
+            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\","/")
 
             raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c',
                                      usecols=[exported_plane + '_OX', exported_plane + '_OY',
@@ -393,10 +394,10 @@ class RayBackendDockerRAYX(RayBackend):
         os.makedirs(self.ray_workdir, exist_ok=True)
 
         tic = time.perf_counter()
-        rml_workfile = os.path.join(self.ray_workdir, run_id + '.rml')
+        rml_workfile = os.path.join(self.ray_workdir, run_id + '.rml').replace("\\","/")
         raypyng_rml.write(rml_workfile)
 
-        docker_rml_workfile = os.path.join(self._rayx_workdir, os.path.basename(rml_workfile))
+        docker_rml_workfile = os.path.join(self._rayx_workdir, os.path.basename(rml_workfile)).replace("\\","/")
         self.docker_container.exec_run(
             cmd=f"{self._rayx_path} -x -i {docker_rml_workfile}"
         )
