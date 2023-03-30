@@ -25,17 +25,18 @@ class SampleWeightedHist(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int) -> Tuple[torch.Tensor, ...]:
+    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int, fill=True) -> Tuple[torch.Tensor, ...]:
         rays_per_weights = num_rays / pc_weights.sum(dim=1)
         repetitions = (pc_weights * rays_per_weights).floor().int()[0]
         residuum = (pc_weights * rays_per_weights)[0] - repetitions
-        _, ordered_indices = residuum.sort()
+        _, ordered_indices = residuum.sort(descending=True)
         out = torch.repeat_interleave(hist, repetitions, dim=1)
-        still_required = num_rays - out.shape[1]
-        added_from_hist = hist[:, ordered_indices[:still_required]]
-        out = torch.hstack((out, added_from_hist))
-        if out.shape[1] != num_rays:
-            raise Exception("The amount of rays is %i but should be %i." % (out.shape[1], num_rays))
+        if fill:
+            still_required = num_rays - out.shape[1]
+            added_from_hist = hist[:, ordered_indices[:still_required]]
+            out = torch.hstack((out, added_from_hist))
+            if out.shape[1] != num_rays:
+                raise Exception("The amount of rays is %i but should be %i." % (out.shape[1], num_rays))
         return out
 
 
