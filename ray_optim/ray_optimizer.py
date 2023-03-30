@@ -272,11 +272,10 @@ class RayOptimizer:
                 'm*',
                 markersize=20,
                 label='predicted parameters')
-        if real_params is not None:
-            param_labels = [param_key for param_key, param_value in real_params.items() if param_key not in omit_labels]
-            ax.set_xticks(range(len(param_labels)))
-            ax.set_xticklabels(param_labels, rotation=90)
-            plt.subplots_adjust(bottom=0.3)
+        param_labels = [param_key for param_key, param_value in predicted_params.items() if param_key not in omit_labels]
+        ax.set_xticks(range(len(param_labels)))
+        ax.set_xticklabels(param_labels, rotation=90)
+        plt.subplots_adjust(bottom=0.3)
         fig.suptitle('Epoch ' + str(self.plot_interval_best_epoch))
         return RayOptimizer.fig_to_image(fig)
 
