@@ -7,7 +7,7 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = '34-parameter-0.1-rayui-TPE-12-Layer-1000-Fixed-Image-Tes-Fixed-Image-Test'#-100-startup-trials-100-ei-samples'
+STUDY_NAME = 'real-data-test-0.3'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
@@ -20,11 +20,11 @@ RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLea
 RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', 'optimization')
 
 # objective
-REAL_DATA_DIR = None
+REAL_DATA_DIR = '../../datasets/metrix_real_data/2021_march_selected'
 EXPORTED_PLANE = "ImagePlane"
-MAX_DEVIATION = 0.1
+MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
-Z_LAYERS = [-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+Z_LAYERS = [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
 NUM_BEAMLINE_PARAM_SAMPLES = 22
 FIXED_PARAMS = []
@@ -43,13 +43,13 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("M1_Cylinder.rotationXerror", RandomParameter(value_lims=(-0.25, 0.25), rg=RG)),
     ("M1_Cylinder.rotationYerror", RandomParameter(value_lims=(-1., 1.), rg=RG)),
     ("M1_Cylinder.rotationZerror", RandomParameter(value_lims=(-1., 1.), rg=RG)),
-    ("M1_Cylinder.translationXerror", RandomParameter(value_lims=(-0.15, 0.15), rg=RG)),
+    ("M1_Cylinder.translationXerror", RandomParameter(value_lims=(-1., 1.), rg=RG)),
     ("M1_Cylinder.translationYerror", RandomParameter(value_lims=(-1., 1.), rg=RG)),
     ("SphericalGrating.radius", RandomParameter(value_lims=(109741., 109841.), rg=RG)),
     ("SphericalGrating.rotationYerror", RandomParameter(value_lims=(-1., 1.), rg=RG)),
     ("SphericalGrating.rotationZerror", RandomParameter(value_lims=(-2.5, 2.5), rg=RG)),
     ("ExitSlit.totalHeight", RandomParameter(value_lims=(0.009, 0.011), rg=RG)),
-    ("ExitSlit.translationZerror", RandomParameter(value_lims=(-29., 31.), rg=RG)),
+    ("ExitSlit.translationZerror", RandomParameter(value_lims=(-31., 31.), rg=RG)),
     ("ExitSlit.rotationZerror", RandomParameter(value_lims=(-0.3, 0.3), rg=RG)),
     ("E1.longHalfAxisA", RandomParameter(value_lims=(20600., 20900.), rg=RG)),
     ("E1.shortHalfAxisB", RandomParameter(value_lims=(300.721702601, 304.721702601), rg=RG)),

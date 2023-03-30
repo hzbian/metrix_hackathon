@@ -4,6 +4,7 @@ import optuna
 
 import wandb
 from losses import multi_objective_loss, sinkhorn_loss
+from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')
 from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
@@ -13,7 +14,7 @@ from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, 
     RayParameter
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
-import config.config_optimization_tpe as CFG
+import config.config_optimization_real_data as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
@@ -54,7 +55,7 @@ directions = CFG.MULTI_OBJECTIVE_DIRECTIONS if CFG.MULTI_OBJECTIVE else None
 optuna_storage_path = CFG.OPTUNA_STORAGE_PATH if CFG.LOGGING else None
 
 optuna_study = optuna.create_study(directions=directions, sampler=CFG.SAMPLER, pruner=optuna.pruners.HyperbandPruner(),
-                                   storage=optuna_storage_path, study_name=CFG.STUDY_NAME)
+                                   storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
 optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
 
 criterion = multi_objective_loss if CFG.MULTI_OBJECTIVE else sinkhorn_loss
@@ -68,7 +69,6 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criteri
 # best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
 #                                                  iterations=100)
 # print(best_parameters, metrics)
-target_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
 
 offset_search_space = lambda: RayParameterContainer(
     [(k, RandomParameter(
@@ -80,16 +80,22 @@ offset_search_space = lambda: RayParameterContainer(
      all_params.items() if isinstance(v, RandomParameter)]
 )
 
-offset = offset_search_space()
-perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in target_parameters]
-for configuration in perturbed_parameters:
-    configuration.perturb(offset)
+if CFG.REAL_DATA_DIR is None:
+    offset = offset_search_space()
+    initial_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
+    perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in initial_parameters]
+    for configuration in perturbed_parameters:
+        configuration.perturb(offset)
+    perturbed_parameters_rays = engine.run(perturbed_parameters, transforms=CFG.TRANSFORMS)
+else:
+    perturbed_parameters_rays = import_data(CFG.REAL_DATA_DIR, CFG.Z_LAYERS, CFG.PARAM_FUNC())
+    initial_parameters = [element['param_container_dict'] for element in perturbed_parameters_rays]
+    offset = None
 
-offset_target_rays = engine.run(perturbed_parameters, transforms=CFG.TRANSFORMS)
-target_rays_without_offset = engine.run(target_parameters, transforms=CFG.TRANSFORMS)
-offset_optimization_target = OffsetOptimizationTarget(target_rays=offset_target_rays, target_offset=offset,
+initial_parameters_rays = engine.run(initial_parameters, transforms=CFG.TRANSFORMS)
+offset_optimization_target = OffsetOptimizationTarget(perturbed_parameters_rays=perturbed_parameters_rays,
                                                       search_space=offset_search_space(),
-                                                      perturbed_parameters=target_parameters,
-                                                      target_rays_without_offset=target_rays_without_offset)
+                                                      initial_parameters=initial_parameters,
+                                                      initial_parameters_rays=initial_parameters_rays, offset=offset)
 
 ray_optimizer.optimize(optimization_target=offset_optimization_target, iterations=CFG.ITERATIONS)

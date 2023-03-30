@@ -19,21 +19,21 @@ plt.switch_backend('Agg')
 
 
 class OptimizationTarget:
-    def __init__(self, target_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
+    def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
                  target_params: Optional[RayParameterContainer] = None):
-        self.target_rays = target_rays
+        self.perturbed_parameters_rays = perturbed_parameters_rays
         self.search_space = search_space
         self.target_params = target_params
 
 
 class OffsetOptimizationTarget(OptimizationTarget):
-    def __init__(self, target_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
-                 perturbed_parameters: List[RayParameterContainer],
-                 target_rays_without_offset: Union[dict, Iterable[dict], List[dict]],
-                 target_offset: Optional[RayParameterContainer] = None):
-        super().__init__(target_rays, search_space, target_offset)
-        self.perturbed_parameters: List[RayParameterContainer] = perturbed_parameters
-        self.target_rays_without_offset = target_rays_without_offset
+    def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
+                 initial_parameters: List[RayParameterContainer],
+                 initial_parameters_rays: Union[dict, Iterable[dict], List[dict]],
+                 offset: Optional[RayParameterContainer] = None):
+        super().__init__(perturbed_parameters_rays, search_space, offset)
+        self.initial_parameters: List[RayParameterContainer] = initial_parameters
+        self.initial_parameters_rays = initial_parameters_rays
 
 
 class OptimizerBackend(metaclass=ABCMeta):
@@ -230,7 +230,7 @@ class RayOptimizer:
                             ylim,
                             epoch: Optional[int] = None) -> np.array:
         fig, axs = plt.subplots(1, 3, squeeze=False)
-        axs[0, 0].scatter(without_compensation[0, :, 0], without_compensation[0, : 1], s=2.0)
+        axs[0, 0].scatter(without_compensation[0, :, 0], without_compensation[0, :, 1], s=2.0)
         axs[0, 1].scatter(target[0, :, 0], target[0, :, 1], s=2.0)
         axs[0, 2].scatter(compensated[0, :, 0], compensated[0, :, 1], s=2.0)
 
@@ -295,12 +295,12 @@ class RayOptimizer:
         if not isinstance(parameters, list):
             parameters = [parameters]
 
-        num_combinations = len(optimization_target.target_rays)  # TODO this might be adapted for multi arm
+        num_combinations = len(optimization_target.perturbed_parameters_rays)  # TODO this might be adapted for multi arm
         initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
-            evaluation_parameters = [element.clone() for element in optimization_target.perturbed_parameters]
-            for i, perturbed_parameters in enumerate(optimization_target.perturbed_parameters):
+            evaluation_parameters = [element.clone() for element in optimization_target.initial_parameters]
+            for i, perturbed_parameters in enumerate(optimization_target.initial_parameters):
                 for k, v in parameters[0].items():
                     evaluation_parameters[i][k] = NumericalParameter(
                         perturbed_parameters[k].get_value() - v.get_value())
@@ -315,7 +315,7 @@ class RayOptimizer:
             output = [output]
 
         begin_loss_time: float = time.time() if self.log_times else None
-        output_loss_dict = self.calculate_loss_from_output(output, optimization_target.target_rays)
+        output_loss_dict = self.calculate_loss_from_output(output, optimization_target.perturbed_parameters_rays)
         if self.log_times:
             self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
 
@@ -331,13 +331,13 @@ class RayOptimizer:
                 self.logging_backend.image("footprint", image)
                 if isinstance(optimization_target, OffsetOptimizationTarget):
                     compensation_image = self.compensation_plot(self.plot_interval_best_rays, self.ray_output_to_tensor(
-                        optimization_target.target_rays), self.ray_output_to_tensor(
-                        optimization_target.target_rays_without_offset), epoch=self.plot_interval_best_epoch)
+                        optimization_target.perturbed_parameters_rays), self.ray_output_to_tensor(
+                        optimization_target.initial_parameters_rays), epoch=self.plot_interval_best_epoch)
                     self.logging_backend.image("compensation", compensation_image)
-                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in optimization_target.target_rays])).item()
+                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in optimization_target.perturbed_parameters_rays])).item()
                 fixed_position_plot = self.fixed_position_plot(self.plot_interval_best_rays[max_ray_index], self.ray_output_to_tensor(
-                    optimization_target.target_rays[max_ray_index]), self.ray_output_to_tensor(
-                    optimization_target.target_rays_without_offset[max_ray_index]), epoch=self.plot_interval_best_epoch, xlim=[-3, 3],
+                    optimization_target.perturbed_parameters_rays[max_ray_index]), self.ray_output_to_tensor(
+                    optimization_target.initial_parameters_rays[max_ray_index]), epoch=self.plot_interval_best_epoch, xlim=[-3, 3],
                                                                ylim=[-3, 3])
                 self.logging_backend.image("fixed_position_plot", fixed_position_plot)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best_params,
@@ -347,7 +347,7 @@ class RayOptimizer:
                 self.plot_interval_best_loss = float('inf')
 
             if self.evaluation_counter == 0:
-                target_tensor = self.ray_output_to_tensor(optimization_target.target_rays)
+                target_tensor = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays)
                 if isinstance(target_tensor, torch.Tensor):
                     target_tensor = [target_tensor]
                 target_image = self.plot_data(target_tensor)
