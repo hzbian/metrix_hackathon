@@ -1,5 +1,5 @@
 import time
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, ABC
 from typing import List, Iterable, Union, Dict, Optional, Callable
 
 import numpy as np
@@ -45,6 +45,35 @@ class OptimizerBackend(metaclass=ABCMeta):
     def optimize(self, objective: Callable, iterations: int, optimization_target: OptimizationTarget):
         pass
 
+class OptimizerBackendBasinhopping(OptimizerBackend):
+    def __init__(self, basinhopping_function):
+        self.basinhopping_function = basinhopping_function
+
+    def setup_optimization(self):
+        pass
+
+    @staticmethod
+    def basinhopping_objective(objective, optimization_target: OptimizationTarget):
+        def output_objective(input: np.ndarray):
+            optimize_parameters = optimization_target.search_space.copy()
+            for i, (key, value) in enumerate(optimize_parameters.items()):
+                if isinstance(value, MutableParameter):
+                    optimize_parameters[key] = NumericalParameter(input[i])
+
+            output = objective(optimize_parameters, optimization_target=optimization_target)
+            return tuple(value.mean().item() for value in output[min(output.keys())])
+
+        return output_objective
+
+    def optimize(self, objective: Callable, iterations: int, optimization_target: OptimizationTarget):
+        optimize_parameters = optimization_target.search_space.copy()
+        x0 = []
+        for key, value in optimize_parameters.items():
+            if isinstance(value, MutableParameter):
+                x0.append((value.value_lims[1]-value.value_lims[0]) / 2.)
+        x0 = np.array(x0)
+        ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0, niter=iterations)
+        return ret.x, ret.fun
 
 class OptimizerBackendOptuna(OptimizerBackend):
     def __init__(self, optuna_study: Study):

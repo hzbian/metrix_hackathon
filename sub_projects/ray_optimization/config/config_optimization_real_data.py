@@ -7,7 +7,7 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = 'real-data-test-0.3'
+STUDY_NAME = 'real-data-test-0.3-new'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
@@ -73,4 +73,5 @@ MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
 ITERATIONS = 1000
+OPTIMIZER = 'optuna'
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()

@@ -8,13 +8,14 @@ from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')
 from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
-    OffsetOptimizationTarget
+    OffsetOptimizationTarget, OptimizerBackendBasinhopping
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
     RayParameter
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
-import config.config_optimization_real_data as CFG
+from scipy.optimize import basinhopping
+import config.config_optimization_tpe as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
@@ -52,15 +53,18 @@ for key, value in all_params.items():
 # optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
 directions = CFG.MULTI_OBJECTIVE_DIRECTIONS if CFG.MULTI_OBJECTIVE else None
-optuna_storage_path = CFG.OPTUNA_STORAGE_PATH if CFG.LOGGING else None
-
-optuna_study = optuna.create_study(directions=directions, sampler=CFG.SAMPLER, pruner=optuna.pruners.HyperbandPruner(),
-                                   storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
-optimizer_backend_optuna = OptimizerBackendOptuna(optuna_study)
+if CFG.OPTIMIZER == 'optuna':
+    optuna_storage_path = CFG.OPTUNA_STORAGE_PATH if CFG.LOGGING else None
+    optuna_study = optuna.create_study(directions=directions, sampler=CFG.SAMPLER, pruner=optuna.pruners.HyperbandPruner(),
+                                       storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
+    optimizer_backend = OptimizerBackendOptuna(optuna_study)
+else:
+    basinhopping_function = lambda func, x0, niter: basinhopping(func, x0, niter=niter)
+    optimizer_backend = OptimizerBackendBasinhopping(basinhopping_function)
 
 criterion = multi_objective_loss if CFG.MULTI_OBJECTIVE else sinkhorn_loss
 
-ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend_optuna, criterion=criterion, engine=engine,
+ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=criterion, engine=engine,
                              log_times=True, exported_plane=CFG.EXPORTED_PLANE,
                              transforms=CFG.TRANSFORMS,
                              logging_backend=WandbLoggingBackend())
