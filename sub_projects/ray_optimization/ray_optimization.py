@@ -59,8 +59,7 @@ if CFG.OPTIMIZER == 'optuna':
                                        storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
     optimizer_backend = OptimizerBackendOptuna(optuna_study)
 else:
-    basinhopping_function = lambda func, x0, niter: basinhopping(func, x0, niter=niter)
-    optimizer_backend = OptimizerBackendBasinhopping(basinhopping_function)
+    optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
 
 criterion = multi_objective_loss if CFG.MULTI_OBJECTIVE else sinkhorn_loss
 

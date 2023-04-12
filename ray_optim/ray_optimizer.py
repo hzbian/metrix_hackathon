@@ -59,7 +59,6 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
             for i, (key, value) in enumerate(optimize_parameters.items()):
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(input[i])
-
             output = objective(optimize_parameters, optimization_target=optimization_target)
             return tuple(value.mean().item() for value in output[min(output.keys())])
 
@@ -68,11 +67,12 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
     def optimize(self, objective: Callable, iterations: int, optimization_target: OptimizationTarget):
         optimize_parameters = optimization_target.search_space.copy()
         x0 = []
+        bounds = []
         for key, value in optimize_parameters.items():
             if isinstance(value, MutableParameter):
-                x0.append((value.value_lims[1]-value.value_lims[0]) / 2.)
-        x0 = np.array(x0)
-        ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0, niter=iterations)
+                bounds.append([value.value_lims[0], value.value_lims[1]])
+                x0.append((value.value_lims[1]-value.value_lims[0]) / 2. + value.value_lims[0])
+        ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0, niter=iterations, minimizer_kwargs={"bounds": bounds}, disp=True)
         return ret.x, ret.fun
 
 class OptimizerBackendOptuna(OptimizerBackend):
@@ -194,12 +194,13 @@ class RayOptimizer:
         self.exported_plane: str = exported_plane
         self.transforms: Optional[RayTransform] = transforms
         self.logging_backend: LoggingBackend = logging_backend
-        self.evaluation_counter: int = 0
         self.log_times: bool = log_times
+        self.evaluation_counter: int = 0
         self.plot_interval_best_params: RayParameterContainer = RayParameterContainer()
         self.plot_interval_best_rays: Union[None, torch.Tensor] = None
         self.plot_interval_best_loss: float = float('inf')
         self.plot_interval_best_epoch: int = 0
+        self.iterations: int = 0
 
     @staticmethod
     def fig_to_image(fig: plt.Figure) -> np.array:
@@ -353,8 +354,8 @@ class RayOptimizer:
                 self.plot_interval_best_loss = loss_mean
                 self.plot_interval_best_params = initial_parameters[epoch - self.evaluation_counter]
                 self.plot_interval_best_epoch = epoch
-            if True in [i % 10 == 0 for i in
-                        range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)]:
+            current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
+            if True in [i % 10 == 0 for i in current_range]:
                 image = self.plot_data(self.plot_interval_best_rays, epoch=self.plot_interval_best_epoch)
                 self.logging_backend.image("footprint", image)
                 if isinstance(optimization_target, OffsetOptimizationTarget):
