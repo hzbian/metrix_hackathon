@@ -72,6 +72,6 @@ MULTI_OBJECTIVE = False
 MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
-ITERATIONS = 1000
-OPTIMIZER = 'basinhopping'
+ITERATIONS = 20
+OPTIMIZER = 'optuna'
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
