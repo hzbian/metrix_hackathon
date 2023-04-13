@@ -25,7 +25,7 @@ wandb.init(entity=CFG.WANDB_ENTITY,
 
 engine = RayEngine(rml_basefile=CFG.RML_BASEFILE,
                    exported_planes=[CFG.EXPORTED_PLANE],
-                   ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                   ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service', docker_container_name=CFG.STUDY_NAME,
                                                      ray_workdir=CFG.RAY_WORKDIR,
                                                      verbose=CFG.VERBOSE),
                    num_workers=-1,
