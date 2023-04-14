@@ -1,19 +1,18 @@
 import time
-from abc import ABCMeta, abstractmethod, ABC
+from abc import ABCMeta, abstractmethod
 from typing import List, Iterable, Union, Dict, Optional, Callable
 
 import numpy as np
 import torch
 import wandb
-# from ax.service.ax_client import AxClient
-
 from matplotlib import pyplot as plt
 from optuna import Study
-from tqdm import trange
 
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
+
+# from ax.service.ax_client import AxClient
 
 plt.switch_backend('Agg')
 
@@ -365,7 +364,7 @@ class RayOptimizer:
         if not isinstance(parameters, list):
             parameters = [parameters]
 
-        num_combinations = len(optimization_target.perturbed_parameters_rays)  # TODO this might be adapted for multi arm
+        num_combinations = len(optimization_target.perturbed_parameters_rays)  # TODO might be adapted for multi arm
         initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
@@ -437,7 +436,7 @@ class RayOptimizer:
                 self.logging_backend.image("target_footprint", target_image)
         if self.log_times:
             self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
-            self.logging_backend.log()
+        self.logging_backend.log()
         self.evaluation_counter += len(output) // num_combinations
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
 
