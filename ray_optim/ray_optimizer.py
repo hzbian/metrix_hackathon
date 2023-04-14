@@ -18,7 +18,8 @@ plt.switch_backend('Agg')
 
 
 class OptimizationTarget:
-    def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
+    def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]],
+                 search_space: RayParameterContainer,
                  target_params: Optional[RayParameterContainer] = None):
         self.perturbed_parameters_rays = perturbed_parameters_rays
         self.search_space = search_space
@@ -26,7 +27,8 @@ class OptimizationTarget:
 
 
 class OffsetOptimizationTarget(OptimizationTarget):
-    def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]], search_space: RayParameterContainer,
+    def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]],
+                 search_space: RayParameterContainer,
                  initial_parameters: List[RayParameterContainer],
                  initial_parameters_rays: Union[dict, Iterable[dict], List[dict]],
                  offset: Optional[RayParameterContainer] = None):
@@ -43,6 +45,7 @@ class OptimizerBackend(metaclass=ABCMeta):
     @abstractmethod
     def optimize(self, objective: Callable, iterations: int, optimization_target: OptimizationTarget):
         pass
+
 
 class OptimizerBackendBasinhopping(OptimizerBackend):
     def __init__(self, basinhopping_function):
@@ -70,9 +73,11 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
         for key, value in optimize_parameters.items():
             if isinstance(value, MutableParameter):
                 bounds.append([value.value_lims[0], value.value_lims[1]])
-                x0.append((value.value_lims[1]-value.value_lims[0]) / 2. + value.value_lims[0])
-        ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0, niter=iterations, minimizer_kwargs={"bounds": bounds}, disp=True)
+                x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
+        ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0,
+                                         niter=iterations, minimizer_kwargs={"bounds": bounds}, disp=True)
         return ret.x, ret.fun
+
 
 class OptimizerBackendOptuna(OptimizerBackend):
     def __init__(self, optuna_study: Study):
@@ -223,10 +228,11 @@ class BestSample:
     def epoch(self, epoch: int):
         self._epoch = epoch
 
+
 class RayOptimizer:
     def __init__(self, optimizer_backend: OptimizerBackend, criterion, exported_plane: str,
                  engine: RayEngine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
-                 log_times: bool = False):
+                 log_times: bool = False, iterations=1000):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: RayEngine = engine
         self.criterion = criterion
@@ -235,7 +241,7 @@ class RayOptimizer:
         self.logging_backend: LoggingBackend = logging_backend
         self.log_times: bool = log_times
         self.evaluation_counter: int = 0
-        self.iterations: int = 0
+        self.iterations: int = iterations
         self.plot_interval_best: BestSample = BestSample()
         self.overall_best: BestSample = BestSample()
 
@@ -293,7 +299,7 @@ class RayOptimizer:
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
-    def fixed_position_plot(compensated: torch.Tensor, target: torch.Tensor, without_compensation: torch.Tensor, xlim,
+    def fixed_position_plot(compensated: list[torch.Tensor], target: list[torch.Tensor], without_compensation: list[torch.Tensor], xlim,
                             ylim,
                             epoch: Optional[int] = None, plot_limit: Optional[int] = None) -> np.array:
         if plot_limit is None:
@@ -342,7 +348,8 @@ class RayOptimizer:
                 'm*',
                 markersize=20,
                 label='predicted parameters')
-        param_labels = [param_key for param_key, param_value in predicted_params.items() if param_key not in omit_labels]
+        param_labels = [param_key for param_key, param_value in predicted_params.items() if
+                        param_key not in omit_labels]
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
@@ -409,10 +416,14 @@ class RayOptimizer:
                         optimization_target.perturbed_parameters_rays), self.ray_output_to_tensor(
                         optimization_target.initial_parameters_rays), epoch=self.plot_interval_best.epoch)
                     self.logging_backend.image("compensation", compensation_image)
-                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in optimization_target.perturbed_parameters_rays])).item()
-                fixed_position_plot = self.fixed_position_plot(self.plot_interval_best.rays[max_ray_index], self.ray_output_to_tensor(
-                    optimization_target.perturbed_parameters_rays[max_ray_index]), self.ray_output_to_tensor(
-                    optimization_target.initial_parameters_rays[max_ray_index]), epoch=self.plot_interval_best.epoch, xlim=[-3, 3],
+                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in
+                                                           optimization_target.perturbed_parameters_rays])).item()
+                fixed_position_plot = self.fixed_position_plot(self.plot_interval_best.rays[max_ray_index],
+                                                               self.ray_output_to_tensor(
+                                                                   optimization_target.perturbed_parameters_rays[
+                                                                       max_ray_index]), self.ray_output_to_tensor(
+                        optimization_target.initial_parameters_rays[max_ray_index]),
+                                                               epoch=self.plot_interval_best.epoch, xlim=[-3, 3],
                                                                ylim=[-3, 3], plot_limit=1)
                 self.logging_backend.image("fixed_position_plot", fixed_position_plot)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best.params,
@@ -420,13 +431,17 @@ class RayOptimizer:
                                                                         real_params=optimization_target.target_params)
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
                 self.plot_interval_best = BestSample()
-            if self.evaluation_counter == self.iterations:
-                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in optimization_target.perturbed_parameters_rays])).item()
-                fixed_position_plot = self.fixed_position_plot(self.overall_best.rays[max_ray_index], self.ray_output_to_tensor(
-                    optimization_target.perturbed_parameters_rays[max_ray_index]), self.ray_output_to_tensor(
-                    optimization_target.initial_parameters_rays[max_ray_index]), epoch=self.overall_best.epoch, xlim=[-3, 3],
+            if self.evaluation_counter == 0:#self.iterations - 1:
+                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in
+                                                           optimization_target.perturbed_parameters_rays])).item()
+                fixed_position_plot = self.fixed_position_plot(self.overall_best.rays[:][0],
+                                                               self.ray_output_to_tensor(
+                                                                   optimization_target.perturbed_parameters_rays[
+                                                                   :][0]), self.ray_output_to_tensor(
+                        optimization_target.initial_parameters_rays[:][0]), epoch=self.overall_best.epoch,
+                                                               xlim=[-3, 3],
                                                                ylim=[-3, 3])
-                self.logging_backend.image("fixed_position_plot", fixed_position_plot)
+                self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
 
             if self.evaluation_counter == 0:
                 target_tensor = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays)
@@ -485,9 +500,9 @@ class RayOptimizer:
             self.overall_best.rays = output
         return losses, num_rays, losses_mean
 
-    def optimize(self, iterations: int, optimization_target: OptimizationTarget):
+    def optimize(self, optimization_target: OptimizationTarget):
         self.optimizer_backend.setup_optimization()
         best_parameters, metrics = self.optimizer_backend.optimize(objective=self.evaluation_function,
-                                                                   iterations=iterations,
+                                                                   iterations=self.iterations,
                                                                    optimization_target=optimization_target)
         return best_parameters, metrics

@@ -66,7 +66,7 @@ criterion = multi_objective_loss if CFG.MULTI_OBJECTIVE else sinkhorn_loss
 ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=criterion, engine=engine,
                              log_times=True, exported_plane=CFG.EXPORTED_PLANE,
                              transforms=CFG.TRANSFORMS,
-                             logging_backend=WandbLoggingBackend())
+                             logging_backend=WandbLoggingBackend(), iterations=CFG.ITERATIONS)
 
 # target_rays = engine.run(target_params, transforms=transforms)
 # best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
@@ -101,4 +101,4 @@ offset_optimization_target = OffsetOptimizationTarget(perturbed_parameters_rays=
                                                       initial_parameters=initial_parameters,
                                                       initial_parameters_rays=initial_parameters_rays, offset=offset)
 
-ray_optimizer.optimize(optimization_target=offset_optimization_target, iterations=CFG.ITERATIONS)
+ray_optimizer.optimize(optimization_target=offset_optimization_target)
