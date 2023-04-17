@@ -299,26 +299,32 @@ class RayOptimizer:
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
-    def fixed_position_plot(compensated: list[torch.Tensor], target: list[torch.Tensor], without_compensation: list[torch.Tensor], xlim,
+    def fixed_position_plot(compensated: list[torch.Tensor], target: list[torch.Tensor],
+                            without_compensation: list[torch.Tensor], xlim,
                             ylim,
-                            epoch: Optional[int] = None, plot_limit: Optional[int] = None) -> np.array:
-        if plot_limit is None:
-            plot_limit = compensated.shape[0]
-        fig, axs = plt.subplots(plot_limit, 3, squeeze=False)
-        for beamline_idx in range(plot_limit):
-            axs[beamline_idx, 0].scatter(without_compensation[0, :, 0], without_compensation[0, :, 1], s=2.0)
-            axs[beamline_idx, 1].scatter(target[0, :, 0], target[0, :, 1], s=2.0)
-            axs[beamline_idx, 2].scatter(compensated[0, :, 0], compensated[0, :, 1], s=2.0)
+                            epoch: Optional[int] = None) -> np.array:
+        fig, axs = plt.subplots(3, len(compensated), squeeze=False, gridspec_kw={'wspace': 0, 'hspace': 0})
+        for beamline_idx in range(len(compensated)):
+            axs[0, beamline_idx].scatter(without_compensation[beamline_idx][0, :, 0],
+                                         without_compensation[beamline_idx][0, :, 1], s=2.0)
+            axs[1, beamline_idx].scatter(target[beamline_idx][0, :, 0], target[beamline_idx][0, :, 1], s=2.0)
+            axs[2, beamline_idx].scatter(compensated[beamline_idx][0, :, 0], compensated[beamline_idx][0, :, 1], s=2.0)
 
             for i in range(3):
-                axs[beamline_idx, i].set_xlim(xlim)
-                axs[beamline_idx, i].set_ylim(ylim)
-                axs[beamline_idx, i].set_ylabel(['w/o compensation', 'target', 'compensated'][i])
-                axs[beamline_idx, i].xaxis.set_major_locator(plt.NullLocator())
-                axs[beamline_idx, i].yaxis.set_major_locator(plt.NullLocator())
+                axs[i, beamline_idx].set_xlim(xlim)
+                axs[i, beamline_idx].set_ylim(ylim)
+                axs[i, beamline_idx].xaxis.set_major_locator(plt.NullLocator())
+                axs[i, beamline_idx].yaxis.set_major_locator(plt.NullLocator())
+                axs[i, beamline_idx].set_aspect('equal')
+                axs[i, beamline_idx].set_xticklabels([])
+                axs[i, beamline_idx].set_yticklabels([])
+
+        for i in range(3):
+            axs[i, 0].set_ylabel(['w/o compensation', 'target', 'compensated'][i])
         if epoch is not None:
             fig.suptitle('Epoch ' + str(epoch))
-
+        fig.set_size_inches(len(compensated)+2, 3)
+        fig.set_dpi(200)
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -418,13 +424,13 @@ class RayOptimizer:
                     self.logging_backend.image("compensation", compensation_image)
                 max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in
                                                            optimization_target.perturbed_parameters_rays])).item()
-                fixed_position_plot = self.fixed_position_plot(self.plot_interval_best.rays[max_ray_index],
-                                                               self.ray_output_to_tensor(
+                fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
+                                                               [self.ray_output_to_tensor(
                                                                    optimization_target.perturbed_parameters_rays[
-                                                                       max_ray_index]), self.ray_output_to_tensor(
-                        optimization_target.initial_parameters_rays[max_ray_index]),
+                                                                       max_ray_index])], [self.ray_output_to_tensor(
+                        optimization_target.initial_parameters_rays[max_ray_index])],
                                                                epoch=self.plot_interval_best.epoch, xlim=[-3, 3],
-                                                               ylim=[-3, 3], plot_limit=1)
+                                                               ylim=[-3, 3])
                 self.logging_backend.image("fixed_position_plot", fixed_position_plot)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best.params,
                                                                         search_space=optimization_target.search_space,
@@ -434,11 +440,11 @@ class RayOptimizer:
             if self.evaluation_counter == 0:#self.iterations - 1:
                 max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in
                                                            optimization_target.perturbed_parameters_rays])).item()
-                fixed_position_plot = self.fixed_position_plot(self.overall_best.rays[:][0],
-                                                               self.ray_output_to_tensor(
-                                                                   optimization_target.perturbed_parameters_rays[
-                                                                   :][0]), self.ray_output_to_tensor(
-                        optimization_target.initial_parameters_rays[:][0]), epoch=self.overall_best.epoch,
+                best_rays_list = self.overall_best.rays
+                target_perturbed_parameters_rays_list = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays)
+                target_initial_parameters_rays_list = self.ray_output_to_tensor(optimization_target.initial_parameters_rays)
+                fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list, target_initial_parameters_rays_list,
+                                                               epoch=self.overall_best.epoch,
                                                                xlim=[-3, 3],
                                                                ylim=[-3, 3])
                 self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
