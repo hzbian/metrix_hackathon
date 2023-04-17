@@ -320,7 +320,7 @@ class RayOptimizer:
                 axs[i, beamline_idx].set_yticklabels([])
 
         for i in range(3):
-            axs[i, 0].set_ylabel(['w/o compensation', 'target', 'compensated'][i])
+            axs[i, 0].set_ylabel(['w/o comp.', 'target', 'compensated'][i])
         if epoch is not None:
             fig.suptitle('Epoch ' + str(epoch))
         fig.set_size_inches(len(compensated)+2, 3)
@@ -429,24 +429,22 @@ class RayOptimizer:
                                                                    optimization_target.perturbed_parameters_rays[
                                                                        max_ray_index])], [self.ray_output_to_tensor(
                         optimization_target.initial_parameters_rays[max_ray_index])],
-                                                               epoch=self.plot_interval_best.epoch, xlim=[-3, 3],
-                                                               ylim=[-3, 3])
+                                                               epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
+                                                               ylim=[-2, 2])
                 self.logging_backend.image("fixed_position_plot", fixed_position_plot)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best.params,
                                                                         search_space=optimization_target.search_space,
                                                                         real_params=optimization_target.target_params)
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
                 self.plot_interval_best = BestSample()
-            if self.evaluation_counter == 0:#self.iterations - 1:
-                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in
-                                                           optimization_target.perturbed_parameters_rays])).item()
+            if self.evaluation_counter == self.iterations - 1:
                 best_rays_list = self.overall_best.rays
                 target_perturbed_parameters_rays_list = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays)
                 target_initial_parameters_rays_list = self.ray_output_to_tensor(optimization_target.initial_parameters_rays)
                 fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list, target_initial_parameters_rays_list,
                                                                epoch=self.overall_best.epoch,
-                                                               xlim=[-3, 3],
-                                                               ylim=[-3, 3])
+                                                               xlim=[-2, 2],
+                                                               ylim=[-2, 2])
                 self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
 
             if self.evaluation_counter == 0:
