@@ -49,7 +49,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("SphericalGrating.rotationYerror", RandomParameter(value_lims=(-1., 1.), rg=RG)),
     ("SphericalGrating.rotationZerror", RandomParameter(value_lims=(-2.5, 2.5), rg=RG)),
     ("ExitSlit.totalHeight", RandomParameter(value_lims=(0.009, 0.011), rg=RG)),
-    ("ExitSlit.translationZerror", RandomParameter(value_lims=(-29., 31.), rg=RG)),
+    ("ExitSlit.translationZerror", RandomParameter(value_lims=(-30., 30.), rg=RG)),
     ("ExitSlit.rotationZerror", RandomParameter(value_lims=(-0.3, 0.3), rg=RG)),
     ("E1.longHalfAxisA", RandomParameter(value_lims=(20600., 20900.), rg=RG)),
     ("E1.shortHalfAxisB", RandomParameter(value_lims=(300.721702601, 304.721702601), rg=RG)),
