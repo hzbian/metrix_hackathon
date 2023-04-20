@@ -7,7 +7,7 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = '34-parameter-0.1-rayui-TPE-12-Layer-1000-Fixed-Image-Tes-Fixed-Image-Test'#-100-startup-trials-100-ei-samples'
+STUDY_NAME = '34-12-Layer-0.3-TPE-startup_1000'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
@@ -22,7 +22,7 @@ RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', 'optimization')
 # objective
 REAL_DATA_DIR = None
 EXPORTED_PLANE = "ImagePlane"
-MAX_DEVIATION = 0.1
+MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
 Z_LAYERS = [-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
@@ -72,6 +72,6 @@ MULTI_OBJECTIVE = False
 MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
-ITERATIONS = 20
+ITERATIONS = 10000
 OPTIMIZER = 'optuna'
-SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
+SAMPLER = TPESampler(n_startup_trials=1000, n_ei_candidates=24, consider_prior=True) #optuna.samplers.CmaEsSampler()

@@ -15,7 +15,7 @@ from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, 
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from scipy.optimize import basinhopping
-import config.config_optimization_real_data as CFG
+import config.config_optimization_tpe as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
