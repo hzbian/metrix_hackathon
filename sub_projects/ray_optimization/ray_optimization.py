@@ -1,5 +1,5 @@
 import sys
-
+import os
 import optuna
 
 import wandb
@@ -25,8 +25,9 @@ wandb.init(entity=CFG.WANDB_ENTITY,
 
 engine = RayEngine(rml_basefile=CFG.RML_BASEFILE,
                    exported_planes=[CFG.EXPORTED_PLANE],
-                   ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service', docker_container_name=CFG.STUDY_NAME,
-                                                     ray_workdir=CFG.RAY_WORKDIR,
+                   ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                     docker_container_name=CFG.STUDY_NAME,
+                                                     ray_workdir=os.path.join(CFG.RAY_WORKDIR, CFG.STUDY_NAME),
                                                      verbose=CFG.VERBOSE),
                    num_workers=-1,
                    as_generator=False)
@@ -55,7 +56,8 @@ for key, value in all_params.items():
 directions = CFG.MULTI_OBJECTIVE_DIRECTIONS if CFG.MULTI_OBJECTIVE else None
 if CFG.OPTIMIZER == 'optuna':
     optuna_storage_path = CFG.OPTUNA_STORAGE_PATH if CFG.LOGGING else None
-    optuna_study = optuna.create_study(directions=directions, sampler=CFG.SAMPLER, pruner=optuna.pruners.HyperbandPruner(),
+    optuna_study = optuna.create_study(directions=directions, sampler=CFG.SAMPLER,
+                                       pruner=optuna.pruners.HyperbandPruner(),
                                        storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
     optimizer_backend = OptimizerBackendOptuna(optuna_study)
 else:
