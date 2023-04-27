@@ -91,6 +91,27 @@ class RandomParameter(MutableParameter):
         return param
 
 
+class OutputParameter:
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+class RandomOutputParameter(RandomParameter, OutputParameter):
+    """
+    A random parameter that affects only the output of the engine and not its inputs
+    """
+    
+    def clone(self) -> RandomOutputParameter:
+        # Note: the value of the cloned parameter is not resampled but also copied.
+        param = RandomOutputParameter(self.value_lims, rg=self.rg)
+        param.value = self.value
+        return param
+
+class NumericalOutputParameter(NumericalParameter, OutputParameter):
+    def clone(self) -> NumericalOutputParameter:
+       return NumericalOutputParameter(value=self.value)
+
+
 class GridParameter(RayParameter):
     """
     Represents a grid parameter, containing a numpy-array of values.

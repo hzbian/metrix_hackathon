@@ -10,7 +10,8 @@ from optuna import Study
 
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
-from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter
+from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
+    RandomOutputParameter, NumericalOutputParameter, OutputParameter
 
 # from ax.service.ax_client import AxClient
 
@@ -384,8 +385,13 @@ class RayOptimizer:
             evaluation_parameters = [element.clone() for element in optimization_target.initial_parameters]
             for i, perturbed_parameters in enumerate(optimization_target.initial_parameters):
                 for k, v in parameters[0].items():
-                    evaluation_parameters[i][k] = NumericalParameter(
-                        perturbed_parameters[k].get_value() - v.get_value())
+                    if isinstance(v, RandomParameter):
+                        value = perturbed_parameters[k].get_value() - v.get_value()
+                        if isinstance(v, OutputParameter):
+                            evaluation_parameters[i][k] = NumericalOutputParameter(value)
+                        else:
+                            evaluation_parameters[i][k] = NumericalParameter(value)
+
             parameters = evaluation_parameters
 
         begin_execution_time: float = time.time() if self.log_times else None

@@ -9,7 +9,7 @@ from raypyng.xmltools import XmlElement
 
 from . import RayTransformType
 from .backend import RayBackend
-from .parameter import RayParameterContainer
+from .parameter import RayParameterContainer, OutputParameter
 from .transform import RayTransform
 
 
@@ -99,8 +99,9 @@ class RayEngine:
         # write values in param_container to RML template and param_container_dict
         for key, param in param_container.items():
             value = param.get_value()
-            element = self._key_to_element(key, template=template_work)
-            element.cdata = str(value)
+            if not isinstance(param, OutputParameter):
+                element = self._key_to_element(key, template=template_work)
+                element.cdata = str(value)
             result['param_container_dict'][key] = value
 
         # call the backend to perform the run

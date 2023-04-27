@@ -2,16 +2,16 @@ import os
 
 from optuna.samplers import TPESampler
 
-from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter
+from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, RandomOutputParameter
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = '34-12-Layer-0.3-TPE-startup_1000'
+STUDY_NAME = '34-12-v2-Layer-0.3-TPE_consider_prior_false'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-LOGGING = True
+LOGGING = False
 VERBOSE = False
 
 # paths
@@ -65,6 +65,9 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("E2.rotationZerror", RandomParameter(value_lims=(-4, 4), rg=RG)),
     ("E2.translationYerror", RandomParameter(value_lims=(-1, 1), rg=RG)),
     ("E2.translationZerror", RandomParameter(value_lims=(-1, 1), rg=RG)),
+    ("ImagePlane.translationXerror", RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
+    ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
+    ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-1, 1), rg=RG))
 ])
 
 # multi objective
@@ -72,6 +75,6 @@ MULTI_OBJECTIVE = False
 MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
-ITERATIONS = 10000
+ITERATIONS = 1000
 OPTIMIZER = 'optuna'
-SAMPLER = TPESampler(n_startup_trials=1000, n_ei_candidates=24, consider_prior=True) #optuna.samplers.CmaEsSampler()
+SAMPLER = TPESampler(consider_prior=False) #optuna.samplers.CmaEsSampler()

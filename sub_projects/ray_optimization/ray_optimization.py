@@ -76,7 +76,7 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=crit
 # print(best_parameters, metrics)
 
 offset_search_space = lambda: RayParameterContainer(
-    [(k, RandomParameter(
+    [(k, type(v)(
         value_lims=(
             -CFG.MAX_DEVIATION * (v.value_lims[1] - v.value_lims[0]),
             CFG.MAX_DEVIATION * (v.value_lims[1] - v.value_lims[0])),
