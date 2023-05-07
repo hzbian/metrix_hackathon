@@ -213,3 +213,14 @@ class MultiLayer(RayTransform):
             return {key: self.transform(ray_output_) for key, ray_output_ in layers.items()}
         else:
             return layers
+
+
+class Translation(RayTransform):
+    def __init__(self, x_translation, y_translation):
+        self.x_translation = x_translation
+        self.y_translation = y_translation
+
+    def __call__(self, ray_output: RayOutput) -> RayOutput:
+        ray_output.x_loc += self.x_translation
+        ray_output.y_loc += self.y_translation
+        return ray_output
