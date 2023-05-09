@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from ray_nn.utils.ray_processing import HistToPointCloud
 from ray_tools.base.backend import RayOutput
-from ray_tools.base.parameter import RayParameterContainer, MutableParameter
+from ray_tools.base.parameter import RayParameterContainer, MutableParameter, OutputParameter
 
 
 class SampleWeightedHist(torch.nn.Module):
@@ -43,7 +43,7 @@ class SampleWeightedHist(torch.nn.Module):
 def pandas_to_param_container(input_pd, param_container: RayParameterContainer):
     output_param_container = param_container.clone()
     for key, entry in output_param_container.items():
-        if isinstance(entry, MutableParameter):
+        if isinstance(entry, MutableParameter) and not isinstance(entry, OutputParameter):
             value = input_pd[key]
             if value < entry.value_lims[0] or value > entry.value_lims[1]:
                 raise Exception("The provided value %.2f for %s is not within its defined range [%.2f, %.2f] of the ray"

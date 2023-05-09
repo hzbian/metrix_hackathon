@@ -1,13 +1,10 @@
-import sys
 import os
-from typing import List
+import sys
 
 import optuna
 
 import wandb
 from losses import multi_objective_loss, sinkhorn_loss
-from ray_tools.base import RayTransform
-from ray_tools.base.transform import MultiLayer
 from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')
@@ -19,7 +16,7 @@ from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, 
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from scipy.optimize import basinhopping
-import config.config_optimization_tpe as CFG
+import config.config_optimization_real_data as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
@@ -88,15 +85,6 @@ offset_search_space = lambda: RayParameterContainer(
      k, v in
      all_params.items() if isinstance(v, RandomParameter)]
 )
-import copy
-def translate_transform(transforms:List[RayTransform], x_translation, y_translation, z_translation) -> List[RayTransform]:
-    transforms_copy = copy.deepcopy(transforms)
-    for transform in transforms_copy:
-        if isinstance(transform, MultiLayer):
-            transform.dist_layers = [element + z_translation for element in transform.dist_layers]
-
-
-    return
 
 if CFG.REAL_DATA_DIR is None:
     offset = offset_search_space()
@@ -104,13 +92,15 @@ if CFG.REAL_DATA_DIR is None:
     perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in initial_parameters]
     for configuration in perturbed_parameters:
         configuration.perturb(offset)
-    perturbed_parameters_rays = engine.run(perturbed_parameters, transforms=CFG.TRANSFORMS)
+    perturbed_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, perturbed_parameters, CFG.TRANSFORMS)
+    perturbed_parameters_rays = engine.run(perturbed_parameters, transforms=perturbed_transforms)
 else:
     perturbed_parameters_rays = import_data(CFG.REAL_DATA_DIR, CFG.Z_LAYERS, CFG.PARAM_FUNC())
     initial_parameters = [element['param_container_dict'] for element in perturbed_parameters_rays]
     offset = None
 
-initial_parameters_rays = engine.run(initial_parameters, transforms=CFG.TRANSFORMS)
+initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, initial_parameters, CFG.TRANSFORMS)
+initial_parameters_rays = engine.run(initial_parameters, transforms=initial_transforms)
 offset_optimization_target = OffsetOptimizationTarget(perturbed_parameters_rays=perturbed_parameters_rays,
                                                       search_space=offset_search_space(),
                                                       initial_parameters=initial_parameters,

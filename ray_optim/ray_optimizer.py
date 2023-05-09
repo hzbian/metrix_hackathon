@@ -1,3 +1,4 @@
+import copy
 import time
 from abc import ABCMeta, abstractmethod
 from typing import List, Iterable, Union, Dict, Optional, Callable
@@ -12,6 +13,7 @@ from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
     RandomOutputParameter, NumericalOutputParameter, OutputParameter
+from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
 
 # from ax.service.ax_client import AxClient
 
@@ -324,7 +326,7 @@ class RayOptimizer:
             axs[i, 0].set_ylabel(['w/o comp.', 'target', 'compensated'][i])
         if epoch is not None:
             fig.suptitle('Epoch ' + str(epoch))
-        fig.set_size_inches(len(compensated)+2, 3)
+        fig.set_size_inches(len(compensated) + 2, 3)
         fig.set_dpi(200)
         return RayOptimizer.fig_to_image(fig)
 
@@ -338,6 +340,40 @@ class RayOptimizer:
                                                                  value.value_lims[0]) / (value.value_lims[1] -
                                                                                          value.value_lims[0]))
         return normalized_parameters
+
+    @staticmethod
+    def translate_transform(transform: RayTransform, xyz_translation: tuple[float, float, float]) -> RayTransform:
+        transforms_copy = copy.deepcopy(transform)
+        if isinstance(transform, MultiLayer):
+            transform.dist_layers = [element + xyz_translation[1] for element in transform.dist_layers]
+        translation_transform = Translation(xyz_translation[-1], xyz_translation[1])
+        return RayTransformCompose(transforms_copy, translation_transform)
+
+    @staticmethod
+    def get_exported_plane_translation(exported_plane: str, param_container: RayParameterContainer):
+        x_translation: float = -1.
+        y_translation: float = -1.
+        z_translation: float = -1.
+        for key, param in param_container.items():
+            if isinstance(param, OutputParameter) and isinstance(param, RandomParameter):
+                if key.split('.')[-1] == exported_plane:
+                    param_entry = key.split('.')[0]
+                    if param_entry == 'translationXerror':
+                        x_translation = param.value
+                    if param_entry == 'translationYerror':
+                        y_translation = param.value
+                    if param_entry == 'translationZerror':
+                        z_translation = param.value
+        return x_translation, y_translation, z_translation
+
+    @staticmethod
+    def translate_exported_plain_transforms(exported_plane: str, param_container_list: List[RayParameterContainer],
+                                            transform: RayTransform):
+        exported_plane_translations = [RayOptimizer.get_exported_plane_translation(exported_plane, param_container_entry) for
+                                       param_container_entry in param_container_list]
+        transforms = [RayOptimizer.translate_transform(transform, exported_plane_translation) for exported_plane_translation in
+                      exported_plane_translations]
+        return transforms
 
     def plot_param_comparison(self, predicted_params: RayParameterContainer, search_space: RayParameterContainer,
                               real_params: Optional[RayParameterContainer] = None,
@@ -395,7 +431,8 @@ class RayOptimizer:
             parameters = evaluation_parameters
 
         begin_execution_time: float = time.time() if self.log_times else None
-        output = self.engine.run(parameters, transforms=self.transforms)
+        transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane, parameters, self.transforms)
+        output = self.engine.run(parameters, transforms=transforms)
         if self.log_times:
             self.logging_backend.add_to_log({"execution_time": time.time() - begin_execution_time})
 
@@ -419,14 +456,16 @@ class RayOptimizer:
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
                 best_rays_list = self.overall_best.rays
-                target_perturbed_parameters_rays_list = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays)
-                target_initial_parameters_rays_list = self.ray_output_to_tensor(optimization_target.initial_parameters_rays)
-                fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list, target_initial_parameters_rays_list,
+                target_perturbed_parameters_rays_list = self.ray_output_to_tensor(
+                    optimization_target.perturbed_parameters_rays)
+                target_initial_parameters_rays_list = self.ray_output_to_tensor(
+                    optimization_target.initial_parameters_rays)
+                fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list,
+                                                               target_initial_parameters_rays_list,
                                                                epoch=self.overall_best.epoch,
                                                                xlim=[-2, 2],
                                                                ylim=[-2, 2])
                 self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
-
 
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % 10 == 0 for i in current_range]:

@@ -1,5 +1,6 @@
 import os
 import sys
+
 from optuna.samplers import TPESampler
 
 sys.path.insert(0, '../../../')
@@ -8,7 +9,7 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = '34-12-v2-Layer-0.3-TPE_consider_prior_false'
+STUDY_NAME = '34-3-12-v2-Layer-0.3-TPE_consider_prior_false'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
@@ -26,7 +27,7 @@ EXPORTED_PLANE = "ImagePlane"
 MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
 Z_LAYERS = [-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
-TRANSFORMS = [MultiLayer(Z_LAYERS, copy_directions=False)]
+TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
 NUM_BEAMLINE_PARAM_SAMPLES = 22
 FIXED_PARAMS = []
 RG = RandomGenerator(seed=42)
@@ -78,4 +79,4 @@ MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 # optimization
 ITERATIONS = 1000
 OPTIMIZER = 'optuna'
-SAMPLER = TPESampler(consider_prior=False) #optuna.samplers.CmaEsSampler()
+SAMPLER = TPESampler(consider_prior=False)  # optuna.samplers.CmaEsSampler()
