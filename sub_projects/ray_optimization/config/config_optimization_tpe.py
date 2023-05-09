@@ -1,7 +1,8 @@
 import os
-
+import sys
 from optuna.samplers import TPESampler
 
+sys.path.insert(0, '../../../')
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, RandomOutputParameter
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
@@ -25,7 +26,7 @@ EXPORTED_PLANE = "ImagePlane"
 MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
 Z_LAYERS = [-26, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
-TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
+TRANSFORMS = [MultiLayer(Z_LAYERS, copy_directions=False)]
 NUM_BEAMLINE_PARAM_SAMPLES = 22
 FIXED_PARAMS = []
 RG = RandomGenerator(seed=42)

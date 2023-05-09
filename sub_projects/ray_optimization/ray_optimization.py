@@ -1,9 +1,13 @@
 import sys
 import os
+from typing import List
+
 import optuna
 
 import wandb
 from losses import multi_objective_loss, sinkhorn_loss
+from ray_tools.base import RayTransform
+from ray_tools.base.transform import MultiLayer
 from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')
@@ -84,6 +88,15 @@ offset_search_space = lambda: RayParameterContainer(
      k, v in
      all_params.items() if isinstance(v, RandomParameter)]
 )
+import copy
+def translate_transform(transforms:List[RayTransform], x_translation, y_translation, z_translation) -> List[RayTransform]:
+    transforms_copy = copy.deepcopy(transforms)
+    for transform in transforms_copy:
+        if isinstance(transform, MultiLayer):
+            transform.dist_layers = [element + z_translation for element in transform.dist_layers]
+
+
+    return
 
 if CFG.REAL_DATA_DIR is None:
     offset = offset_search_space()
