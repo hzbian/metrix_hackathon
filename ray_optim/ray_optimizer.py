@@ -351,13 +351,13 @@ class RayOptimizer:
 
     @staticmethod
     def get_exported_plane_translation(exported_plane: str, param_container: RayParameterContainer):
-        x_translation: float = -1.
-        y_translation: float = -1.
-        z_translation: float = -1.
+        x_translation: float = 0.
+        y_translation: float = 0.
+        z_translation: float = 0.
         for key, param in param_container.items():
             if isinstance(param, OutputParameter) and isinstance(param, RandomParameter):
-                if key.split('.')[-1] == exported_plane:
-                    param_entry = key.split('.')[0]
+                if key.split('.')[0] == exported_plane:
+                    param_entry = key.split('.')[-1]
                     if param_entry == 'translationXerror':
                         x_translation = param.value
                     if param_entry == 'translationYerror':
@@ -373,6 +373,7 @@ class RayOptimizer:
                                        param_container_entry in param_container_list]
         transforms = [RayOptimizer.translate_transform(transform, exported_plane_translation) for exported_plane_translation in
                       exported_plane_translations]
+        print([exported_plane_translation for exported_plane_translation in exported_plane_translations])
         return transforms
 
     def plot_param_comparison(self, predicted_params: RayParameterContainer, search_space: RayParameterContainer,
