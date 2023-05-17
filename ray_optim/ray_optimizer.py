@@ -12,7 +12,7 @@ from optuna import Study
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
-    RandomOutputParameter, NumericalOutputParameter, OutputParameter
+    NumericalOutputParameter, OutputParameter
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
 
 # from ax.service.ax_client import AxClient
@@ -355,7 +355,7 @@ class RayOptimizer:
         y_translation: float = 0.
         z_translation: float = 0.
         for key, param in param_container.items():
-            if isinstance(param, OutputParameter) and isinstance(param, RandomParameter):
+            if isinstance(param, OutputParameter) and isinstance(param, NumericalParameter):
                 if key.split('.')[0] == exported_plane:
                     param_entry = key.split('.')[-1]
                     if param_entry == 'translationXerror':
@@ -369,11 +369,12 @@ class RayOptimizer:
     @staticmethod
     def translate_exported_plain_transforms(exported_plane: str, param_container_list: List[RayParameterContainer],
                                             transform: RayTransform):
-        exported_plane_translations = [RayOptimizer.get_exported_plane_translation(exported_plane, param_container_entry) for
-                                       param_container_entry in param_container_list]
-        transforms = [RayOptimizer.translate_transform(transform, exported_plane_translation) for exported_plane_translation in
+        exported_plane_translations = [
+            RayOptimizer.get_exported_plane_translation(exported_plane, param_container_entry) for
+            param_container_entry in param_container_list]
+        transforms = [RayOptimizer.translate_transform(transform, exported_plane_translation) for
+                      exported_plane_translation in
                       exported_plane_translations]
-        print([exported_plane_translation for exported_plane_translation in exported_plane_translations])
         return transforms
 
     def plot_param_comparison(self, predicted_params: RayParameterContainer, search_space: RayParameterContainer,
@@ -410,6 +411,20 @@ class RayOptimizer:
             y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
             return torch.stack((x_locs, y_locs), -1)
 
+    @staticmethod
+    def get_evaluation_parameters(initial_parameters: List[RayParameterContainer], parameters) -> List[
+        RayParameterContainer]:
+        evaluation_parameters = [element.clone() for element in initial_parameters]
+        for i, perturbed_parameters in enumerate(initial_parameters):
+            for k, v in parameters[0].items():
+                if isinstance(perturbed_parameters[k], RandomParameter):
+                    value = perturbed_parameters[k].get_value() - v.get_value()
+                    if isinstance(perturbed_parameters[k], OutputParameter):
+                        evaluation_parameters[i][k] = NumericalOutputParameter(value)
+                    else:
+                        evaluation_parameters[i][k] = NumericalParameter(value)
+        return evaluation_parameters
+
     def evaluation_function(self, parameters, optimization_target: OptimizationTarget) -> dict:
         begin_total_time: float = time.time() if self.log_times else None
         if not isinstance(parameters, list):
@@ -419,17 +434,7 @@ class RayOptimizer:
         initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
-            evaluation_parameters = [element.clone() for element in optimization_target.initial_parameters]
-            for i, perturbed_parameters in enumerate(optimization_target.initial_parameters):
-                for k, v in parameters[0].items():
-                    if isinstance(v, RandomParameter):
-                        value = perturbed_parameters[k].get_value() - v.get_value()
-                        if isinstance(v, OutputParameter):
-                            evaluation_parameters[i][k] = NumericalOutputParameter(value)
-                        else:
-                            evaluation_parameters[i][k] = NumericalParameter(value)
-
-            parameters = evaluation_parameters
+            parameters = RayOptimizer.get_evaluation_parameters(optimization_target.initial_parameters, parameters)
 
         begin_execution_time: float = time.time() if self.log_times else None
         transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane, parameters, self.transforms)

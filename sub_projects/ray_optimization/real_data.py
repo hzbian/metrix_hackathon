@@ -43,7 +43,9 @@ class SampleWeightedHist(torch.nn.Module):
 def pandas_to_param_container(input_pd, param_container: RayParameterContainer):
     output_param_container = param_container.clone()
     for key, entry in output_param_container.items():
-        if isinstance(entry, MutableParameter) and not isinstance(entry, OutputParameter):
+        if isinstance(entry, MutableParameter):
+            if key not in input_pd.keys():
+                raise Exception("Could not find an entry for the defined parameter %s in the parameter file."%key)
             value = input_pd[key]
             if value < entry.value_lims[0] or value > entry.value_lims[1]:
                 raise Exception("The provided value %.2f for %s is not within its defined range [%.2f, %.2f] of the ray"
