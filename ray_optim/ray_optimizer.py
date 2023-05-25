@@ -345,8 +345,8 @@ class RayOptimizer:
     def translate_transform(transform: RayTransform, xyz_translation: tuple[float, float, float]) -> RayTransform:
         transforms_copy = copy.deepcopy(transform)
         if isinstance(transform, MultiLayer):
-            transform.dist_layers = [element + xyz_translation[1] for element in transform.dist_layers]
-        translation_transform = Translation(xyz_translation[-1], xyz_translation[1])
+            transforms_copy.dist_layers = [element + xyz_translation[2] for element in transform.dist_layers]
+        translation_transform = Translation(xyz_translation[0], xyz_translation[1])
         return RayTransformCompose(transforms_copy, translation_transform)
 
     @staticmethod
