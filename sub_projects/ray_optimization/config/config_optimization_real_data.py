@@ -27,7 +27,6 @@ N_RAYS = ['1e4']
 Z_LAYERS = [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
 NUM_BEAMLINE_PARAM_SAMPLES = 22
-FIXED_PARAMS = []
 RG = RandomGenerator(seed=42)
 PARAM_FUNC = lambda: RayParameterContainer([
     ("U41_318eV.numberRays", NumericalParameter(value=1e4)),
@@ -65,10 +64,11 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("E2.rotationZerror", RandomParameter(value_lims=(22., 32.), rg=RG)),
     ("E2.translationYerror", RandomParameter(value_lims=(-1, 1), rg=RG)),
     ("E2.translationZerror", RandomParameter(value_lims=(-1, 1), rg=RG)),
-   # ("ImagePlane.translationXerror", RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
-   # ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
-   # ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
+    ("ImagePlane.translationXerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
+    ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
+    ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
 ])
+FIXED_PARAMS = [k for k in PARAM_FUNC().keys()][1:-3]
 
 # multi objective
 MULTI_OBJECTIVE = False
