@@ -7,7 +7,7 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = 'real-data-test-0.3-new-no-trans-xyz-v4'
+STUDY_NAME = '37-real-data-0.3-tpe'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
@@ -68,7 +68,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
     ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
 ])
-FIXED_PARAMS = [k for k in PARAM_FUNC().keys()][1:-3]
+FIXED_PARAMS = []#[k for k in PARAM_FUNC().keys()][1:-3]
 
 # multi objective
 MULTI_OBJECTIVE = False
