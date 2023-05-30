@@ -89,12 +89,12 @@ class RayBackendDockerRAYUI(RayBackend):
         # if container already exists, stop and remove it
         try:
             self.docker_container = self.client.containers.get(self.docker_container_name)
-            #print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
-            #self.docker_container.stop()
-            #try:
-            #    self.docker_container.remove()
-            #except docker.errors.APIError:
-            #    pass
+            print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
+            self.docker_container.stop()
+            try:
+                self.docker_container.remove()
+            except docker.errors.APIError:
+                pass
         except docker.errors.NotFound:
             pass
 
@@ -105,7 +105,8 @@ class RayBackendDockerRAYUI(RayBackend):
         Send kill signal to docker container.
         """
         try:
-            self.docker_container.kill()
+            #self.docker_container.kill()
+            print("Kill")
         except docker.errors.NotFound:
             pass
 
@@ -142,18 +143,22 @@ class RayBackendDockerRAYUI(RayBackend):
 
 
         for run in range(self.max_retry + 1):
+            docker_command = "docker run -v "+self.ray_workdir+':'+self._rayui_workdir+':rw ray-ui-service ray-ui -m '+docker_rml_workfile+' '+cmd_exported_planes+' RawRaysBeam'
+            #os.system(docker_command)
+            print(docker_command)
             self.docker_container = self.client.containers.run(
                 self.docker_image,
-                name=self.docker_container_name,
+                name=self.docker_container_name+run_id,
                 volumes={self.ray_workdir: {'bind': self._rayui_workdir, 'mode': 'rw'}},  # mount Ray-UI workdir
                 detach=False,
                 auto_remove=True,  # remove container after kill or stop
-                command=['ray-ui', '-m', docker_rml_workfile, cmd_exported_planes]
+                entrypoint=['ray-ui', '-m', docker_rml_workfile, 'ImagePlane', 'RawRaysBeam']
             )
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
                 if not os.path.isfile(os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\","/")):
+                    print('Could not find' + os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv'))
                     retry = True
             if not retry:
                 break
@@ -246,7 +251,8 @@ class RayBackendPodmanRAYUI(RayBackend):
         Send kill signal to docker container.
         """
         try:
-            self.docker_container.kill()
+            #self.docker_container.kill()
+            print("Kill")
         except docker.errors.NotFound:
             pass
 
