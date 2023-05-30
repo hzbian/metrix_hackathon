@@ -89,25 +89,16 @@ class RayBackendDockerRAYUI(RayBackend):
         # if container already exists, stop and remove it
         try:
             self.docker_container = self.client.containers.get(self.docker_container_name)
-            print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
-            self.docker_container.stop()
-            try:
-                self.docker_container.remove()
-            except docker.errors.APIError:
-                pass
+            #print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
+            #self.docker_container.stop()
+            #try:
+            #    self.docker_container.remove()
+            #except docker.errors.APIError:
+            #    pass
         except docker.errors.NotFound:
             pass
 
-        # create local Ray-UI workdir (should be done before mounting docker directory below)
-        os.makedirs(self.ray_workdir, exist_ok=True)
 
-        self.docker_container = self.client.containers.run(
-            self.docker_image,
-            name=self.docker_container_name,
-            volumes={self.ray_workdir: {'bind': self._rayui_workdir, 'mode': 'rw'}},  # mount Ray-UI workdir
-            detach=True,  # run in background
-            auto_remove=True,  # remove container after kill or stop
-        )
 
     def kill(self):
         """
@@ -130,13 +121,15 @@ class RayBackendDockerRAYUI(RayBackend):
         if run_id is None:
             run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
 
+        # create local Ray-UI workdir (should be done before mounting docker directory below)
+        os.makedirs(self.ray_workdir, exist_ok=True)
+
         # create sub-workdir (required for multi-threading with Ray-UI)
         run_workdir = os.path.join(self.ray_workdir, run_id)
         os.makedirs(run_workdir, exist_ok=True)
 
         tic = time.perf_counter()
-
-        # create RML-file for this run
+       # create RML-file for this run
         rml_workfile = os.path.join(run_workdir, 'workfile.rml')
         raypyng_rml.write(rml_workfile)
 
@@ -146,9 +139,16 @@ class RayBackendDockerRAYUI(RayBackend):
         # argument for planes to be exported
         cmd_exported_planes = " ".join("\"" + plane + "\"" for plane in exported_planes)
         # run Ray-UI background mode in docker and retry if it failes
+
+
         for run in range(self.max_retry + 1):
-            self.docker_container.exec_run(
-                cmd=f"python /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
+            self.docker_container = self.client.containers.run(
+                self.docker_image,
+                name=self.docker_container_name,
+                volumes={self.ray_workdir: {'bind': self._rayui_workdir, 'mode': 'rw'}},  # mount Ray-UI workdir
+                detach=False,
+                auto_remove=True,  # remove container after kill or stop
+                command=['ray-ui', '-m', docker_rml_workfile, cmd_exported_planes]
             )
             retry = False
             # fail indicator: any required CSV-file is missing
