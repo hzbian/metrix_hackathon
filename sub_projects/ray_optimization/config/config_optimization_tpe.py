@@ -11,8 +11,8 @@ STUDY_NAME = '37-real-data-0.3-tpe'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-LOGGING = True
-VERBOSE = False
+LOGGING = False
+VERBOSE = True
 
 # paths
 ROOT_DIR = '../../'
