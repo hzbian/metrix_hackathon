@@ -1,6 +1,6 @@
 import copy
 import time
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, ABC
 from typing import List, Iterable, Union, Dict, Optional, Callable
 
 import numpy as np
@@ -16,6 +16,10 @@ from ray_tools.base.parameter import RayParameterContainer, MutableParameter, Nu
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
 
 # from ax.service.ax_client import AxClient
+from evotorch.core import BoundsPair
+from evotorch import Problem
+from evotorch.algorithms import SNES
+from evotorch.logging import StdOutLogger
 
 plt.switch_backend('Agg')
 
@@ -73,13 +77,41 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
         optimize_parameters = optimization_target.search_space.copy()
         x0 = []
         bounds = []
-        for key, value in optimize_parameters.items():
+        for _, value in optimize_parameters.items():
             if isinstance(value, MutableParameter):
                 bounds.append([value.value_lims[0], value.value_lims[1]])
                 x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
         ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0,
                                          niter=iterations, minimizer_kwargs={"bounds": bounds}, disp=True)
         return ret.x, ret.fun
+
+
+class OptimizerBackendEvoTorch(OptimizerBackend):
+    def setup_optimization(self):
+        pass
+
+    def optimize(self, objective: Callable, iterations: int, optimization_target: OptimizationTarget):
+        optimize_parameters = optimization_target.search_space.copy()
+        bounds = []
+        for value in optimize_parameters.values():
+            if isinstance(value, MutableParameter):
+                bounds.append(BoundsPair(value.value_lims[0], value.value_lims[1]))
+        problem = Problem("min", self.evotorch_objective(objective, optimization_target), solution_length=len(bounds),
+                          initial_bounds=(-1,1), vectorized=True)
+        searcher = SNES(problem, popsize=1000, stdev_init=10.0)
+        _ = StdOutLogger(searcher, interval=50)
+        searcher.run(iterations)
+
+    def evotorch_objective(self, objective, optimization_target: OptimizationTarget):
+        def output_objective(input: torch.Tensor):
+            optimize_parameters = optimization_target.search_space.copy()
+            for i, (key, value) in enumerate(optimize_parameters.items()):
+                if isinstance(value, MutableParameter):
+                    optimize_parameters[key] = NumericalParameter(input[i])
+            output = objective(optimize_parameters, optimization_target=optimization_target)
+            return tuple(value.mean().item() for value in output[min(output.keys())])
+
+        return output_objective
 
 
 class OptimizerBackendOptuna(OptimizerBackend):

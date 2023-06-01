@@ -13,7 +13,7 @@ import docker
 import docker.errors
 import docker.types
 
-import podman
+#import podman
 
 import h5py
 import numpy as np
@@ -89,12 +89,10 @@ class RayBackendDockerRAYUI(RayBackend):
         self._rayui_workdir = '/opt/ray-ui-workdir'
 
         self.client = docker.from_env()
-        self.client = podman.PodmanClient()
+        #self.client = podman.PodmanClient()
 
         if dockerfile_path is not None:
-            file = open(os.path.join(dockerfile_path, 'Dockerfile'), 'r')
-            print(file.read())
-            self.client.images.build(fileobj=file, tag=self.docker_image)
+            self.client.images.build(path=dockerfile_path, tag=self.docker_image)
         # if container already exists, stop and remove it
         try:
             self.docker_container = self.client.containers.get(self.docker_container_name)
@@ -226,7 +224,7 @@ class RayBackendPodmanRAYUI(RayBackend):
         self._rayui_workdir = '/opt/ray-ui-workdir'
 
         self.client = docker.from_env()
-        self.client = podman.PodmanClient(base_url='npipe:////./pipe/podman-machine-default')
+        #self.client = podman.PodmanClient(base_url='npipe:////./pipe/podman-machine-default')
         #self.client = podman.PodmanClient(base_url="unix:////run/user/1003/podman/podman.sock")
 
         # if container already exists, stop and remove it

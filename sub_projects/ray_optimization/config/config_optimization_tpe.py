@@ -12,7 +12,7 @@ WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
 LOGGING = False
-VERBOSE = True
+VERBOSE = False
 
 # paths
 ROOT_DIR = '../../'
@@ -76,5 +76,5 @@ MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
 ITERATIONS = 1000
-OPTIMIZER = 'optuna'
+OPTIMIZER = 'evotorch'
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()

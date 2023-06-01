@@ -9,7 +9,7 @@ from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')
 from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
-    OffsetOptimizationTarget, OptimizerBackendBasinhopping
+    OffsetOptimizationTarget, OptimizerBackendBasinhopping, OptimizerBackendEvoTorch
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
     RayParameter
@@ -62,6 +62,8 @@ if CFG.OPTIMIZER == 'optuna':
                                        pruner=optuna.pruners.HyperbandPruner(),
                                        storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
     optimizer_backend = OptimizerBackendOptuna(optuna_study)
+elif CFG.OPTIMIZER == 'evotorch':
+    optimizer_backend = OptimizerBackendEvoTorch()
 else:
     optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
 
