@@ -72,6 +72,7 @@ class RayBackendTest(unittest.TestCase):
         engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
                            exported_planes=self.exported_planes,
                            ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                             dockerfile_path='../../ray_docker/rayui2',
                                                              docker_container_name='ray-ui-service-test',
                                                              ray_workdir='../../ray_workdir',
                                                              verbose=True),

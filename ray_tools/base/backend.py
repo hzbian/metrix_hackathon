@@ -72,6 +72,7 @@ class RayBackendDockerRAYUI(RayBackend):
     def __init__(self,
                  docker_image: str,
                  ray_workdir: str,
+                 dockerfile_path: str = None,
                  docker_container_name: str = None,
                  max_retry: int = 1000,
                  verbose=True) -> None:
@@ -79,13 +80,21 @@ class RayBackendDockerRAYUI(RayBackend):
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
         self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + '_backend'
+        self.dockerfile_path = dockerfile_path
         self.max_retry = max_retry
         self.verbose = verbose
+        self.container_system = "podman"
 
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
 
         self.client = docker.from_env()
+        self.client = podman.PodmanClient()
+
+        if dockerfile_path is not None:
+            file = open(os.path.join(dockerfile_path, 'Dockerfile'), 'r')
+            print(file.read())
+            self.client.images.build(fileobj=file, tag=self.docker_image)
         # if container already exists, stop and remove it
         try:
             self.docker_container = self.client.containers.get(self.docker_container_name)
@@ -107,6 +116,7 @@ class RayBackendDockerRAYUI(RayBackend):
             volumes={self.ray_workdir: {'bind': self._rayui_workdir, 'mode': 'rw'}},  # mount Ray-UI workdir
             detach=True,  # run in background
             auto_remove=True,  # remove container after kill or stop
+            entrypoint=["tail", "-f", "/dev/null"],
         )
 
     def kill(self):
@@ -114,7 +124,8 @@ class RayBackendDockerRAYUI(RayBackend):
         Send kill signal to docker container.
         """
         try:
-            self.docker_container.kill()
+            if self.container_system == 'docker':
+                self.docker_container.kill()
         except docker.errors.NotFound:
             pass
 
@@ -148,7 +159,7 @@ class RayBackendDockerRAYUI(RayBackend):
         # run Ray-UI background mode in docker and retry if it failes
         for run in range(self.max_retry + 1):
             self.docker_container.exec_run(
-                cmd=f"python /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
+                cmd=f"python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
             )
             retry = False
             # fail indicator: any required CSV-file is missing

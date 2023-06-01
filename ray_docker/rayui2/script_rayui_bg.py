@@ -1,7 +1,6 @@
 import os
 import subprocess
 import argparse
-from typing import List
 
 
 # HOW TO use: python3 script_rayui_bg.py /pfad/test.rml -p TestPlane TestPlane2
@@ -23,14 +22,13 @@ if __name__ == "__main__":
                         required=False)
     args = parser.parse_args()
     rml_workfile: str = args.rml_workfile
-    exported_planes: List[str] = args.exported_planes
-    proc = subprocess.Popen('/home/user/RAY/build/build-Ray-UI-Linux---Qt_6_4_0-GCC_64bit-Release/Ray-UI -b', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    proc = subprocess.Popen('ray-ui -b', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
     workdir = os.path.dirname(rml_workfile)
 
     query('load ' + rml_workfile, proc)
     query("trace noanalyze", proc)
-    for exported_plane in exported_planes:
+    for exported_plane in args.exported_planes:
         query("export \"" + exported_plane + "\" \"RawRaysBeam\" " + workdir, proc)
     query("quit", proc)
     proc.stdin.close()
