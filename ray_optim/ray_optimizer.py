@@ -98,7 +98,7 @@ class OptimizerBackendEvoTorch(OptimizerBackend):
                 bounds.append(BoundsPair(value.value_lims[0], value.value_lims[1]))
         problem = Problem("min", self.evotorch_objective(objective, optimization_target), solution_length=len(bounds),
                           initial_bounds=(-1,1), vectorized=True)
-        searcher = SNES(problem, popsize=1000, stdev_init=10.0)
+        searcher = SNES(problem, popsize=1, stdev_init=10.0)
         _ = StdOutLogger(searcher, interval=50)
         searcher.run(iterations)
 
@@ -107,9 +107,9 @@ class OptimizerBackendEvoTorch(OptimizerBackend):
             optimize_parameters = optimization_target.search_space.copy()
             for i, (key, value) in enumerate(optimize_parameters.items()):
                 if isinstance(value, MutableParameter):
-                    optimize_parameters[key] = NumericalParameter(input[i])
+                    optimize_parameters[key] = NumericalParameter(input[0][i].item())
             output = objective(optimize_parameters, optimization_target=optimization_target)
-            return tuple(value.mean().item() for value in output[min(output.keys())])
+            return output[min(output.keys())][0].mean().unsqueeze(0)
 
         return output_objective
 
