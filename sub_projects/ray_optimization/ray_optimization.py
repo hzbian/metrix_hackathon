@@ -98,9 +98,10 @@ if CFG.REAL_DATA_DIR is None:
     perturbed_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, perturbed_parameters, CFG.TRANSFORMS)
     perturbed_parameters_rays = engine.run(perturbed_parameters, transforms=perturbed_transforms)
 else:
-    perturbed_parameters_rays = import_data(CFG.REAL_DATA_DIR, CFG.Z_LAYERS, CFG.PARAM_FUNC())
+    perturbed_parameters_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(), check_value_lims=True)
     initial_parameters = [element['param_container_dict'] for element in perturbed_parameters_rays]
     offset = None
+    validation_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_VALIDATION_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(), check_value_lims=False)
 
 initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, initial_parameters, CFG.TRANSFORMS)
 initial_parameters_rays = engine.run(initial_parameters, transforms=initial_transforms)

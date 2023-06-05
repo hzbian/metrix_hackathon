@@ -25,7 +25,8 @@ class SampleWeightedHist(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int, fill=True) -> Tuple[torch.Tensor, ...]:
+    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int, fill=True) -> Tuple[
+        torch.Tensor, ...]:
         rays_per_weights = num_rays / pc_weights.sum(dim=1)
         repetitions = (pc_weights * rays_per_weights).floor().int()[0]
         residuum = (pc_weights * rays_per_weights)[0] - repetitions
@@ -40,22 +41,24 @@ class SampleWeightedHist(torch.nn.Module):
         return out
 
 
-def pandas_to_param_container(input_pd, param_container: RayParameterContainer):
+def pandas_to_param_container(input_pd, param_container: RayParameterContainer, check_value_lims: bool = True):
     output_param_container = param_container.clone()
     for key, entry in output_param_container.items():
         if isinstance(entry, MutableParameter):
             if key not in input_pd.keys():
-                raise Exception("Could not find an entry for the defined parameter %s in the parameter file."%key)
+                raise Exception("Could not find an entry for the defined parameter %s in the parameter file." % key)
             value = input_pd[key]
-            if value < entry.value_lims[0] or value > entry.value_lims[1]:
-                raise Exception("The provided value %.2f for %s is not within its defined range [%.2f, %.2f] of the ray"
-                                "parameter container." % (value, key, entry.value_lims[0], entry.value_lims[1]))
+            if check_value_lims:
+                if value < entry.value_lims[0] or value > entry.value_lims[1]:
+                    raise Exception(
+                        "The provided value %.2f for %s is not within its defined range [%.2f, %.2f] of the ray"
+                        "parameter container." % (value, key, entry.value_lims[0], entry.value_lims[1]))
             entry.value = value
 
     return output_param_container
 
 
-def import_data(real_data_dir, included_z_layers, param_container):
+def import_data(real_data_dir, imported_measurements, included_z_layers, param_container, check_value_lims=True):
     transform = HistToPointCloud()
     transform_weight = SampleWeightedHist()
     parameters = pd.read_csv(os.path.join(real_data_dir, 'parameters.csv'), index_col=0)
@@ -64,9 +67,11 @@ def import_data(real_data_dir, included_z_layers, param_container):
     output_list = []
     for subdir, dirs, files in tqdm(os.walk(real_data_dir)):
         measurement_name = os.path.basename(os.path.normpath(subdir))[:3]
+        if measurement_name not in imported_measurements:
+            continue
         if measurement_name not in parameters.keys():
             continue
-        output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container)}
+        output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container, check_value_lims=check_value_lims)}
         z_direction_dict = {}
         for file in files:
             if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
@@ -85,7 +90,8 @@ def import_data(real_data_dir, included_z_layers, param_container):
                                            num_rays=1000)
                 ray_output = RayOutput(x_loc=scatter[0, :, 0].float().numpy(), y_loc=scatter[0, :, 1].float().numpy(),
                                        z_loc=np.array([], dtype=float), y_dir=np.array([], dtype=float),
-                                       x_dir=np.array([], dtype=float), z_dir=np.array([], dtype=float), energy=np.array([], dtype=float))
+                                       x_dir=np.array([], dtype=float), z_dir=np.array([], dtype=float),
+                                       energy=np.array([], dtype=float))
                 z_layer_id = file[:-4]
                 if int(z_layer_id) in included_z_layers:
                     z_direction_dict[z_layer_id] = ray_output

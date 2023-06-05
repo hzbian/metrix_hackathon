@@ -7,7 +7,7 @@ from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
 # logging
-STUDY_NAME = '37-real-data-0.3-tpe'
+STUDY_NAME = '37-real-data-0.3-ea'
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
@@ -20,7 +20,13 @@ RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLea
 RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', 'optimization')
 
 # objective
-REAL_DATA_DIR = '../../datasets/metrix_real_data/2021_march_selected'
+
+## real data
+REAL_DATA_DIR = '../../datasets/metrix_real_data/2021_march_complete'
+REAL_DATA_TRAIN_SET = ['M03', 'M10', 'M18', 'M22', 'M23', 'M24', 'M25', 'M27', 'M28', 'M29', 'M30', 'M32', 'M33', 'M36',
+                       'M37', 'M40', 'M41', 'M42', 'M43', 'M44']
+REAL_DATA_VALIDATION_SET = ['M04', 'M05', 'M06', 'M07', 'M08', 'M09', 'M11', 'M12', 'M13', 'M14', 'M15', 'M16', 'M17',
+                            'M18', 'M19', 'M20', 'M21', 'M26', 'M31', 'M34', 'M35', 'M38', 'M39']
 EXPORTED_PLANE = "ImagePlane"
 MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
@@ -68,7 +74,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
     ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
 ])
-FIXED_PARAMS = []#[k for k in PARAM_FUNC().keys()][1:-3]
+FIXED_PARAMS = []  # [k for k in PARAM_FUNC().keys()][1:-3]
 
 # multi objective
 MULTI_OBJECTIVE = False
