@@ -15,7 +15,7 @@ from ray_tools.base.parameter import RayParameterContainer, MutableParameter, Nu
     NumericalOutputParameter, OutputParameter
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
 
-# from ax.service.ax_client import AxClient
+from ax.service.ax_client import AxClient
 from evotorch.core import BoundsPair
 from evotorch import Problem
 from evotorch.algorithms import SNES
@@ -38,10 +38,14 @@ class OffsetOptimizationTarget(OptimizationTarget):
                  search_space: RayParameterContainer,
                  initial_parameters: List[RayParameterContainer],
                  initial_parameters_rays: Union[dict, Iterable[dict], List[dict]],
-                 offset: Optional[RayParameterContainer] = None):
+                 offset: Optional[RayParameterContainer] = None,
+                 validation_parameters_rays: Optional[List[RayParameterContainer]] = None,
+                 validation_rays: Optional[Union[dict, Iterable[dict], List[dict]]] = None):
         super().__init__(perturbed_parameters_rays, search_space, offset)
         self.initial_parameters: List[RayParameterContainer] = initial_parameters
         self.initial_parameters_rays = initial_parameters_rays
+        self.validation_parameters_rays = validation_parameters_rays
+        self.validation_rays = validation_rays
 
 
 class OptimizerBackend(metaclass=ABCMeta):
@@ -97,7 +101,7 @@ class OptimizerBackendEvoTorch(OptimizerBackend):
             if isinstance(value, MutableParameter):
                 bounds.append(BoundsPair(value.value_lims[0], value.value_lims[1]))
         problem = Problem("min", self.evotorch_objective(objective, optimization_target), solution_length=len(bounds),
-                          initial_bounds=(-1,1), vectorized=True)
+                          initial_bounds=(-1, 1), vectorized=True)
         searcher = SNES(problem, popsize=1, stdev_init=10.0)
         _ = StdOutLogger(searcher, interval=50)
         searcher.run(iterations)
@@ -505,6 +509,17 @@ class RayOptimizer:
                                                                ylim=[-2, 2])
                 self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
 
+                if optimization_target.validation_rays is not None:
+                    validation_rays_list = self.ray_output_to_tensor(
+                        optimization_target.validation_rays)
+                    validation_parameters_rays_list = self.ray_output_to_tensor(
+                        optimization_target.validation_parameters_rays)
+                    validation_fixed_position_plot = self.fixed_position_plot(best_rays_list, validation_rays_list,
+                                                                              validation_parameters_rays_list,
+                                                                              epoch=self.overall_best.epoch,
+                                                                              xlim=[-2, 2],
+                                                                              ylim=[-2, 2])
+                    self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % 10 == 0 for i in current_range]:
                 image = self.plot_data(self.plot_interval_best.rays, epoch=self.plot_interval_best.epoch)
