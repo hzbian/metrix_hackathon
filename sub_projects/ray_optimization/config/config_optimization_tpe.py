@@ -6,13 +6,6 @@ from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, 
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
-# logging
-STUDY_NAME = '37-real-data-0.3-ea'
-WANDB_ENTITY = 'hzb-aos'
-WANDB_PROJECT = 'metrix_hackathon_offsets'
-OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-LOGGING = False
-VERBOSE = False
 
 # paths
 ROOT_DIR = '../../'
@@ -82,5 +75,13 @@ MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
 ITERATIONS = 1000
-OPTIMIZER = 'evotorch'
+OPTIMIZER = ['optuna', 'evotorch'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
+
+# logging
+STUDY_NAME = '-'.join([str(len(PARAM_FUNC())-len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', OPTIMIZER, 'v3'])
+WANDB_ENTITY = 'hzb-aos'
+WANDB_PROJECT = 'metrix_hackathon_offsets'
+OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
+LOGGING = True
+VERBOSE = False
