@@ -24,6 +24,15 @@ from evotorch.logging import StdOutLogger
 plt.switch_backend('Agg')
 
 
+class RayScan:
+    def __init__(self, uncompensated_parameters: List[RayParameterContainer],
+               uncompensated_rays: Union[dict, Iterable[dict], List[dict]],
+               observed_rays: Union[dict, Iterable[dict], List[dict]]):
+        self.uncompensated_parameters: List[RayParameterContainer] = uncompensated_parameters
+        self.uncompensated_rays: Union[dict, Iterable[dict], List[dict]] = uncompensated_rays
+        self.observed_rays: Union[dict, Iterable[dict], List[dict]] = observed_rays
+
+
 class OptimizationTarget:
     def __init__(self, perturbed_parameters_rays: Union[dict, Iterable[dict], List[dict]],
                  search_space: RayParameterContainer,
@@ -39,13 +48,11 @@ class OffsetOptimizationTarget(OptimizationTarget):
                  initial_parameters: List[RayParameterContainer],
                  initial_parameters_rays: Union[dict, Iterable[dict], List[dict]],
                  offset: Optional[RayParameterContainer] = None,
-                 validation_parameters_rays: Optional[List[RayParameterContainer]] = None,
-                 validation_rays: Optional[Union[dict, Iterable[dict], List[dict]]] = None):
+                 validation_scan: Optional[RayScan] = None):
         super().__init__(perturbed_parameters_rays, search_space, offset)
         self.initial_parameters: List[RayParameterContainer] = initial_parameters
         self.initial_parameters_rays = initial_parameters_rays
-        self.validation_parameters_rays = validation_parameters_rays
-        self.validation_rays = validation_rays
+        self.validation_scan = validation_scan
 
 
 class OptimizerBackend(metaclass=ABCMeta):
@@ -471,6 +478,9 @@ class RayOptimizer:
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
             parameters = RayOptimizer.get_evaluation_parameters(optimization_target.initial_parameters, parameters)
+            if optimization_target.validation_scan is not None:
+                validation_parameters = RayOptimizer.get_evaluation_parameters(
+                    optimization_target.validation_scan.uncompensated_parameters, initial_parameters)
 
         begin_execution_time: float = time.time() if self.log_times else None
         transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane, parameters, self.transforms)
@@ -509,12 +519,15 @@ class RayOptimizer:
                                                                ylim=[-2, 2])
                 self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
 
-                if optimization_target.validation_rays is not None:
+                if optimization_target.validation_scan is not None:
+                    validation_scan = optimization_target.validation_scan
                     validation_rays_list = self.ray_output_to_tensor(
-                        optimization_target.validation_rays)
+                        validation_scan.observed_rays)
                     validation_parameters_rays_list = self.ray_output_to_tensor(
-                        optimization_target.validation_parameters_rays)
-                    validation_fixed_position_plot = self.fixed_position_plot(best_rays_list, validation_rays_list,
+                        validation_scan.uncompensated_rays)
+                    compensated_rays_list = self.engine.run(validation_parameters, transforms)
+                    validation_fixed_position_plot = self.fixed_position_plot(compensated_rays_list,
+                                                                              validation_rays_list,
                                                                               validation_parameters_rays_list,
                                                                               epoch=self.overall_best.epoch,
                                                                               xlim=[-2, 2],

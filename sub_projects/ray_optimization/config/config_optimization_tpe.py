@@ -83,5 +83,5 @@ STUDY_NAME = '-'.join([str(len(PARAM_FUNC())-len(FIXED_PARAMS)), 'real' if REAL_
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-LOGGING = True
+LOGGING = False
 VERBOSE = False
