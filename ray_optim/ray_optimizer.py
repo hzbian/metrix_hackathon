@@ -366,7 +366,7 @@ class RayOptimizer:
                 axs[i, beamline_idx].set_yticklabels([])
 
         for i in range(3):
-            axs[i, 0].set_ylabel(['w/o comp.', 'target', 'compensated'][i])
+            axs[i, 0].set_ylabel(['w/o comp.', 'observed', 'compensated'][i])
         if epoch is not None:
             fig.suptitle('Epoch ' + str(epoch))
         fig.set_size_inches(len(compensated) + 2, 3)
@@ -526,6 +526,7 @@ class RayOptimizer:
                     validation_parameters_rays_list = self.ray_output_to_tensor(
                         validation_scan.uncompensated_rays)
                     compensated_rays_list = self.engine.run(validation_parameters, transforms)
+                    compensated_rays_list = self.ray_output_to_tensor(compensated_rays_list)
                     validation_fixed_position_plot = self.fixed_position_plot(compensated_rays_list,
                                                                               validation_rays_list,
                                                                               validation_parameters_rays_list,

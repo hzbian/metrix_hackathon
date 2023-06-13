@@ -79,9 +79,9 @@ OPTIMIZER = ['optuna', 'evotorch'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
 
 # logging
-STUDY_NAME = '-'.join([str(len(PARAM_FUNC())-len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', OPTIMIZER, 'v3'])
+STUDY_NAME = '-'.join([str(len(PARAM_FUNC())-len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_DEVIATION), OPTIMIZER, 'v5'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-LOGGING = False
+LOGGING = True
 VERBOSE = False
