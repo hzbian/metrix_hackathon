@@ -1,6 +1,7 @@
 datasets/metrix_real_world
 datasets/metrix_simulation/ray_enhance
 /ray_docker/rayui/RAY-UI-development/
+.idea
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
