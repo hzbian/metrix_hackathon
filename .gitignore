@@ -2,6 +2,9 @@ datasets/metrix_real_world
 datasets/metrix_simulation/ray_enhance
 /ray_docker/rayui/RAY-UI-development/
 .idea
+ray_workdir/
+wandb/
+datasets/metrix_real_data/
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
