@@ -62,7 +62,8 @@ def import_data(real_data_dir, imported_measurements, included_z_layers, param_c
     transform = HistToPointCloud()
     transform_weight = SampleWeightedHist()
     parameters = pd.read_csv(os.path.join(real_data_dir, 'parameters.csv'), index_col=0)
-    xy_dilation = pd.read_csv(os.path.join(real_data_dir, 'xy_dilation_mm.csv'))
+    x_dilation = parameters.T['ImagePlane.translationXerror']  # TODO check if this is added twice now
+    y_dilation = parameters.T['ImagePlane.translationYerror']
     black = Image.open(os.path.join(real_data_dir, 'black.bmp'))
     output_list = []
     for subdir, dirs, files in tqdm(os.walk(real_data_dir)):
@@ -71,7 +72,8 @@ def import_data(real_data_dir, imported_measurements, included_z_layers, param_c
             continue
         if measurement_name not in parameters.keys():
             continue
-        output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container, check_value_lims=check_value_lims)}
+        output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container,
+                                                                         check_value_lims=check_value_lims)}
         z_direction_dict = {}
         for file in files:
             if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
@@ -79,9 +81,10 @@ def import_data(real_data_dir, imported_measurements, included_z_layers, param_c
                 sample = Image.open(path)
                 sample = ImageChops.subtract(sample, black)
                 sample = torchvision.transforms.ToTensor()(sample)
-                sample_xy_dilation = xy_dilation[measurement_name]
-                x_lims = torch.tensor((sample_xy_dilation[0], sample_xy_dilation[0] + 768 * 1.6 / 1000)).unsqueeze(0)
-                y_lims = torch.tensor((sample_xy_dilation[1], sample_xy_dilation[1] + 576 * 1.6 / 1000)).unsqueeze(0)
+                x_lims = torch.tensor(
+                    (x_dilation[measurement_name], x_dilation[measurement_name] + 768 * 1.6 / 1000)).unsqueeze(0)
+                y_lims = torch.tensor(
+                    (y_dilation[measurement_name], y_dilation[measurement_name] + 576 * 1.6 / 1000)).unsqueeze(0)
                 image, intensity = transform(sample, x_lims, y_lims)
                 cleaned_indices = intensity[0] > 0.02
                 cleaned_intensity = intensity[0][cleaned_indices]
