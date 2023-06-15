@@ -26,8 +26,8 @@ plt.switch_backend('Agg')
 
 class RayScan:
     def __init__(self, uncompensated_parameters: List[RayParameterContainer],
-               uncompensated_rays: Union[dict, Iterable[dict], List[dict]],
-               observed_rays: Union[dict, Iterable[dict], List[dict]]):
+                 uncompensated_rays: Union[dict, Iterable[dict], List[dict]],
+                 observed_rays: Union[dict, Iterable[dict], List[dict]]):
         self.uncompensated_parameters: List[RayParameterContainer] = uncompensated_parameters
         self.uncompensated_rays: Union[dict, Iterable[dict], List[dict]] = uncompensated_rays
         self.observed_rays: Union[dict, Iterable[dict], List[dict]] = observed_rays
@@ -371,7 +371,7 @@ class RayOptimizer:
             fig.suptitle('Epoch ' + str(epoch))
         fig.set_size_inches(len(compensated) + 2, 3)
         fig.set_dpi(200)
-        return RayOptimizer.fig_to_image(fig)
+        return fig
 
     @staticmethod
     def normalize_parameters(parameters: RayParameterContainer,
@@ -444,12 +444,13 @@ class RayOptimizer:
         fig.suptitle('Epoch ' + str(self.plot_interval_best.epoch))
         return RayOptimizer.fig_to_image(fig)
 
-    def ray_output_to_tensor(self, ray_output: Union[Dict, List[Dict], Iterable[Dict]]):
+    @staticmethod
+    def ray_output_to_tensor(ray_output: Union[Dict, List[Dict], Iterable[Dict]], exported_plane: str):
         if not isinstance(ray_output, Dict):
-            return [self.ray_output_to_tensor(element) for element in
+            return [RayOptimizer.ray_output_to_tensor(element, exported_plane) for element in
                     ray_output]
         else:
-            rays: dict = ray_output['ray_output'][self.exported_plane]
+            rays: dict = ray_output['ray_output'][exported_plane]
             x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
             y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
             return torch.stack((x_locs, y_locs), -1)
@@ -508,31 +509,35 @@ class RayOptimizer:
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
                 best_rays_list = self.overall_best.rays
-                target_perturbed_parameters_rays_list = self.ray_output_to_tensor(
-                    optimization_target.perturbed_parameters_rays)
+                target_perturbed_parameters_rays_list = RayOptimizer.ray_output_to_tensor(
+                    optimization_target.perturbed_parameters_rays, self.exported_plane)
                 target_initial_parameters_rays_list = self.ray_output_to_tensor(
-                    optimization_target.initial_parameters_rays)
+                    optimization_target.initial_parameters_rays, self.exported_plane)
                 fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list,
                                                                target_initial_parameters_rays_list,
                                                                epoch=self.overall_best.epoch,
                                                                xlim=[-2, 2],
                                                                ylim=[-2, 2])
+                fixed_position_plot = self.fig_to_image(fixed_position_plot)
                 self.logging_backend.image("overall_fixed_position_plot", fixed_position_plot)
 
                 if optimization_target.validation_scan is not None:
                     validation_scan = optimization_target.validation_scan
                     validation_rays_list = self.ray_output_to_tensor(
-                        validation_scan.observed_rays)
+                        validation_scan.observed_rays, exported_plane=self.exported_plane)
                     validation_parameters_rays_list = self.ray_output_to_tensor(
-                        validation_scan.uncompensated_rays)
+                        validation_scan.uncompensated_rays, self.exported_plane)
                     compensated_rays_list = self.engine.run(validation_parameters, transforms)
-                    compensated_rays_list = self.ray_output_to_tensor(compensated_rays_list)
+                    compensated_rays_list = self.ray_output_to_tensor(compensated_rays_list,
+                                                                      exported_plane=self.exported_plane)
                     validation_fixed_position_plot = self.fixed_position_plot(compensated_rays_list,
                                                                               validation_rays_list,
                                                                               validation_parameters_rays_list,
                                                                               epoch=self.overall_best.epoch,
                                                                               xlim=[-2, 2],
                                                                               ylim=[-2, 2])
+
+                    validation_fixed_position_plot = self.fig_to_image(validation_fixed_position_plot)
                     self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % 10 == 0 for i in current_range]:
@@ -540,18 +545,22 @@ class RayOptimizer:
                 self.logging_backend.image("footprint", image)
                 if isinstance(optimization_target, OffsetOptimizationTarget):
                     compensation_image = self.compensation_plot(self.plot_interval_best.rays, self.ray_output_to_tensor(
-                        optimization_target.perturbed_parameters_rays), self.ray_output_to_tensor(
-                        optimization_target.initial_parameters_rays), epoch=self.plot_interval_best.epoch)
+                        optimization_target.perturbed_parameters_rays, self.exported_plane), self.ray_output_to_tensor(
+                        optimization_target.initial_parameters_rays, self.exported_plane), epoch=self.plot_interval_best.epoch)
                     self.logging_backend.image("compensation", compensation_image)
-                max_ray_index = torch.argmax(torch.Tensor([self.ray_output_to_tensor(element).shape[1] for element in
-                                                           optimization_target.perturbed_parameters_rays])).item()
+                max_ray_index = torch.argmax(
+                    torch.Tensor([self.ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
+                                  optimization_target.perturbed_parameters_rays])).item()
                 fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
                                                                [self.ray_output_to_tensor(
                                                                    optimization_target.perturbed_parameters_rays[
-                                                                       max_ray_index])], [self.ray_output_to_tensor(
-                        optimization_target.initial_parameters_rays[max_ray_index])],
+                                                                       max_ray_index], self.exported_plane)],
+                                                               [self.ray_output_to_tensor(
+                                                                   optimization_target.initial_parameters_rays[
+                                                                       max_ray_index], self.exported_plane)],
                                                                epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
                                                                ylim=[-2, 2])
+                fixed_position_plot = self.fig_to_image(fixed_position_plot)
                 self.logging_backend.image("fixed_position_plot", fixed_position_plot)
                 parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best.params,
                                                                         search_space=optimization_target.search_space,
@@ -559,7 +568,7 @@ class RayOptimizer:
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                target_tensor = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays)
+                target_tensor = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays, self.exported_plane)
                 if isinstance(target_tensor, torch.Tensor):
                     target_tensor = [target_tensor]
                 target_image = self.plot_data(target_tensor)
@@ -591,8 +600,8 @@ class RayOptimizer:
         return output_loss
 
     def calculate_loss_epoch(self, output, target_rays):
-        output = self.ray_output_to_tensor(output)
-        target_rays = self.ray_output_to_tensor(target_rays)
+        output = self.ray_output_to_tensor(output, self.exported_plane)
+        target_rays = self.ray_output_to_tensor(target_rays, self.exported_plane)
         num_rays = torch.tensor([element.shape[1] for element in output], dtype=target_rays[0].dtype,
                                 device=target_rays[0].device)
         losses = [self.criterion(target_rays[i], output[i]) for i in range(len(output))]
