@@ -2,10 +2,11 @@ import os
 
 from optuna.samplers import TPESampler
 
+from ray_tools.base.backend import RayBackendDockerRAYUI
+from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, RandomOutputParameter
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
-
 
 # paths
 ROOT_DIR = '../../'
@@ -79,9 +80,21 @@ OPTIMIZER = ['optuna', 'evotorch'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
 
 # logging
-STUDY_NAME = '-'.join([str(len(PARAM_FUNC())-len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_DEVIATION), OPTIMIZER, 'v5'])
+STUDY_NAME = '-'.join(
+    [str(len(PARAM_FUNC()) - len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_DEVIATION),
+     OPTIMIZER, 'v5'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-LOGGING = True
+LOGGING = False
 VERBOSE = False
+
+ENGINE = RayEngine(rml_basefile=RML_BASEFILE,
+          exported_planes=[EXPORTED_PLANE],
+          ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                            dockerfile_path='../../ray_docker/rayui',
+                                            docker_container_name=STUDY_NAME,
+                                            ray_workdir=os.path.join(RAY_WORKDIR, STUDY_NAME),
+                                            verbose=VERBOSE),
+          num_workers=-2,
+          as_generator=False)

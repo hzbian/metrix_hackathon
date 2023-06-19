@@ -1,4 +1,3 @@
-import os
 import sys
 
 import optuna
@@ -13,27 +12,17 @@ from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbL
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, MutableParameter, \
     RayParameter
-from ray_tools.base.engine import RayEngine
-from ray_tools.base.backend import RayBackendDockerRAYUI
 from scipy.optimize import basinhopping
-import config.config_optimization_tpe as CFG
+import config.config_gauss as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
            name=CFG.STUDY_NAME,
+           group=CFG.GROUP_NAME,
            mode='online' if CFG.LOGGING else 'disabled',
            )
 
-engine = RayEngine(rml_basefile=CFG.RML_BASEFILE,
-                   exported_planes=[CFG.EXPORTED_PLANE],
-                   ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
-                                                     dockerfile_path='../../ray_docker/rayui',
-                                                     docker_container_name=CFG.STUDY_NAME,
-                                                     ray_workdir=os.path.join(CFG.RAY_WORKDIR, CFG.STUDY_NAME),
-                                                     verbose=CFG.VERBOSE),
-                   num_workers=-1,
-                   as_generator=False)
-
+engine = CFG.ENGINE
 # optimize only some all_params
 all_params = CFG.PARAM_FUNC()
 
