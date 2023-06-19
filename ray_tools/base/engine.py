@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import abc
+import torch
 from typing import Iterable, Union, Dict, List
 
 from joblib import Parallel, delayed
@@ -8,12 +10,20 @@ from raypyng import RMLFile
 from raypyng.xmltools import XmlElement
 
 from . import RayTransformType
-from .backend import RayBackend
+from .backend import RayBackend, RayOutput
 from .parameter import RayParameterContainer, OutputParameter
 from .transform import RayTransform
 
 
-class RayEngine:
+class Engine(abc.ABC):
+    def run(self,
+            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
+            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+        pass
+
+
+class RayEngine(Engine):
     """
     Creates an engine to run raytracing simulations.
     :param rml_basefile: RML-file to be used as beamline template.
@@ -124,3 +134,37 @@ class RayEngine:
             template = self.template
         component, param = key.split('.')
         return template.__getattr__(component).__getattr__(param)
+
+
+class GaussEngine(Engine):
+    def run(self,
+            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
+            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+
+        if isinstance(param_containers, RayParameterContainer):
+            param_containers = [param_containers]
+
+        # convert transforms into list if it was a singleton
+        if transforms is None or isinstance(transforms, (RayTransform, dict)):
+            transforms = len(param_containers) * [transforms]
+
+        outputs = []
+        for param_container_num, param_container in enumerate(param_containers):
+            x_mean = param_container['x_mean'].get_value()
+            y_mean = param_container['y_mean'].get_value()
+            x_var = param_container['x_var'].get_value()
+            y_var = param_container['y_var'].get_value()
+            n_rays = int(param_container['number_rays'].get_value())
+            m = torch.distributions.multivariate_normal.MultivariateNormal(torch.Tensor([x_mean, y_mean]),
+                                                                           torch.diag(torch.Tensor([x_var, y_var])))
+            samples = m.rsample(torch.Size([n_rays]))
+            samples_directions = torch.rand([n_rays, 3]) * param_container['direction_spread'].get_value()
+            ray_out = RayOutput(samples[:, 0].numpy(), samples[:, 1].numpy(), torch.zeros_like(samples[:, 0]).numpy(),
+                                samples_directions[:, 0].numpy(), samples_directions[:, 1].numpy(),
+                                samples_directions[:, 2].numpy(), torch.ones_like(samples[:, 0]).numpy())
+            if transforms[param_container_num] is not None:
+                ray_out = transforms[param_container_num](ray_out)
+
+            outputs.append({'ray_output': {'ImagePlane': ray_out}, 'param_container_dict': param_container})
+        return outputs
