@@ -18,7 +18,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("x_dir", NumericalParameter(value=1.)),
     ("y_dir", NumericalParameter(value=1.)),
     ("z_dir", NumericalParameter(value=1.)),
-    ("direction_spread", RandomParameter(value_lims=(0., 0.), rg=RG)),
+    ("direction_spread", NumericalParameter(value=0.)),
     ("x_mean", RandomParameter(value_lims=(-1.5, 1.5), rg=RG)),
     ("y_mean", RandomParameter(value_lims=(-1.5, 1.5), rg=RG)),
     ("x_var", RandomParameter(value_lims=(0.001, 0.01), rg=RG)),
