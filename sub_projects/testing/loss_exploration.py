@@ -18,11 +18,11 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("x_dir", NumericalParameter(value=1.)),
     ("y_dir", NumericalParameter(value=1.)),
     ("z_dir", NumericalParameter(value=1.)),
-    ("direction_spread", RandomParameter(value_lims=(0., 0.1), rg=RG)),
-    ("x_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
-    ("y_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
-    ("x_var", RandomParameter(value_lims=(0., 2.), rg=RG)),
-    ("y_var", RandomParameter(value_lims=(0., 2.), rg=RG)),
+    ("direction_spread", RandomParameter(value_lims=(0., 0.), rg=RG)),
+    ("x_mean", RandomParameter(value_lims=(-1.5, 1.5), rg=RG)),
+    ("y_mean", RandomParameter(value_lims=(-1.5, 1.5), rg=RG)),
+    ("x_var", RandomParameter(value_lims=(0.001, 0.01), rg=RG)),
+    ("y_var", RandomParameter(value_lims=(0.001, 0.01), rg=RG)),
 ])
 
 engine = GaussEngine()
