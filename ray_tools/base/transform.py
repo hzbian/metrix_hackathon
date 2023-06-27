@@ -137,6 +137,11 @@ class Histogram(RayTransform):
         self.auto_center = auto_center
 
     def __call__(self, ray_output: RayOutput) -> Dict:
+        if isinstance(ray_output, dict):
+            return_dict = {}
+            for key, entry in ray_output.items():
+                return_dict[key] = self.compute_histogram(entry.x_loc, entry.y_loc)
+            return return_dict
         return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
 
     def compute_histogram(self, x_loc: np.ndarray, y_loc: np.ndarray) -> Dict:
