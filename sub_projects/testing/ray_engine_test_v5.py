@@ -90,5 +90,3 @@ for idx in show_examples:
                    str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['x_lims']) + ' ' +
                    str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['y_lims']))
         plt.show()
-
-engine.ray_backend.kill()

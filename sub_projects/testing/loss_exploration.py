@@ -19,14 +19,14 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("y_dir", NumericalParameter(value=1.)),
     ("z_dir", NumericalParameter(value=1.)),
     ("direction_spread", NumericalParameter(value=0.)),
-    ("x_mean", RandomParameter(value_lims=(-1.5, 1.5), rg=RG)),
-    ("y_mean", RandomParameter(value_lims=(-1.5, 1.5), rg=RG)),
-    ("x_var", RandomParameter(value_lims=(0.001, 0.01), rg=RG)),
-    ("y_var", RandomParameter(value_lims=(0.001, 0.01), rg=RG)),
+    ("x_mean", RandomParameter(value_lims=(-1., 1.), rg=RG)),
+    ("y_mean", RandomParameter(value_lims=(-1., 1.), rg=RG)),
+    ("x_var", RandomParameter(value_lims=(0.003, 0.006), rg=RG)),
+    ("y_var", RandomParameter(value_lims=(0.003, 0.006), rg=RG)),
 ])
 
 engine = GaussEngine()
-ray_outputs = engine.run(PARAM_FUNC(), transforms=MultiLayer([0, 10, 20]))
+ray_outputs = engine.run([PARAM_FUNC() for i in range(3)], transforms=MultiLayer([0, 10, 20]))
 ray_outputs = RayOptimizer.ray_output_to_tensor(ray_output=ray_outputs, exported_plane='ImagePlane')
 fig = RayOptimizer.fixed_position_plot(ray_outputs, ray_outputs, ray_outputs, xlim=[-2, 2], ylim=[-2, 2])
 plt.plot()
