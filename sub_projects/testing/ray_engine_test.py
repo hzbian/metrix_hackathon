@@ -2,24 +2,33 @@ import sys
 
 sys.path.insert(0, '../../')
 
+import numpy as np
+
+import matplotlib.pyplot as plt
+
 from ray_tools.base.engine import RayEngine
-from ray_tools.base.backend import RayBackendDockerRAYX
+from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
-from ray_tools.base.transform import Crop, Histogram, RayTransformCompose
+from ray_tools.base.transform import Histogram, RayTransformConcat, MultiLayer
 from ray_tools.base.utils import RandomGenerator
 
+n_rays = 1e5
+
+exported_planes = ["ImagePlane"]
+
 engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
-                   exported_planes=['ImagePlane'],
-                   ray_backend=RayBackendDockerRAYX(docker_image='ray-x-service',
-                                                    ray_workdir='../../ray_workdir',
-                                                    verbose=True),
+                   exported_planes=exported_planes,
+                   ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                     docker_container_name='ray-ui-service-test',
+                                                     ray_workdir='/dev/shm/ray_workdir',
+                                                     verbose=True),
                    num_workers=-1,
                    as_generator=False)
 
 rg = RandomGenerator(seed=42)
 
 param_func = lambda: RayParameterContainer([
-    (engine.template.U41_318eV.numberRays, NumericalParameter(value=1e4)),
+    (engine.template.U41_318eV.numberRays, NumericalParameter(value=n_rays)),
     (engine.template.U41_318eV.translationXerror, RandomParameter(value_lims=(-0.25, 0.25), rg=rg)),
     (engine.template.U41_318eV.translationYerror, RandomParameter(value_lims=(-0.25, 0.25), rg=rg)),
     (engine.template.U41_318eV.rotationXerror, RandomParameter(value_lims=(-0.05, 0.05), rg=rg)),
@@ -56,26 +65,28 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-params = [param_func() for _ in range(10)]
-result = engine.run(params, transforms=RayTransformCompose(  # Histogram(n_bins=256, lim=1.0),
-    Crop(x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))
-))
+n_examples = 10
+dist_layers = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+transform = RayTransformConcat({
+    'ml': MultiLayer(dist_layers=dist_layers,
+                     copy_directions=False,
+                     transform=Histogram(n_bins=256)),
+    'hist': Histogram(n_bins=1024),
 
-import matplotlib.pyplot as plt
+})
 
-for idx in range(10):
-    plt.figure()
-    plt.title(str(idx))
-    plt.scatter(result[idx]['ray_output']['ImagePlane'].y_loc, result[idx]['ray_output']['ImagePlane'].x_loc, s=0.001)
-    plt.xlim((-1.0, 1.0))
-    plt.ylim((-1.0, 1.0))
-    plt.show()
+result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
+                    transforms={exported_plane: transform for exported_plane in exported_planes})
 
-    plt.figure()
-    plt.title(str(idx))
-    plt.imshow(
-        Histogram(n_bins=256, x_lims=(-1.0, 1.0), y_lims=(-1.0, 1.0))(result[idx]['ray_output']['ImagePlane'])[
-            'histogram'])
-    plt.show()
+show_examples = [7]  # range(n_examples)
 
-engine.ray_backend.kill()
+for idx in show_examples:
+    for dist in dist_layers:
+        plt.figure(figsize=(10, 10))
+        plt.title(str(dist) + ' ' + str(idx))
+        plt.imshow(np.flipud(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['histogram'].T),
+                   cmap='Greys')
+        plt.xlabel(str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['n_rays']) + ' ' +
+                   str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['x_lims']) + ' ' +
+                   str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['y_lims']))
+        plt.show()
