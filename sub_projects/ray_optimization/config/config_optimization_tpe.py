@@ -11,7 +11,7 @@ from ray_tools.base.utils import RandomGenerator
 # paths
 ROOT_DIR = '../../'
 RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
-RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', 'optimization')
+RAY_WORKDIR = '/dev/shm'
 
 # objective
 
