@@ -13,9 +13,6 @@ import docker
 import docker.errors
 import docker.types
 
-import podman
-from podman.errors.exceptions import NotFound
-
 import h5py
 import numpy as np
 import pandas as pd
@@ -100,16 +97,17 @@ class RayBackendDockerRAYUI(RayBackend):
                     "podman build -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')),
                                                       self.docker_image))
         # if container already exists, stop and remove it
-        try:
-            self.docker_container = self.client.containers.get(self.docker_container_name)
-            print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
-            self.docker_container.stop()
+        if self.container_system == "docker":
             try:
-                self.docker_container.remove()
-            except docker.errors.APIError:
+                self.docker_container = self.client.containers.get(self.docker_container_name)
+                print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
+                self.docker_container.stop()
+                try:
+                    self.docker_container.remove()
+                except docker.errors.APIError:
+                    pass
+            except docker.errors.NotFound:
                 pass
-        except (docker.errors.NotFound, podman.errors.exceptions.NotFound):
-            pass
 
         # create local Ray-UI workdir (should be done before mounting docker directory below)
         os.makedirs(self.ray_workdir, exist_ok=True)
