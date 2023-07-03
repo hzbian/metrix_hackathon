@@ -42,9 +42,8 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 STUDY_NAME = '-'.join(
     [str(len(PARAM_FUNC()) - len(FIXED_PARAMS)), 'gauss', str(MAX_DEVIATION),
      OPTIMIZER, 'v5'])
-GROUP_NAME = 'gauss'
 WANDB_ENTITY = 'hzb-aos'
-WANDB_PROJECT = 'metrix_hackathon_offsets'
+WANDB_PROJECT = 'metrix_hackathon_gauss'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
 LOGGING = True
 VERBOSE = True

@@ -18,7 +18,6 @@ import config.config_gauss as CFG
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
            name=CFG.STUDY_NAME,
-           group=CFG.GROUP_NAME,
            mode='online' if CFG.LOGGING else 'disabled',
            )
 
