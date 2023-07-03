@@ -91,8 +91,6 @@ class RayBackendDockerRAYUI(RayBackend):
 
         if self.container_system == "docker":
             self.client = docker.from_env()
-        else:
-            self.client = podman.PodmanClient()
 
         if dockerfile_path is not None:
             if self.container_system == "docker":
