@@ -5,6 +5,8 @@ import shutil
 import time
 import string
 import random
+from subprocess import DEVNULL, STDOUT, check_call
+
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict
@@ -175,9 +177,9 @@ class RayBackendDockerRAYUI(RayBackend):
                     cmd=f"python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
                 )
             else:
-                os.system(f"podman run --security-opt label=disable --mount=type=bind,src={self.ray_workdir},"
-                          f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} bash -c 'python3 "
-                          f"/opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}'")
+                podman_command = f"podman run --security-opt label=disable --mount=type=bind,src={self.ray_workdir},"\
+                                 f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} bash -c "
+                check_call(podman_command.split()+[f'python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}'], stdout=DEVNULL, stderr=STDOUT)
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
