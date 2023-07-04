@@ -1,5 +1,5 @@
 import sys
-
+import time
 sys.path.insert(0, '../../')
 
 import numpy as np
@@ -65,7 +65,7 @@ param_func = lambda: RayParameterContainer([
     (engine.template.E2.translationZerror, RandomParameter(value_lims=(-1, 1), rg=rg)),
 ])
 
-n_examples = 10
+n_examples = 2
 dist_layers = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 transform = RayTransformConcat({
     'ml': MultiLayer(dist_layers=dist_layers,
@@ -74,12 +74,13 @@ transform = RayTransformConcat({
     'hist': Histogram(n_bins=1024),
 
 })
-
+begin = time.time()
 result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
                     transforms={exported_plane: transform for exported_plane in exported_planes})
-
-show_examples = [7]  # range(n_examples)
-
+end = time.time()
+print(str(end-begin), "s elapsed.")
+'''
+show_examples = [2]  # range(n_examples)
 for idx in show_examples:
     for dist in dist_layers:
         plt.figure(figsize=(10, 10))
@@ -90,3 +91,4 @@ for idx in show_examples:
                    str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['x_lims']) + ' ' +
                    str(result[idx]['ray_output']['ImagePlane']['ml'][str(dist)]['y_lims']))
         plt.show()
+'''
