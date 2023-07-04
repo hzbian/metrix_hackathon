@@ -10,7 +10,7 @@ RUN sudo ln -s /usr/local/qwt-6.2.0/include/ /usr/include/qwt
 RUN sudo ln -s /usr/local/qwt-6.2.0/lib/libqwt.so /usr/lib/libqwt.so
 RUN sudo ln -s /usr/local/qwt-6.2.0/lib/libqwt.so /usr/lib/libqwt.so.6.2
 
-RUN git clone https://docker:glpat-D_RTy2ABs-htDBQ6iqVy@gitlab.helmholtz-berlin.de/RAY/RAY.git
+RUN git clone https://docker:6sVD8PgJ_HCy8z7f74p2@git.ies.uni-kassel.de/dmeier/ray-ui.git RAY
 RUN git config --global --add safe.directory /home/user/RAY
 RUN cd RAY/src/Ray-UI && qmake Ray-UI.pro && make -j4
 RUN sudo ln -s /home/user/RAY/build/build-Ray-UI-Linux---Qt_6_4_0-GCC_64bit-Release/Ray-UI /usr/bin/Ray-UI
