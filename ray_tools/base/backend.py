@@ -180,7 +180,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 podman_command = f"podman run --security-opt label=disable --mount=type=bind,src={self.ray_workdir},"\
                                  f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} bash -c "
                 podman_command = f"podman exec test python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
-                check_call(podman_command, stdout=DEVNULL, stderr=STDOUT)
+                check_call(podman_command.split(), stdout=DEVNULL, stderr=STDOUT)
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
