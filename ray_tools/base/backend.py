@@ -121,8 +121,10 @@ class RayBackendDockerRAYUI(RayBackend):
                              f"=type=bind,src={self.ray_workdir}," \
                              f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
                              f"/dev/null"
+            if self.verbose:
+                print(podman_command)
             try:
-                subprocess.Popen(podman_command.split(), stderr=self.print_device, stdout=self.print_device)
+                subprocess.Popen(podman_command.split())
             except Exception:
                 pass
 
