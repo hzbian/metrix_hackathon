@@ -6,7 +6,7 @@ import time
 import string
 import random
 from subprocess import DEVNULL, STDOUT, check_call
-
+import subprocess
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict
@@ -110,6 +110,20 @@ class RayBackendDockerRAYUI(RayBackend):
                     pass
             except docker.errors.NotFound:
                 pass
+        else:
+            try:
+                os.system(f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}")
+            except Exception:
+                pass
+            podman_command = f"podman run --security-opt label=disable --name {self.docker_container_name} --mount" \
+                             f"=type=bind,src={self.ray_workdir}," \
+                             f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
+                             f"/dev/null"
+            print(podman_command)
+            try:
+                subprocess.Popen(podman_command.split())
+            except Exception:
+                pass
 
         # create local Ray-UI workdir (should be done before mounting docker directory below)
         os.makedirs(self.ray_workdir, exist_ok=True)
@@ -177,9 +191,8 @@ class RayBackendDockerRAYUI(RayBackend):
                     cmd=f"python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
                 )
             else:
-                podman_command = f"podman run --security-opt label=disable --mount=type=bind,src={self.ray_workdir},"\
-                                 f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} bash -c "
-                podman_command = f"podman exec test python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane"
+
+                podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane"
                 check_call(podman_command.split(), stdout=DEVNULL, stderr=STDOUT)
             retry = False
             # fail indicator: any required CSV-file is missing
