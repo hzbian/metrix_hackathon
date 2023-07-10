@@ -2,15 +2,13 @@ import sys
 import time
 sys.path.insert(0, '../../')
 
-import numpy as np
-
-import matplotlib.pyplot as plt
-
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
 from ray_tools.base.transform import Histogram, RayTransformConcat, MultiLayer
 from ray_tools.base.utils import RandomGenerator
+
+print("Everything imported.")
 
 n_rays = 1e5
 
@@ -74,6 +72,7 @@ transform = RayTransformConcat({
     'hist': Histogram(n_bins=1024),
 
 })
+print("Engine initialized. Starting optimization.")
 begin = time.time()
 result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
                     transforms={exported_plane: transform for exported_plane in exported_planes})
