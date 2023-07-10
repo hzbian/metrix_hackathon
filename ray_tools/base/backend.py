@@ -7,6 +7,7 @@ import string
 import random
 from subprocess import DEVNULL, STDOUT, check_call
 import subprocess
+import shlex
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict
@@ -51,12 +52,12 @@ class RayBackend(metaclass=ABCMeta):
     def run(self, raypyng_rml: RMLFile, exported_planes: List[str], run_id: str = None) -> Dict[str, RayOutput]:
         """
         Run raytracing given an RMLFile instance.
-        :param raypyng_rml: RMLFile instance to be processed.
-        :param exported_planes: Image planes and component outputs to be exported.
-        :param run_id: Run identifier (as string).
-        :return: Dict with 'exported_planes' as keys and generated :class:`RayOutput` instances as values.
-        """
-        pass
+    :param raypyng_rml: RMLFile instance to be processed.
+    :param exported_planes: Image planes and component outputs to be exported.
+    :param run_id: Run identifier (as string).
+    :return: Dict with 'exported_planes' as keys and generated :class:`RayOutput` instances as values.
+    """
+    pass
 
 
 class RayBackendDockerRAYUI(RayBackend):
@@ -84,6 +85,7 @@ class RayBackendDockerRAYUI(RayBackend):
         self.max_retry = max_retry
         self.verbose = verbose
         self.container_system = "podman"
+        self.print_device = STDOUT if self.verbose else DEVNULL
 
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
@@ -95,9 +97,8 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.container_system == "docker":
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
-                os.system(
-                    "podman build -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')),
-                                                      self.docker_image))
+                build_command = "podman build -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
+                check_call(shlex.split(build_command))
         # if container already exists, stop and remove it
         if self.container_system == "docker":
             try:
@@ -112,16 +113,16 @@ class RayBackendDockerRAYUI(RayBackend):
                 pass
         else:
             try:
-                os.system(f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}")
+                stop_rm_command = f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}"
+                subprocess.check_call(stop_rm_command, stdout=self.print_device, stderr=self.print_device)
             except Exception:
                 pass
             podman_command = f"podman run --security-opt label=disable --name {self.docker_container_name} --mount" \
                              f"=type=bind,src={self.ray_workdir}," \
                              f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
                              f"/dev/null"
-            print(podman_command)
             try:
-                subprocess.Popen(podman_command.split())
+                subprocess.Popen(podman_command.split(), stderr=self.print_device, stdout=self.print_device)
             except Exception:
                 pass
 
@@ -192,8 +193,8 @@ class RayBackendDockerRAYUI(RayBackend):
                 )
             else:
 
-                podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane"
-                check_call(podman_command.split(), stdout=DEVNULL, stderr=STDOUT)
+                podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
+                check_call(podman_command.split(), stdout=DEVNULL, stderr=self.print_device)
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
