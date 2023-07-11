@@ -98,6 +98,8 @@ class RayBackendDockerRAYUI(RayBackend):
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
                 build_command = "podman build -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
+                if self.verbose:
+                    print(build_command)
                 check_call(shlex.split(build_command))
         # if container already exists, stop and remove it
         if self.container_system == "docker":
@@ -114,17 +116,19 @@ class RayBackendDockerRAYUI(RayBackend):
         else:
             try:
                 stop_rm_command = f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}"
+                if self.verbose:
+                    print(stop_rm_command)
                 subprocess.check_call(stop_rm_command, stdout=self.print_device, stderr=self.print_device)
             except Exception:
                 pass
-            podman_command = f"podman run --security-opt label=disable --name {self.docker_container_name} --mount" \
+            podman_command = f"podman run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
                              f"=type=bind,src={self.ray_workdir}," \
                              f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
                              f"/dev/null"
             if self.verbose:
                 print(podman_command)
             try:
-                subprocess.Popen(podman_command.split())
+                subprocess.check_call(podman_command.split())
             except Exception:
                 pass
 
@@ -197,6 +201,8 @@ class RayBackendDockerRAYUI(RayBackend):
 
                 podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
                 check_call(podman_command.split(), stdout=DEVNULL, stderr=self.print_device)
+                if self.verbose:
+                    print(podman_command)
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
