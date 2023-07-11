@@ -1,15 +1,16 @@
 import sys
 import time
 sys.path.insert(0, '../../')
-
+begin = time.time()
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
 from ray_tools.base.transform import Histogram, RayTransformConcat, MultiLayer
 from ray_tools.base.utils import RandomGenerator
+end = time.time()
+print(f"Everything imported. Took {end-begin} s.")
 
-print("Everything imported.")
-
+begin = time.time()
 n_rays = 1e5
 
 exported_planes = ["ImagePlane"]
@@ -19,7 +20,7 @@ engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      docker_container_name='ray-ui-service-test',
                                                      ray_workdir='/dev/shm/ray_workdir',
-                                                     verbose=True),
+                                                     verbose=False),
                    num_workers=-1,
                    as_generator=False)
 
@@ -72,7 +73,8 @@ transform = RayTransformConcat({
     'hist': Histogram(n_bins=1024),
 
 })
-print("Engine initialized. Starting optimization.")
+end = time.time()
+print(f"Engine initialized. Took {end-begin} s. Starting optimization.")
 begin = time.time()
 result = engine.run(param_containers=[param_func() for _ in range(n_examples)],
                     transforms={exported_plane: transform for exported_plane in exported_planes})

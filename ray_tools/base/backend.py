@@ -97,7 +97,7 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.container_system == "docker":
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
-                build_command = "podman build -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
+                build_command = "podman build --security-opt label=disable -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
                 if self.verbose:
                     print(build_command)
                 check_call(shlex.split(build_command))
@@ -128,7 +128,7 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.verbose:
                 print(podman_command)
             try:
-                subprocess.check_call(podman_command.split())
+                subprocess.check_call(podman_command.split(), stdout=self.print_device, stderr=self.print_device)
             except Exception:
                 pass
 
