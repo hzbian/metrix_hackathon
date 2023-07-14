@@ -16,15 +16,15 @@ NUM_BEAMLINE_PARAM_SAMPLES = 22
 RG = RandomGenerator(seed=42)
 
 PARAM_FUNC = lambda: RayParameterContainer([
-    ("number_rays", NumericalParameter(value=1e4)),
-    ("x_dir", NumericalParameter(value=1.)),
-    ("y_dir", NumericalParameter(value=1.)),
+    ("number_rays", NumericalParameter(value=1e2)),
+    ("x_dir", NumericalParameter(value=0.)),
+    ("y_dir", NumericalParameter(value=0.)),
     ("z_dir", NumericalParameter(value=1.)),
     ("direction_spread", NumericalParameter(value=0.)),
-    ("x_mean", RandomParameter(value_lims=(-1., 1.), rg=RG)),
-    ("y_mean", RandomParameter(value_lims=(-1., 1.), rg=RG)),
-    ("x_var", RandomParameter(value_lims=(0.003, 0.006), rg=RG)),
-    ("y_var", RandomParameter(value_lims=(0.003, 0.006), rg=RG)),
+    ("x_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
+    ("y_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
+    ("x_var", RandomParameter(value_lims=(0.003, 0.01), rg=RG)),
+    ("y_var", RandomParameter(value_lims=(0.003, 0.01), rg=RG)),
 ])
 
 FIXED_PARAMS = []  # [k for k in PARAM_FUNC().keys()][1:-3]
