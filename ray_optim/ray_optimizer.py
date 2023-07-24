@@ -385,6 +385,22 @@ class RayOptimizer:
         return normalized_parameters
 
     @staticmethod
+    def parameters_mse(parameters_a: RayParameterContainer, parameters_b: RayParameterContainer,
+                       search_space: RayParameterContainer):
+        counter: int = 0
+        mse: float = 0.
+        normalized_parameters_a: RayParameterContainer = RayOptimizer.normalize_parameters(parameters_a, search_space)
+        normalized_parameters_b: RayParameterContainer = RayOptimizer.normalize_parameters(parameters_b, search_space)
+        for key_a, normalized_parameter_a in normalized_parameters_a.items():
+            if key_a in normalized_parameters_b.keys():
+                mse += (normalized_parameter_a.get_value() - normalized_parameters_b[key_a].get_value()) ** 2
+                counter += 1
+        if counter != 0:
+            return mse / counter
+        else:
+            return 0
+
+    @staticmethod
     def translate_transform(transform: RayTransform, xyz_translation: tuple[float, float, float]) -> RayTransform:
         transforms_copy = copy.deepcopy(transform)
         if isinstance(transform, MultiLayer):
@@ -492,6 +508,12 @@ class RayOptimizer:
         if not isinstance(output, list):
             output = [output]
 
+        if isinstance(optimization_target, OffsetOptimizationTarget):
+            if optimization_target.target_params is not None:
+                mse = RayOptimizer.parameters_mse(optimization_target.target_params, parameters[0], optimization_target.search_space)
+                self.logging_backend.add_to_log({"params_mse": mse})
+
+
         begin_loss_time: float = time.time() if self.log_times else None
         output_loss_dict = self.calculate_loss_from_output(output, optimization_target.perturbed_parameters_rays)
         if self.log_times:
@@ -546,7 +568,8 @@ class RayOptimizer:
                 if isinstance(optimization_target, OffsetOptimizationTarget):
                     compensation_image = self.compensation_plot(self.plot_interval_best.rays, self.ray_output_to_tensor(
                         optimization_target.perturbed_parameters_rays, self.exported_plane), self.ray_output_to_tensor(
-                        optimization_target.initial_parameters_rays, self.exported_plane), epoch=self.plot_interval_best.epoch)
+                        optimization_target.initial_parameters_rays, self.exported_plane),
+                                                                epoch=self.plot_interval_best.epoch)
                     self.logging_backend.image("compensation", compensation_image)
                 max_ray_index = torch.argmax(
                     torch.Tensor([self.ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
@@ -568,7 +591,8 @@ class RayOptimizer:
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                target_tensor = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays, self.exported_plane)
+                target_tensor = self.ray_output_to_tensor(optimization_target.perturbed_parameters_rays,
+                                                          self.exported_plane)
                 if isinstance(target_tensor, torch.Tensor):
                     target_tensor = [target_tensor]
                 target_image = self.plot_data(target_tensor)
