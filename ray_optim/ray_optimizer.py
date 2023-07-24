@@ -442,15 +442,12 @@ class RayOptimizer:
         if omit_labels is None:
             omit_labels = []
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
-        ax.set_ylim([0., 1.])
+        ax.set_ylim([-0.5, 0.5])
         if real_params is not None:
-            ax.plot([param.get_value() for param in self.normalize_parameters(real_params, search_space).values()],
-                    'bo',
-                    markersize=20,
+            ax.stem([param.get_value()-0.5 for param in self.normalize_parameters(real_params, search_space).values()],
                     label='real parameters')
-        ax.plot([param.get_value() for param in self.normalize_parameters(predicted_params, search_space).values()],
-                'm*',
-                markersize=20,
+        ax.stem([param.get_value()-0.5 for param in self.normalize_parameters(predicted_params, search_space).values()],
+                linefmt='g', markerfmt='o',
                 label='predicted parameters')
         param_labels = [param_key for param_key, param_value in predicted_params.items() if
                         param_key not in omit_labels]
