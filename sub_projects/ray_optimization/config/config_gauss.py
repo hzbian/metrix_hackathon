@@ -21,13 +21,13 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("y_dir", NumericalParameter(value=0.)),
     ("z_dir", NumericalParameter(value=1.)),
     ("direction_spread", NumericalParameter(value=0.)),
-    ("x_mean", NumericalParameter(value=0.)),
+    ("x_mean", RandomParameter(value_lims=(-2, 2.), rg=RG)),
     ("y_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
-    ("x_var", NumericalParameter(value=0.005)),
-    ("y_var", NumericalParameter(value=0.005)),
+    ("x_var", RandomParameter(value_lims=(0.5, 1.0), rg=RG)),
+    ("y_var", RandomParameter(value_lims=(0.5, 1.0), rg=RG)),
 ])
 
-FIXED_PARAMS = []  # [k for k in PARAM_FUNC().keys()][1:-3]
+FIXED_PARAMS = [k for k, v in PARAM_FUNC().items() if k not in 'y_var' and isinstance(v, RandomParameter)]
 
 # multi objective
 MULTI_OBJECTIVE = False
@@ -41,11 +41,11 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 # logging
 STUDY_NAME = '-'.join(
     [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss', str(MAX_DEVIATION),
-     OPTIMIZER, 'v11'])
+     OPTIMIZER, 'v19'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_gauss'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-PLOT_INTERVAL = 1
+PLOT_INTERVAL = 10
 LOGGING = True
 VERBOSE = True
 

@@ -385,8 +385,8 @@ class RayOptimizer:
         return normalized_parameters
 
     @staticmethod
-    def parameters_mse_rmse(parameters_a: RayParameterContainer, parameters_b: RayParameterContainer,
-                       search_space: RayParameterContainer):
+    def parameters_rmse(parameters_a: RayParameterContainer, parameters_b: RayParameterContainer,
+                            search_space: RayParameterContainer):
         counter: int = 0
         mse: float = 0.
         normalized_parameters_a: RayParameterContainer = RayOptimizer.normalize_parameters(parameters_a, search_space)
@@ -396,7 +396,7 @@ class RayOptimizer:
                 mse += (normalized_parameter_a.get_value() - normalized_parameters_b[key_a].get_value()) ** 2
                 counter += 1
         if counter != 0:
-            return mse / counter, sqrt(mse / counter)
+            return sqrt(mse / counter)
         else:
             return 0
 
@@ -444,11 +444,13 @@ class RayOptimizer:
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
         ax.set_ylim([-0.5, 0.5])
         if real_params is not None:
-            ax.stem([param.get_value()-0.5 for param in self.normalize_parameters(real_params, search_space).values()],
-                    label='real parameters')
-        ax.stem([param.get_value()-0.5 for param in self.normalize_parameters(predicted_params, search_space).values()],
-                linefmt='g', markerfmt='o',
-                label='predicted parameters')
+            ax.stem(
+                [param.get_value() - 0.5 for param in self.normalize_parameters(real_params, search_space).values()],
+                label='real parameters')
+        ax.stem(
+            [param.get_value() - 0.5 for param in self.normalize_parameters(predicted_params, search_space).values()],
+            linefmt='g', markerfmt='o',
+            label='predicted parameters')
         param_labels = [param_key for param_key, param_value in predicted_params.items() if
                         param_key not in omit_labels]
         ax.set_xticks(range(len(param_labels)))
@@ -469,18 +471,18 @@ class RayOptimizer:
             return torch.stack((x_locs, y_locs), -1)
 
     @staticmethod
-    def get_evaluation_parameters(initial_parameters: List[RayParameterContainer], offsets) -> List[
+    def get_evaluation_parameters(uncompensated_parameters_list: List[RayParameterContainer], offsets) -> List[
         RayParameterContainer]:
-        evaluation_parameters = [element.clone() for element in initial_parameters]
-        for i, perturbed_parameters in enumerate(initial_parameters):
+        evaluation_parameters_list = [element.clone() for element in uncompensated_parameters_list]
+        for i, uncompensated_parameters in enumerate(uncompensated_parameters_list):
             for offsets_k, offsets_value in offsets[0].items():
-                if isinstance(perturbed_parameters[offsets_k], RandomParameter):
-                    value = perturbed_parameters[offsets_k].get_value() - offsets_value.get_value()
-                    if isinstance(perturbed_parameters[offsets_k], OutputParameter):
-                        evaluation_parameters[i][offsets_k] = NumericalOutputParameter(value)
+                if isinstance(uncompensated_parameters[offsets_k], RandomParameter):
+                    value = uncompensated_parameters[offsets_k].get_value() + offsets_value.get_value()
+                    if isinstance(uncompensated_parameters[offsets_k], OutputParameter):
+                        evaluation_parameters_list[i][offsets_k] = NumericalOutputParameter(value)
                     else:
-                        evaluation_parameters[i][offsets_k] = NumericalParameter(value)
-        return evaluation_parameters
+                        evaluation_parameters_list[i][offsets_k] = NumericalParameter(value)
+        return evaluation_parameters_list
 
     def evaluation_function(self, parameters, optimization_target: OptimizationTarget) -> dict:
         begin_total_time: float = time.time() if self.log_times else None
@@ -491,7 +493,8 @@ class RayOptimizer:
         initial_parameters = [element.copy() for element in parameters]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
-            parameters = RayOptimizer.get_evaluation_parameters(optimization_target.uncompensated_parameters, parameters)
+            parameters = RayOptimizer.get_evaluation_parameters(optimization_target.uncompensated_parameters,
+                                                                parameters)
             if optimization_target.validation_scan is not None:
                 validation_parameters = RayOptimizer.get_evaluation_parameters(
                     optimization_target.validation_scan.uncompensated_parameters, initial_parameters)
@@ -507,9 +510,9 @@ class RayOptimizer:
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
             if optimization_target.target_params is not None:
-                mse, rmse = RayOptimizer.parameters_mse_rmse(optimization_target.target_params, parameters[0], optimization_target.search_space)
-                self.logging_backend.add_to_log({"params_mse": mse, "params_rmse": rmse})
-
+                rmse = RayOptimizer.parameters_rmse(optimization_target.target_params, initial_parameters[0],
+                                                             optimization_target.search_space)
+                self.logging_backend.add_to_log({"params_rmse": rmse})
 
         begin_loss_time: float = time.time() if self.log_times else None
         output_loss_dict = self.calculate_loss_from_output(output, optimization_target.observed_rays)
