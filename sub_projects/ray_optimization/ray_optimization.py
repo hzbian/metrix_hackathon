@@ -78,34 +78,34 @@ offset_search_space = lambda: RayParameterContainer(
 )
 
 if CFG.REAL_DATA_DIR is None:
-    offset = offset_search_space()
-    initial_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
-    perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in initial_parameters]
-    for configuration in perturbed_parameters:
-        configuration.perturb(offset)
-    perturbed_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, perturbed_parameters, CFG.TRANSFORMS)
-    perturbed_parameters_rays = engine.run(perturbed_parameters, transforms=perturbed_transforms)
+    target_offset = offset_search_space()
+    uncompensated_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
+    compensated_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in uncompensated_parameters]
+    for configuration in compensated_parameters:
+        configuration.perturb(target_offset)
+    compensated_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, compensated_parameters, CFG.TRANSFORMS)
+    observed_rays = engine.run(compensated_parameters, transforms=compensated_transforms)
     validation_scan = None
 else:
-    perturbed_parameters_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(), check_value_lims=True)
-    initial_parameters = [element['param_container_dict'] for element in perturbed_parameters_rays]
-    offset = None
+    observed_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(), check_value_lims=True)
+    uncompensated_parameters = [element['param_container_dict'] for element in observed_rays]
+    target_offset = None
     observed_validation_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_VALIDATION_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(), check_value_lims=False)
     uncompensated_validation_parameters = [element['param_container_dict'] for element in observed_validation_rays]
 
 
-initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, initial_parameters, CFG.TRANSFORMS)
-initial_parameters_rays = engine.run(initial_parameters, transforms=initial_transforms)
+initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, uncompensated_parameters, CFG.TRANSFORMS)
+uncompensated_rays = engine.run(uncompensated_parameters, transforms=initial_transforms)
 
 if CFG.REAL_DATA_DIR is not None:
     validation_parameters_rays = engine.run(uncompensated_validation_parameters, transforms=initial_transforms)
     validation_scan = RayScan(uncompensated_parameters=uncompensated_validation_parameters, uncompensated_rays=validation_parameters_rays, observed_rays=observed_validation_rays)
 else:
     validation_scan = None
-offset_optimization_target = OffsetOptimizationTarget(perturbed_parameters_rays=perturbed_parameters_rays,
-                                                      search_space=offset_search_space(),
-                                                      initial_parameters=initial_parameters,
-                                                      initial_parameters_rays=initial_parameters_rays, offset=offset, validation_scan=validation_scan)
+offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
+                                                      offset_search_space=offset_search_space(),
+                                                      uncompensated_parameters=uncompensated_parameters,
+                                                      uncompensated_rays=uncompensated_rays, target_offset=target_offset, validation_scan=validation_scan)
 
 
 ray_optimizer.optimize(optimization_target=offset_optimization_target)
