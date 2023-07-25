@@ -1,6 +1,7 @@
 import copy
 import time
 from abc import ABCMeta, abstractmethod, ABC
+from math import sqrt
 from typing import List, Iterable, Union, Dict, Optional, Callable
 
 import numpy as np
@@ -278,7 +279,7 @@ class BestSample:
 class RayOptimizer:
     def __init__(self, optimizer_backend: OptimizerBackend, criterion, exported_plane: str,
                  engine: RayEngine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
-                 log_times: bool = False, iterations=1000):
+                 log_times: bool = False, plot_interval: int = 10, iterations=1000):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: RayEngine = engine
         self.criterion = criterion
@@ -290,6 +291,7 @@ class RayOptimizer:
         self.iterations: int = iterations
         self.plot_interval_best: BestSample = BestSample()
         self.overall_best: BestSample = BestSample()
+        self.plot_interval = plot_interval
 
     @staticmethod
     def fig_to_image(fig: plt.Figure) -> np.array:
@@ -385,7 +387,7 @@ class RayOptimizer:
         return normalized_parameters
 
     @staticmethod
-    def parameters_mse(parameters_a: RayParameterContainer, parameters_b: RayParameterContainer,
+    def parameters_mse_rmse(parameters_a: RayParameterContainer, parameters_b: RayParameterContainer,
                        search_space: RayParameterContainer):
         counter: int = 0
         mse: float = 0.
@@ -396,7 +398,7 @@ class RayOptimizer:
                 mse += (normalized_parameter_a.get_value() - normalized_parameters_b[key_a].get_value()) ** 2
                 counter += 1
         if counter != 0:
-            return mse / counter
+            return mse / counter, sqrt(mse / counter)
         else:
             return 0
 
@@ -469,17 +471,17 @@ class RayOptimizer:
             return torch.stack((x_locs, y_locs), -1)
 
     @staticmethod
-    def get_evaluation_parameters(initial_parameters: List[RayParameterContainer], parameters) -> List[
+    def get_evaluation_parameters(initial_parameters: List[RayParameterContainer], offsets) -> List[
         RayParameterContainer]:
         evaluation_parameters = [element.clone() for element in initial_parameters]
         for i, perturbed_parameters in enumerate(initial_parameters):
-            for k, v in parameters[0].items():
-                if isinstance(perturbed_parameters[k], RandomParameter):
-                    value = perturbed_parameters[k].get_value() - v.get_value()
-                    if isinstance(perturbed_parameters[k], OutputParameter):
-                        evaluation_parameters[i][k] = NumericalOutputParameter(value)
+            for offsets_k, offsets_value in offsets[0].items():
+                if isinstance(perturbed_parameters[offsets_k], RandomParameter):
+                    value = perturbed_parameters[offsets_k].get_value() - offsets_value.get_value()
+                    if isinstance(perturbed_parameters[offsets_k], OutputParameter):
+                        evaluation_parameters[i][offsets_k] = NumericalOutputParameter(value)
                     else:
-                        evaluation_parameters[i][k] = NumericalParameter(value)
+                        evaluation_parameters[i][offsets_k] = NumericalParameter(value)
         return evaluation_parameters
 
     def evaluation_function(self, parameters, optimization_target: OptimizationTarget) -> dict:
@@ -500,21 +502,21 @@ class RayOptimizer:
         transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane, parameters, self.transforms)
         output = self.engine.run(parameters, transforms=transforms)
         if self.log_times:
-            self.logging_backend.add_to_log({"execution_time": time.time() - begin_execution_time})
+            self.logging_backend.add_to_log({"System/execution_time": time.time() - begin_execution_time})
 
         if not isinstance(output, list):
             output = [output]
 
         if isinstance(optimization_target, OffsetOptimizationTarget):
             if optimization_target.target_params is not None:
-                mse = RayOptimizer.parameters_mse(optimization_target.target_params, parameters[0], optimization_target.search_space)
-                self.logging_backend.add_to_log({"params_mse": mse})
+                mse, rmse = RayOptimizer.parameters_mse_rmse(optimization_target.target_params, parameters[0], optimization_target.search_space)
+                self.logging_backend.add_to_log({"params_mse": mse, "params_rmse": rmse})
 
 
         begin_loss_time: float = time.time() if self.log_times else None
         output_loss_dict = self.calculate_loss_from_output(output, optimization_target.perturbed_parameters_rays)
         if self.log_times:
-            self.logging_backend.add_to_log({"loss_time": time.time() - begin_loss_time})
+            self.logging_backend.add_to_log({"System/loss_time": time.time() - begin_loss_time})
 
         for epoch, (loss, ray_count, loss_mean) in output_loss_dict.items():
             self.logging_backend.add_to_log({"epoch": epoch, "loss": loss_mean, "ray_count": ray_count.mean()})
@@ -559,7 +561,7 @@ class RayOptimizer:
                     validation_fixed_position_plot = self.fig_to_image(validation_fixed_position_plot)
                     self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
-            if True in [i % 10 == 0 for i in current_range]:
+            if True in [i % self.plot_interval == 0 for i in current_range]:
                 image = self.plot_data(self.plot_interval_best.rays, epoch=self.plot_interval_best.epoch)
                 self.logging_backend.image("footprint", image)
                 if isinstance(optimization_target, OffsetOptimizationTarget):
@@ -595,7 +597,7 @@ class RayOptimizer:
                 target_image = self.plot_data(target_tensor)
                 self.logging_backend.image("target_footprint", target_image)
         if self.log_times:
-            self.logging_backend.add_to_log({"total_time": time.time() - begin_total_time})
+            self.logging_backend.add_to_log({"System/total_time": time.time() - begin_total_time})
         self.logging_backend.log()
         self.evaluation_counter += len(output) // num_combinations
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}

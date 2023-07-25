@@ -10,10 +10,10 @@ REAL_DATA_DIR = None
 EXPORTED_PLANE = "ImagePlane"
 MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
-Z_LAYERS = [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+Z_LAYERS = [0]#[-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
-NUM_BEAMLINE_PARAM_SAMPLES = 22
-RG = RandomGenerator(seed=46)
+NUM_BEAMLINE_PARAM_SAMPLES = 1
+RG = RandomGenerator(seed=42)
 
 PARAM_FUNC = lambda: RayParameterContainer([
     ("number_rays", NumericalParameter(value=1e2)),
@@ -41,10 +41,11 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 # logging
 STUDY_NAME = '-'.join(
     [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss', str(MAX_DEVIATION),
-     OPTIMIZER, 'v5'])
+     OPTIMIZER, 'v11'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_gauss'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
+PLOT_INTERVAL = 1
 LOGGING = True
 VERBOSE = True
 
