@@ -82,10 +82,11 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 # logging
 STUDY_NAME = '-'.join(
     [str(len(PARAM_FUNC()) - len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_DEVIATION),
-     OPTIMIZER, 'v6'])
+     OPTIMIZER, 'v7'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
+PLOT_INTERVAL = 10
 LOGGING = False
 VERBOSE = False
 
