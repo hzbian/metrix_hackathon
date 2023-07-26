@@ -20,7 +20,7 @@ from ray_tools.base.transform import MultiLayer
 def investigate_var(var_name: str, value_lims):
     RG = RandomGenerator(seed=42)
     PARAM_FUNC = lambda: RayParameterContainer([
-        ("number_rays", NumericalParameter(value=1e2)),
+        ("number_rays", NumericalParameter(value=1e3)),
         ("x_dir", NumericalParameter(value=0.)),
         ("y_dir", NumericalParameter(value=0.)),
         ("z_dir", NumericalParameter(value=1.)),
@@ -45,7 +45,7 @@ def investigate_var(var_name: str, value_lims):
         params_list.append(perturbed_parameters)
         offset_list.append(offset_instance[var_name].get_value())
 
-    outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10, 15])) for params_entry in params_list]
+    outputs_list = [engine.run(params_entry, transforms=MultiLayer([0])) for params_entry in params_list]
     outputs_list = [RayOptimizer.ray_output_to_tensor(ray_output=outputs_entry, exported_plane='ImagePlane') for
                     outputs_entry in outputs_list]
 
@@ -60,6 +60,8 @@ def investigate_var(var_name: str, value_lims):
 
     plt.clf()
     plt.scatter(np.array(offset_list[1:]), np.array(distances_list[1:]), s=0.2)
+    plt.xlim=([0, 2])
+    plt.ylim([0, 2])
     plt.xlabel('Absolute error')
     plt.ylabel('Sinkhorn distance')
     plt.tight_layout()
