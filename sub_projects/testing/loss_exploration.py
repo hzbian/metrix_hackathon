@@ -1,9 +1,13 @@
 import sys
 
+import torch.nn
 from matplotlib import pyplot as plt
 
 import numpy as np
 from tqdm import trange
+
+from ray_tools.base import RayOutput
+
 sys.path.insert(0, '../../')
 from sub_projects.ray_optimization.losses import sinkhorn_loss
 
@@ -26,18 +30,40 @@ def histogram_mse(a, b):
     y_max = max(a.y_loc.max(), b.y_loc.max())
     hist_a = Histogram(100, (x_min, x_max), (y_min, y_max))(a)['histogram']
     hist_b = Histogram(100, (x_min, x_max), (y_min, y_max))(b)['histogram']
-    #plt.imshow(hist_a)
-    #plt.savefig('a.png')
-    #plt.imshow(hist_b)
-    #plt.savefig('b.png')
-    #plt.imshow((hist_a - hist_b)**2)
-    #plt.savefig('a-b.png')
-    return ((hist_a - hist_b)**2).mean()
+    # plt.imshow(hist_a)
+    # plt.savefig('a.png')
+    # plt.imshow(hist_b)
+    # plt.savefig('b.png')
+    # plt.imshow((hist_a - hist_b)**2)
+    # plt.savefig('a-b.png')
+    return ((hist_a - hist_b) ** 2).mean()
 
-def investigate_var(var_name: str, value_lims):
+
+def sinkhorn_output_loss(a, b):
+    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')
+    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')
+    return sinkhorn_loss(a[0], b[0])
+
+
+kld = torch.nn.KLDivLoss(log_target=True)
+
+def kld_loss(a, b):
+    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')
+    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')
+    #print(a.shape, b.shape)
+    return kld(a[0], b[0])
+
+def js_loss(a, b):
+    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')[0]
+    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0]
+    M = 0.5 * (a + b)
+    return 0.5 * (kld(a, M) + kld(b, M))
+
+#                outputs_entry in outputs_list
+def investigate_var(var_name: str, value_lims, loss_function, loss_string):
     RG = RandomGenerator(seed=42)
     PARAM_FUNC = lambda: RayParameterContainer([
-        ("number_rays", NumericalParameter(value=1e3)),
+        ("number_rays", NumericalParameter(value=1e2)),
         ("x_dir", NumericalParameter(value=0.)),
         ("y_dir", NumericalParameter(value=0.)),
         ("z_dir", NumericalParameter(value=1.)),
@@ -67,25 +93,27 @@ def investigate_var(var_name: str, value_lims):
     #                outputs_entry in outputs_list]
 
     distances_list = []
-    for i in trange(num_samples):
-        #distance = sinkhorn_loss(outputs_list[0][0], outputs_list[i][0]).mean()
-        distance = histogram_mse(outputs_list[0], outputs_list[i])
+    for i in trange(1,num_samples):
+        # distance = sinkhorn_loss(outputs_list[0][0], outputs_list[i][0]).mean()
+        distance = loss_function(outputs_list[0], outputs_list[i])
+        print(i, distance)
+        # distance = histogram_mse(outputs_list[0], outputs_list[i])
         distances_list.append(distance.item())
-    #RayOptimizer.fixed_position_plot(outputs_list[0], outputs_list[1], outputs_list[2], xlim=[-2, 2],
+    # RayOptimizer.fixed_position_plot(outputs_list[0], outputs_list[1], outputs_list[2], xlim=[-2, 2],
     #                                 ylim=[-2, 2])
     # plt.plot()
     # plt.savefig('out_' + var_name + '.png')
 
     plt.clf()
-    plt.scatter(np.array(offset_list[1:]), np.array(distances_list[1:]), s=0.2)
-    plt.xlim=([0, 2])
-    plt.ylim([0, 2])
+    plt.scatter(np.array(offset_list[1:]), np.array(distances_list[:]), s=0.2)
+    #plt.xlim = ([0, 2])
+    #plt.ylim([0, 2])
     plt.xlabel('Absolute error')
-    plt.ylabel('Sinkhorn distance')
+    plt.ylabel(loss_string+' distance')
     plt.tight_layout()
-    plt.savefig('scatter_' + var_name + '.png')
+    plt.savefig(loss_string+'_' + var_name + '.png')
     plt.clf()
 
 
-investigate_var('y_mean', value_lims=(0.0, 2))
-investigate_var('y_var', value_lims=(0.0, 2))
+investigate_var('y_mean', value_lims=(0.0, 2), loss_function=kld_loss, loss_string="kld")
+investigate_var('y_var', value_lims=(0.0, 2), loss_function=kld_loss, loss_string="kld")
