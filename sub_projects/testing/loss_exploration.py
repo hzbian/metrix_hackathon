@@ -4,9 +4,9 @@ from matplotlib import pyplot as plt
 
 import numpy as np
 from tqdm import trange
+sys.path.insert(0, '../../')
 from sub_projects.ray_optimization.losses import sinkhorn_loss
 
-sys.path.insert(0, '../../')
 from ray_tools.base.engine import GaussEngine
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, RayParameter
@@ -14,8 +14,25 @@ from ray_tools.base.utils import RandomGenerator
 
 from ray_optim.ray_optimizer import RayOptimizer
 
-from ray_tools.base.transform import MultiLayer
+from ray_tools.base.transform import MultiLayer, Histogram
 
+
+def histogram_mse(a, b):
+    a = a[0]['ray_output']['ImagePlane']['0']
+    b = b[0]['ray_output']['ImagePlane']['0']
+    x_min = min(a.x_loc.min(), b.x_loc.min())
+    x_max = max(a.x_loc.max(), b.x_loc.max())
+    y_min = min(a.y_loc.min(), b.y_loc.min())
+    y_max = max(a.y_loc.max(), b.y_loc.max())
+    hist_a = Histogram(100, (x_min, x_max), (y_min, y_max))(a)['histogram']
+    hist_b = Histogram(100, (x_min, x_max), (y_min, y_max))(b)['histogram']
+    #plt.imshow(hist_a)
+    #plt.savefig('a.png')
+    #plt.imshow(hist_b)
+    #plt.savefig('b.png')
+    #plt.imshow((hist_a - hist_b)**2)
+    #plt.savefig('a-b.png')
+    return ((hist_a - hist_b)**2).mean()
 
 def investigate_var(var_name: str, value_lims):
     RG = RandomGenerator(seed=42)
@@ -46,15 +63,16 @@ def investigate_var(var_name: str, value_lims):
         offset_list.append(offset_instance[var_name].get_value())
 
     outputs_list = [engine.run(params_entry, transforms=MultiLayer([0])) for params_entry in params_list]
-    outputs_list = [RayOptimizer.ray_output_to_tensor(ray_output=outputs_entry, exported_plane='ImagePlane') for
-                    outputs_entry in outputs_list]
+    # outputs_list = [RayOptimizer.ray_output_to_tensor(ray_output=outputs_entry, exported_plane='ImagePlane') for
+    #                outputs_entry in outputs_list]
 
     distances_list = []
     for i in trange(num_samples):
-        distance = sinkhorn_loss(outputs_list[0][0], outputs_list[i][0]).mean()
+        #distance = sinkhorn_loss(outputs_list[0][0], outputs_list[i][0]).mean()
+        distance = histogram_mse(outputs_list[0], outputs_list[i])
         distances_list.append(distance.item())
-    RayOptimizer.fixed_position_plot(outputs_list[0], outputs_list[1], outputs_list[2], xlim=[-2, 2],
-                                     ylim=[-2, 2])
+    #RayOptimizer.fixed_position_plot(outputs_list[0], outputs_list[1], outputs_list[2], xlim=[-2, 2],
+    #                                 ylim=[-2, 2])
     # plt.plot()
     # plt.savefig('out_' + var_name + '.png')
 
