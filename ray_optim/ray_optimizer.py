@@ -349,29 +349,32 @@ class RayOptimizer:
                             without_compensation: list[torch.Tensor], xlim,
                             ylim,
                             epoch: Optional[int] = None) -> np.array:
-        fig, axs = plt.subplots(3, len(compensated), squeeze=False, gridspec_kw={'wspace': 0, 'hspace': 0})
-        for beamline_idx in range(len(compensated)):
-            axs[0, beamline_idx].scatter(without_compensation[beamline_idx][0, :, 0],
-                                         without_compensation[beamline_idx][0, :, 1], s=2.0)
-            axs[1, beamline_idx].scatter(target[beamline_idx][0, :, 0], target[beamline_idx][0, :, 1], s=2.0)
-            axs[2, beamline_idx].scatter(compensated[beamline_idx][0, :, 0], compensated[beamline_idx][0, :, 1], s=2.0)
+        y_label = ['w/o comp.', 'observed', 'compensated']
+        suptitle = 'Epoch' + str(epoch) if epoch is not None else None
+        return RayOptimizer.fixed_position_plot_base([without_compensation, target, compensated], xlim, ylim, y_label, suptitle)
 
-            for i in range(3):
-                axs[i, beamline_idx].set_xlim(xlim)
-                axs[i, beamline_idx].set_ylim(ylim)
-                axs[i, beamline_idx].xaxis.set_major_locator(plt.NullLocator())
-                axs[i, beamline_idx].yaxis.set_major_locator(plt.NullLocator())
-                axs[i, beamline_idx].set_aspect('equal')
-                axs[i, beamline_idx].set_xticklabels([])
-                axs[i, beamline_idx].set_yticklabels([])
+    @staticmethod
+    def fixed_position_plot_base(tensor_list_list: list[list[torch.Tensor]], xlim, ylim, ylabel, suptitle: Optional[str] = None):
+        fig, axs = plt.subplots(len(tensor_list_list), len(tensor_list_list[0]), squeeze=False, gridspec_kw={'wspace': 0, 'hspace':0})
+        for idx_list_list in range(len(tensor_list_list)):
+            for beamline_idx in range(len(tensor_list_list[0])):
+                element = tensor_list_list[idx_list_list][beamline_idx]
+                axs[idx_list_list, beamline_idx].scatter(element[0, :, 0], element[0, :, 1], s=2.0)
+                axs[idx_list_list, beamline_idx].set_xlim(xlim)
+                axs[idx_list_list, beamline_idx].set_ylim(ylim)
+                axs[idx_list_list, beamline_idx].xaxis.set_major_locator(plt.NullLocator())
+                axs[idx_list_list, beamline_idx].yaxis.set_major_locator(plt.NullLocator())
+                axs[idx_list_list, beamline_idx].set_aspect('equal')
+                axs[idx_list_list, beamline_idx].set_xticklabels([])
+                axs[idx_list_list, beamline_idx].set_yticklabels([])
 
-        for i in range(3):
-            axs[i, 0].set_ylabel(['w/o comp.', 'observed', 'compensated'][i])
-        if epoch is not None:
-            fig.suptitle('Epoch ' + str(epoch))
-        fig.set_size_inches(len(compensated) + 2, 3)
+            axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list])
+            if suptitle is not None:
+                fig.suptitle(suptitle)
+        fig.set_size_inches(len(tensor_list_list[0]) + 2, 3)
         fig.set_dpi(200)
         return fig
+
 
     @staticmethod
     def normalize_parameters(parameters: RayParameterContainer,
