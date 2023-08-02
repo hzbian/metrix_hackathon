@@ -27,7 +27,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("y_var", RandomParameter(value_lims=(0.5, 1.0), rg=RG)),
 ])
 
-FIXED_PARAMS = [k for k, v in PARAM_FUNC().items() if k not in 'y_var' and isinstance(v, RandomParameter)]
+FIXED_PARAMS = []#[k for k, v in PARAM_FUNC().items() if k not in 'y_var' and isinstance(v, RandomParameter)]
 
 # multi objective
 MULTI_OBJECTIVE = False
@@ -35,17 +35,17 @@ MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
 ITERATIONS = 1000
-OPTIMIZER = ['optuna', 'evotorch'][0]
+OPTIMIZER = ['optuna', 'evotorch', 'basinhopping'][2]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
 
 # logging
 STUDY_NAME = '-'.join(
     [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss', str(MAX_DEVIATION),
-     OPTIMIZER, 'v19'])
+     OPTIMIZER, 'fixed-interval-v21'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_gauss'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
-PLOT_INTERVAL = 10
+PLOT_INTERVAL = 100
 LOGGING = True
 VERBOSE = True
 

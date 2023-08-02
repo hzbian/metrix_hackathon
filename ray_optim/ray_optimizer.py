@@ -92,7 +92,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
                 bounds.append([value.value_lims[0], value.value_lims[1]])
                 x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
         ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0,
-                                         niter=iterations, minimizer_kwargs={"bounds": bounds}, disp=True)
+                                         niter=iterations, interval=iterations, stepsize=1, T=0.01, minimizer_kwargs={"bounds": bounds}, disp=True)
         return ret.x, ret.fun
 
 
