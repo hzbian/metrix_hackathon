@@ -118,7 +118,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 stop_rm_command = f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}"
                 if self.verbose:
                     print(stop_rm_command)
-                subprocess.check_call(stop_rm_command, stdout=self.print_device, stderr=self.print_device)
+                subprocess.check_call(shlex.split(stop_rm_command), stdout=self.print_device, stderr=self.print_device)
             except Exception:
                 pass
             podman_command = f"podman run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
@@ -128,7 +128,7 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.verbose:
                 print(podman_command)
             try:
-                subprocess.check_call(podman_command.split(), stdout=self.print_device, stderr=self.print_device)
+                subprocess.check_call(shlex.split(podman_command), stdout=self.print_device, stderr=self.print_device)
             except Exception:
                 pass
 
@@ -200,9 +200,9 @@ class RayBackendDockerRAYUI(RayBackend):
             else:
 
                 podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
-                check_call(podman_command.split(), stdout=DEVNULL, stderr=self.print_device)
                 if self.verbose:
                     print(podman_command)
+                check_call(shlex.split(podman_command), stdout=DEVNULL, stderr=self.print_device)
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
