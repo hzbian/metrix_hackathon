@@ -118,7 +118,9 @@ class RayBackendDockerRAYUI(RayBackend):
                 stop_rm_command = f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}"
                 if self.verbose:
                     print(stop_rm_command)
-                subprocess.check_call(shlex.split(stop_rm_command), stdout=self.print_device, stderr=self.print_device)
+                output = subprocess.check_output(shlex.split(stop_rm_command))
+                if self.verbose:
+                    print(output)
             except Exception:
                 if self.verbose:
                     print("Could not stop and remove podman.")
@@ -130,7 +132,9 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.verbose:
                 print(podman_command)
             try:
-                subprocess.check_call(shlex.split(podman_command), stdout=self.print_device, stderr=self.print_device)
+                output = subprocess.check_output(shlex.split(podman_command))
+                if self.verbose:
+                    print(output)
             except Exception:
                 if self.verbose:
                     print("Could not run podman.")
