@@ -115,10 +115,16 @@ class RayBackendDockerRAYUI(RayBackend):
                 pass
         else:
             try:
-                stop_rm_command = f"podman stop {self.docker_container_name} && podman rm {self.docker_container_name}"
+                stop_command = f"podman stop {self.docker_container_name}"
                 if self.verbose:
-                    print(stop_rm_command)
-                output = subprocess.check_output(shlex.split(stop_rm_command))
+                    print(stop_command)
+                output = subprocess.check_output(shlex.split(stop_command))
+                if self.verbose:
+                    print(output)
+                rm_command = f"podman rm {self.docker_container_name}"
+                if self.verbose:
+                    print(rm_command)
+                output = subprocess.check_output(shlex.split(rm_command))
                 if self.verbose:
                     print(output)
             except Exception:
