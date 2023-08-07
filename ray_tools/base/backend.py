@@ -120,6 +120,8 @@ class RayBackendDockerRAYUI(RayBackend):
                     print(stop_rm_command)
                 subprocess.check_call(shlex.split(stop_rm_command), stdout=self.print_device, stderr=self.print_device)
             except Exception:
+                if self.verbose:
+                    print("Could not stop and remove podman.")
                 pass
             podman_command = f"podman run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
                              f"=type=bind,src={self.ray_workdir}," \
@@ -130,6 +132,8 @@ class RayBackendDockerRAYUI(RayBackend):
             try:
                 subprocess.check_call(shlex.split(podman_command), stdout=self.print_device, stderr=self.print_device)
             except Exception:
+                if self.verbose:
+                    print("Could not run podman.")
                 pass
 
         # create local Ray-UI workdir (should be done before mounting docker directory below)
