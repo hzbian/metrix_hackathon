@@ -216,7 +216,9 @@ class RayBackendDockerRAYUI(RayBackend):
                 podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
                 if self.verbose:
                     print(podman_command)
-                check_call(shlex.split(podman_command), stdout=DEVNULL, stderr=self.print_device)
+                output = subprocess.check_output(shlex.split(podman_command))
+                if self.verbose:
+                    print(output)
             retry = False
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
