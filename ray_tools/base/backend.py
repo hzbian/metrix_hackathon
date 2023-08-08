@@ -213,7 +213,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 )
             else:
 
-                podman_command = f"podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
+                podman_command = f"systemd-run --scope --user podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
                 if self.verbose:
                     print(podman_command)
                 output = subprocess.check_output(shlex.split(podman_command))
