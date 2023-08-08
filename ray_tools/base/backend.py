@@ -123,13 +123,13 @@ class RayBackendDockerRAYUI(RayBackend):
                 stop_command = f"podman kill {self.docker_container_name}"
                 if self.verbose:
                     print(stop_command)
-                output = subprocess.check_output(shlex.split(stop_command))
+                output = subprocess.check_output(shlex.split(stop_command), stderr=self.print_device)
                 if self.verbose:
                     print(output)
                 rm_command = f"podman rm {self.docker_container_name}"
                 if self.verbose:
                     print(rm_command)
-                output = subprocess.check_output(shlex.split(rm_command))
+                output = subprocess.check_output(shlex.split(rm_command), stderr=self.print_device)
                 if self.verbose:
                     print(output)
             except Exception:
@@ -143,7 +143,7 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.verbose:
                 print(podman_command)
             try:
-                output = subprocess.check_output(shlex.split(podman_command))
+                output = subprocess.check_output(shlex.split(podman_command), stderr=self.print_device)
                 if self.verbose:
                     print(output)
             except Exception:
