@@ -156,13 +156,18 @@ class GaussEngine(Engine):
             x_var = param_container['x_var'].get_value()
             y_var = param_container['y_var'].get_value()
             n_rays = int(param_container['number_rays'].get_value())
+            correlation_factor = param_container['correlation_factor'].get_value()
+            correlation = correlation_factor * torch.sqrt(x_var) * torch.sqrt(y_var)
             m = torch.distributions.multivariate_normal.MultivariateNormal(torch.Tensor([x_mean, y_mean]),
-                                                                           torch.diag(torch.Tensor([x_var, y_var])))
+                                                                           torch.Tensor([[x_var, correlation],
+                                                                                         [correlation, y_var]]))
             samples = m.rsample(torch.Size([n_rays]))
             samples_directions = torch.rand([n_rays, 3]) * param_container['direction_spread'].get_value()
             ray_out = RayOutput(samples[:, 0].numpy(), samples[:, 1].numpy(), torch.zeros_like(samples[:, 0]).numpy(),
-                                param_container['x_dir'].get_value()+samples_directions[:, 0].numpy(), param_container['y_dir'].get_value()+samples_directions[:, 1].numpy(),
-                                param_container['z_dir'].get_value()+samples_directions[:, 2].numpy(), torch.ones_like(samples[:, 0]).numpy())
+                                param_container['x_dir'].get_value() + samples_directions[:, 0].numpy(),
+                                param_container['y_dir'].get_value() + samples_directions[:, 1].numpy(),
+                                param_container['z_dir'].get_value() + samples_directions[:, 2].numpy(),
+                                torch.ones_like(samples[:, 0]).numpy())
             if transforms[param_container_num] is not None:
                 ray_out = transforms[param_container_num](ray_out)
 
