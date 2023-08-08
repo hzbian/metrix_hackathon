@@ -6,7 +6,6 @@ from matplotlib import pyplot as plt
 import numpy as np
 from tqdm import trange
 
-
 sys.path.insert(0, '../../')
 from sub_projects.ray_optimization.losses import sinkhorn_loss
 from ray_tools.base import RayOutput
@@ -19,6 +18,37 @@ from ray_tools.base.utils import RandomGenerator
 from ray_optim.ray_optimizer import RayOptimizer
 
 from ray_tools.base.transform import MultiLayer, Histogram
+import ignite
+
+ssim_fun = ignite.metrics.SSIM(1.0)
+
+
+def ssim(a, b):
+    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')[0].unsqueeze(0)
+    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0].unsqueeze(0)
+    ssim_fun.update((a, b))
+    return ssim_fun.compute()
+
+
+def histogram_ssim(a, b):
+    a = a[0]['ray_output']['ImagePlane']['0']
+    b = b[0]['ray_output']['ImagePlane']['0']
+    x_min = min(a.x_loc.min(), b.x_loc.min())
+    x_max = max(a.x_loc.max(), b.x_loc.max())
+    y_min = min(a.y_loc.min(), b.y_loc.min())
+    y_max = max(a.y_loc.max(), b.y_loc.max())
+    hist_a = Histogram(100, (x_min, x_max), (y_min, y_max))(a)['histogram']
+    hist_b = Histogram(100, (x_min, x_max), (y_min, y_max))(b)['histogram']
+    hist_a = torch.from_numpy(hist_a).unsqueeze(0).unsqueeze(0).float()
+    hist_b = torch.from_numpy(hist_b).unsqueeze(0).unsqueeze(0).float()
+    # plt.imshow(hist_a)
+    # plt.savefig('a.png')
+    # plt.imshow(hist_b)
+    # plt.savefig('b.png')
+    # plt.imshow((hist_a - hist_b)**2)
+    # plt.savefig('a-b.png')
+    ssim_fun.update((hist_a, hist_b))
+    return torch.tensor(ssim_fun.compute())
 
 
 def histogram_mse(a, b):
@@ -30,11 +60,11 @@ def histogram_mse(a, b):
     y_max = max(a.y_loc.max(), b.y_loc.max())
     hist_a = Histogram(10, (x_min, x_max), (y_min, y_max))(a)['histogram']
     hist_b = Histogram(10, (x_min, x_max), (y_min, y_max))(b)['histogram']
-    #plt.imshow(hist_a)
+    # plt.imshow(hist_a)
     # plt.savefig('a.png')
-    #plt.imshow(hist_b)
+    # plt.imshow(hist_b)
     # plt.savefig('b.png')
-    #plt.imshow((hist_a - hist_b)**2)
+    # plt.imshow((hist_a - hist_b)**2)
     # plt.savefig('a-b.png')
     return ((hist_a - hist_b) ** 2).mean()
 
@@ -86,6 +116,7 @@ def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
         ("x_dir", NumericalParameter(value=0.)),
         ("y_dir", NumericalParameter(value=0.)),
         ("z_dir", NumericalParameter(value=1.)),
+        ("correlation_factor", NumericalParameter(value=0.)),
         ("direction_spread", NumericalParameter(value=0.)),
         ("x_mean", NumericalParameter(value=0)),
         ("y_mean", NumericalParameter(value=0)),
@@ -137,5 +168,5 @@ def investigate_var(var_name: str, value_lims, loss_function, loss_string):
 
 
 # print(evaluate_single_var("y_mean", 0.15, loss_function=kld_loss))
-investigate_var('y_mean', value_lims=(0.0, 0.1), loss_function=kld_loss, loss_string="mse")
-investigate_var('y_var', value_lims=(0.0, 0.1), loss_function=kld_loss, loss_string="mse")
+investigate_var('y_mean', value_lims=(0.0, 1.0), loss_function=histogram_ssim, loss_string="histo_ssim")
+investigate_var('y_var', value_lims=(0.0, 1.0), loss_function=histogram_ssim, loss_string="histo_ssim")
