@@ -5,7 +5,7 @@ import shutil
 import time
 import string
 import random
-from subprocess import DEVNULL, STDOUT, check_call
+from subprocess import DEVNULL, STDOUT
 import subprocess
 import shlex
 from abc import ABCMeta, abstractmethod
@@ -90,6 +90,9 @@ class RayBackendDockerRAYUI(RayBackend):
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
 
+        # create local Ray-UI workdir (should be done before mounting docker directory below)
+        os.makedirs(self.ray_workdir, exist_ok=True)
+
         if self.container_system == "docker":
             self.client = docker.from_env()
 
@@ -100,7 +103,9 @@ class RayBackendDockerRAYUI(RayBackend):
                 build_command = "podman build --security-opt label=disable -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
                 if self.verbose:
                     print(build_command)
-                check_call(shlex.split(build_command))
+                output = subprocess.check_output(shlex.split(build_command), stderr=self.print_device)
+                if self.verbose:
+                    print(output)
         # if container already exists, stop and remove it
         if self.container_system == "docker":
             try:
@@ -115,7 +120,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 pass
         else:
             try:
-                stop_command = f"podman stop {self.docker_container_name}"
+                stop_command = f"podman kill {self.docker_container_name}"
                 if self.verbose:
                     print(stop_command)
                 output = subprocess.check_output(shlex.split(stop_command))
@@ -146,8 +151,6 @@ class RayBackendDockerRAYUI(RayBackend):
                     print("Could not run podman.")
                 pass
 
-        # create local Ray-UI workdir (should be done before mounting docker directory below)
-        os.makedirs(self.ray_workdir, exist_ok=True)
 
         bind_volumes = [
             {
@@ -216,7 +219,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 podman_command = f"systemd-run --scope --user podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
                 if self.verbose:
                     print(podman_command)
-                output = subprocess.check_output(shlex.split(podman_command))
+                output = subprocess.check_output(shlex.split(podman_command), stderr=self.print_device)
                 if self.verbose:
                     print(output)
             retry = False
