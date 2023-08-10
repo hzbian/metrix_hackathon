@@ -55,7 +55,7 @@ elif CFG.OPTIMIZER == 'evotorch':
 else:
     optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
 
-criterion = multi_objective_loss if CFG.MULTI_OBJECTIVE else sinkhorn_loss
+criterion = CFG.CRITERION
 
 ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=criterion, engine=engine,
                              log_times=True, exported_plane=CFG.EXPORTED_PLANE,

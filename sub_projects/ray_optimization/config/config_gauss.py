@@ -4,15 +4,17 @@ from ray_tools.base.engine import GaussEngine
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
+from sub_projects.ray_optimization.losses import sinkhorn_loss
+from sub_projects.testing.loss_exploration import cov_mse, box_iou
 
 # objective
 REAL_DATA_DIR = None
 EXPORTED_PLANE = "ImagePlane"
 MAX_DEVIATION = 0.3
 N_RAYS = ['1e4']
-Z_LAYERS = [0]#[-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+Z_LAYERS = [0, 5]#[-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
-NUM_BEAMLINE_PARAM_SAMPLES = 1
+NUM_BEAMLINE_PARAM_SAMPLES = 4
 RG = RandomGenerator(seed=42)
 
 PARAM_FUNC = lambda: RayParameterContainer([
@@ -35,6 +37,7 @@ MULTI_OBJECTIVE = False
 MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
+CRITERION = box_iou
 ITERATIONS = 1000
 OPTIMIZER = ['optuna', 'evotorch', 'basinhopping'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
@@ -47,7 +50,9 @@ WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_gauss'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
 PLOT_INTERVAL = 100
-LOGGING = True
+LOGGING = False
 VERBOSE = False
 
 ENGINE = GaussEngine()
+
+
