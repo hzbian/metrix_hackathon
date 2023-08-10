@@ -19,33 +19,46 @@ from ray_tools.base.transform import MultiLayer, Histogram
 import ignite
 import torchvision
 
-ssim_fun = ignite.metrics.SSIM(1.0)
+#ssim_fun = ignite.metrics.SSIM(1.0)
 
 
 def ssim(a, b):
     a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')[0].unsqueeze(0)
     b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0].unsqueeze(0)
-    ssim_fun.update((a, b))
-    return ssim_fun.compute()
+    #ssim_fun.update((a, b))
+    #return ssim_fun.compute()
 
 
-def cov_mse(a, b):
-    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')[0][0]
-    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0][0]
-    cov_a = torch.cov(a)
-    cov_b = torch.cov(b)
+def cov_mse(a, b, exported_plane: str):
+    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
+    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
+    cov_a = torch.stack([torch.cov(element) for element in a])
+    cov_b = torch.stack([torch.cov(element) for element in b])
     return ((cov_a - cov_b) ** 2).mean()
 
-def box_iou(a, b):
-    a = a[0]['ray_output']['ImagePlane']['0']
-    b = b[0]['ray_output']['ImagePlane']['0']
-    global_x_min = min(a.x_loc.min(), b.x_loc.min())
-    global_y_min = min(a.y_loc.min(), b.y_loc.min())
-    shift_x = - global_x_min if global_x_min < 0 else 0
-    shift_y = - global_y_min if global_y_min < 0 else 0
-    box_a = torch.tensor((shift_x+a.x_loc.min(), shift_y+a.y_loc.min(), shift_x+a.x_loc.max(), shift_y+a.y_loc.max())).unsqueeze(0)
-    box_b = torch.tensor((shift_x+b.x_loc.min(), shift_y+b.y_loc.min(), shift_x+b.x_loc.max(), shift_y+b.y_loc.max())).unsqueeze(0)
-    return torchvision.ops.generalized_box_iou_loss(box_a, box_b)
+
+def box_iou(a, b, exported_plane):
+    a_dict = a['ray_output'][exported_plane]
+    b_dict = b['ray_output'][exported_plane]
+    box_a_list = []
+    box_b_list = []
+
+    for key, a in a_dict.items():
+        b = b_dict[key]
+        global_x_min = min(a.x_loc.min(), b.x_loc.min())
+        global_y_min = min(a.y_loc.min(), b.y_loc.min())
+        shift_x = - global_x_min if global_x_min < 0 else 0
+        shift_y = - global_y_min if global_y_min < 0 else 0
+        box_a = torch.tensor(
+            (shift_x + a.x_loc.min(), shift_y + a.y_loc.min(), shift_x + a.x_loc.max(), shift_y + a.y_loc.max())).unsqueeze(
+            0)
+        box_a_list.append(box_a)
+        box_b = torch.tensor(
+            (shift_x + b.x_loc.min(), shift_y + b.y_loc.min(), shift_x + b.x_loc.max(), shift_y + b.y_loc.max())).unsqueeze(
+            0)
+        box_b_list.append(box_b)
+
+    return torchvision.ops.generalized_box_iou_loss(torch.stack(box_a_list), torch.stack(box_b_list))
 
 
 def histogram_ssim(a, b):
@@ -92,9 +105,7 @@ def to_tensor(a):
 
 
 def sinkhorn_output_loss(a, b):
-    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')
-    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')
-    return sinkhorn_loss(a[0], b[0])
+    return sinkhorn_loss(a, b, exported_plane='ImagePlane')
 
 
 kld = torch.nn.KLDivLoss(log_target=True)
