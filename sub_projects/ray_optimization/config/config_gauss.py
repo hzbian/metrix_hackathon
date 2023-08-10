@@ -36,18 +36,18 @@ MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
 ITERATIONS = 1000
-OPTIMIZER = ['optuna', 'evotorch', 'basinhopping'][2]
+OPTIMIZER = ['optuna', 'evotorch', 'basinhopping'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()
 
 # logging
 STUDY_NAME = '-'.join(
     [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss', str(MAX_DEVIATION),
-     OPTIMIZER, 'fixed-interval-v21'])
+     OPTIMIZER, '-v23'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_gauss'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
 PLOT_INTERVAL = 100
 LOGGING = True
-VERBOSE = True
+VERBOSE = False
 
 ENGINE = GaussEngine()
