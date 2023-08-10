@@ -1,14 +1,13 @@
+import os
 import unittest
 
 import optuna
-import os
 
-from ray_optim.ray_optimizer import OptimizerBackend, RayOptimizer, OptimizerBackendOptuna
+from ray_optim.ray_optimizer import RayOptimizer
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, RandomParameter, NumericalParameter
 from ray_tools.base.utils import RandomGenerator
-from sub_projects.ray_optimization.losses import sinkhorn_loss
 
 
 class RayOptimizerTest(unittest.TestCase):

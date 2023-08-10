@@ -627,11 +627,11 @@ class RayOptimizer:
         return output_loss
 
     def calculate_loss_epoch(self, output, target_rays):
-        output = self.ray_output_to_tensor(output, self.exported_plane)
-        target_rays = self.ray_output_to_tensor(target_rays, self.exported_plane)
-        num_rays = torch.tensor([element.shape[1] for element in output], dtype=target_rays[0].dtype,
-                                device=target_rays[0].device)
-        losses = [self.criterion(target_rays[i], output[i]) for i in range(len(output))]
+        output_tensor = self.ray_output_to_tensor(output, self.exported_plane)
+        #target_rays = self.ray_output_to_tensor(target_rays, self.exported_plane)
+        num_rays = torch.tensor([element.shape[1] for element in output_tensor], dtype=output_tensor[0].dtype,
+                                device=output_tensor[0].device)
+        losses = [self.criterion(target_rays[i], output[i], exported_plane=self.exported_plane) for i in range(len(output))]
         if isinstance(losses[0], tuple):
             output_losses = []
             for i in range(len(losses[0])):
@@ -646,9 +646,9 @@ class RayOptimizer:
             losses_mean = losses[0].mean().item()
 
         if losses_mean < self.plot_interval_best.loss:
-            self.plot_interval_best.rays = output
+            self.plot_interval_best.rays = output_tensor
         if losses_mean < self.overall_best.loss:
-            self.overall_best.rays = output
+            self.overall_best.rays = output_tensor
         return losses, num_rays, losses_mean
 
     def optimize(self, optimization_target: OptimizationTarget):
