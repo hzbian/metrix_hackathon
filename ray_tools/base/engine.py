@@ -156,8 +156,11 @@ class GaussEngine(Engine):
             x_var = param_container['x_var'].get_value()
             y_var = param_container['y_var'].get_value()
             n_rays = int(param_container['number_rays'].get_value())
-            correlation_factor = param_container['correlation_factor'].get_value()
-            correlation = correlation_factor * torch.sqrt(x_var) * torch.sqrt(y_var)
+            if 'correlation_factor' in param_container:
+                correlation_factor = param_container['correlation_factor'].get_value()
+            else:
+                correlation_factor = 0.
+            correlation = correlation_factor * torch.sqrt(torch.tensor(x_var)) * torch.sqrt(torch.tensor(y_var))
             m = torch.distributions.multivariate_normal.MultivariateNormal(torch.Tensor([x_mean, y_mean]),
                                                                            torch.Tensor([[x_var, correlation],
                                                                                          [correlation, y_var]]))
