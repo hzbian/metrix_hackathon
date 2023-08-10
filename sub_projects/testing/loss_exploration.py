@@ -1,14 +1,12 @@
 import sys
 
+import numpy as np
 import torch.nn
 from matplotlib import pyplot as plt
-
-import numpy as np
 from tqdm import trange
 
 sys.path.insert(0, '../../')
 from sub_projects.ray_optimization.losses import sinkhorn_loss
-from ray_tools.base import RayOutput
 
 from ray_tools.base.engine import GaussEngine
 
@@ -19,6 +17,7 @@ from ray_optim.ray_optimizer import RayOptimizer
 
 from ray_tools.base.transform import MultiLayer, Histogram
 import ignite
+import torchvision
 
 ssim_fun = ignite.metrics.SSIM(1.0)
 
@@ -28,6 +27,25 @@ def ssim(a, b):
     b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0].unsqueeze(0)
     ssim_fun.update((a, b))
     return ssim_fun.compute()
+
+
+def cov_mse(a, b):
+    a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')[0][0]
+    b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0][0]
+    cov_a = torch.cov(a)
+    cov_b = torch.cov(b)
+    return ((cov_a - cov_b) ** 2).mean()
+
+def box_iou(a, b):
+    a = a[0]['ray_output']['ImagePlane']['0']
+    b = b[0]['ray_output']['ImagePlane']['0']
+    global_x_min = min(a.x_loc.min(), b.x_loc.min())
+    global_y_min = min(a.y_loc.min(), b.y_loc.min())
+    shift_x = - global_x_min if global_x_min < 0 else 0
+    shift_y = - global_y_min if global_y_min < 0 else 0
+    box_a = torch.tensor((shift_x+a.x_loc.min(), shift_y+a.y_loc.min(), shift_x+a.x_loc.max(), shift_y+a.y_loc.max())).unsqueeze(0)
+    box_b = torch.tensor((shift_x+b.x_loc.min(), shift_y+b.y_loc.min(), shift_x+b.x_loc.max(), shift_y+b.y_loc.max())).unsqueeze(0)
+    return torchvision.ops.generalized_box_iou_loss(box_a, box_b)
 
 
 def histogram_ssim(a, b):
@@ -100,7 +118,7 @@ def js_loss(a, b):
 def evaluate_single_var(var_name: str, value: float, loss_function):
     params_list, offset_list = create_params_offset_list(var_name=var_name, num_samples=2, value_lims=(value, value))
     engine = GaussEngine()
-    outputs_list = [engine.run(params_entry, transforms=MultiLayer([0])) for params_entry in params_list]
+    outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10])) for params_entry in params_list]
     distance = loss_function(outputs_list[0], outputs_list[1])
     RayOptimizer.fixed_position_plot_base([to_tensor(list_entry) for list_entry in outputs_list],
                                           xlim=[-2, 2], ylim=[-2, 2],
@@ -112,7 +130,7 @@ def evaluate_single_var(var_name: str, value: float, loss_function):
 def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
     RG = RandomGenerator(seed=42)
     PARAM_FUNC = lambda: RayParameterContainer([
-        ("number_rays", NumericalParameter(value=1e2)),
+        ("number_rays", NumericalParameter(value=1e3)),
         ("x_dir", NumericalParameter(value=0.)),
         ("y_dir", NumericalParameter(value=0.)),
         ("z_dir", NumericalParameter(value=1.)),
@@ -142,7 +160,7 @@ def investigate_var(var_name: str, value_lims, loss_function, loss_string):
     engine = GaussEngine()
     num_samples = 300
     params_list, offset_list = create_params_offset_list(var_name, value_lims, num_samples=num_samples)
-    outputs_list = [engine.run(params_entry, transforms=MultiLayer([0])) for params_entry in params_list]
+    outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10])) for params_entry in params_list]
 
     distances_list = []
     for i in trange(1, num_samples):
@@ -167,6 +185,7 @@ def investigate_var(var_name: str, value_lims, loss_function, loss_string):
     plt.clf()
 
 
-# print(evaluate_single_var("y_mean", 0.15, loss_function=kld_loss))
-investigate_var('y_mean', value_lims=(0.0, 1.0), loss_function=histogram_ssim, loss_string="histo_ssim")
-investigate_var('y_var', value_lims=(0.0, 1.0), loss_function=histogram_ssim, loss_string="histo_ssim")
+if __name__ == '__main__':
+    # print(evaluate_single_var("y_mean", 0.15, loss_function=kld_loss))
+    investigate_var('y_mean', value_lims=(0.0, 1.0), loss_function=box_iou, loss_string="generalized_box_iou_loss")
+    investigate_var('y_var', value_lims=(0.0, 1.0), loss_function=box_iou, loss_string="generalized_box_iou_loss")
