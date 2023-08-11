@@ -1,3 +1,4 @@
+import torchvision.ops
 from optuna.samplers import TPESampler
 
 from ray_tools.base.engine import GaussEngine
@@ -5,7 +6,7 @@ from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, 
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 from sub_projects.ray_optimization.losses import sinkhorn_loss
-from sub_projects.testing.loss_exploration import cov_mse, box_iou
+from sub_projects.testing.loss_exploration import cov_mse, BoxIoULoss
 
 # objective
 REAL_DATA_DIR = None
@@ -37,7 +38,7 @@ MULTI_OBJECTIVE = False
 MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
-CRITERION = box_iou
+CRITERION = BoxIoULoss(torchvision.ops.complete_box_iou_loss)
 ITERATIONS = 1000
 OPTIMIZER = ['optuna', 'evotorch', 'basinhopping'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()

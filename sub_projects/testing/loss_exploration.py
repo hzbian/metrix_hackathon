@@ -1,4 +1,6 @@
 import sys
+from abc import ABC, abstractmethod
+from typing import Union, Dict, List, Iterable, Callable
 
 import numpy as np
 import torch.nn
@@ -17,16 +19,119 @@ from ray_optim.ray_optimizer import RayOptimizer
 
 from ray_tools.base.transform import MultiLayer, Histogram
 import ignite
-import torchvision
 
-#ssim_fun = ignite.metrics.SSIM(1.0)
+
+# ssim_fun = ignite.metrics.SSIM(1.0)
+
+class RayLoss(ABC):
+    """
+    Base class for defining losses.
+    """
+
+    @abstractmethod
+    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
+                exported_plane: str) -> torch.Tensor:
+        """
+        Function that calculates the loss from input parameters a and b.
+        :param a: Ray_output that should be compared.
+        :param b: Ray_output that should be compared.
+        :param exported_plane: The plane of ray_output that should be compared.
+        :return: Calculated loss.
+        """
+        pass
+
+
+class ScheduledLoss(RayLoss):
+    """
+    Schedules two losses. The first ``loss_a_epochs`` it uses ``loss_a``, after that ``loss_b`` is taken.
+    :param loss_a: Loss being used the first ``loss_a_epochs``.
+    :param loss_b: Loss being used after ``loss_a_epochs``.
+    :param loss_a_epochs: The number of epochs, that ``loss_a`` is taken, after that, use ``loss_b``.
+    """
+
+    def __init__(self, loss_a: RayLoss, loss_b: RayLoss, loss_a_epochs: int):
+        self.loss_a: RayLoss = loss_a
+        self.loss_b: RayLoss = loss_b
+        self.loss_a_epochs: int = loss_a_epochs
+        self.passed_epochs: int = 0
+
+    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
+                exported_plane: str) -> torch.Tensor:
+        if self.passed_epochs > self.loss_a_epochs:
+            self.passed_epochs += 1
+            return self.loss_a.loss_fn(a, b, exported_plane)
+        else:
+            return self.loss_b.loss_fn(a, b, exported_plane)
+
+
+class BoxIoULoss(RayLoss):
+    """
+    Implementation of box intersection-over-union losses. This class is meant to be used with a Torchvision function
+    as input as described in the `PyTorch documentation <https://pytorch.org/vision/master/ops.html#losses>`_
+    :param base_fn can be one of `torchvision.ops.complete_box_iou`, ``torchvision.ops.distance_box_iou_loss`` or
+    ``torchvision.ops.generalized_box_iou_loss``.
+    """
+
+    def __init__(self, base_fn: Callable[..., torch.Tensor]):
+        self.base_fn: Callable[..., torch.Tensor] = base_fn
+
+    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
+                exported_plane: str) -> torch.Tensor:
+        a_dict = a['ray_output'][exported_plane]
+        b_dict = b['ray_output'][exported_plane]
+        box_a_list = []
+        box_b_list = []
+
+        for key, a in a_dict.items():
+            b = b_dict[key]
+            global_x_min = min(a.x_loc.min(), b.x_loc.min())
+            global_y_min = min(a.y_loc.min(), b.y_loc.min())
+            shift_x = - global_x_min if global_x_min < -1 else 0
+            shift_y = - global_y_min if global_y_min < -1 else 0
+            box_a = torch.tensor(
+                (shift_x + a.x_loc.min(), shift_y + a.y_loc.min(), shift_x + a.x_loc.max(),
+                 shift_y + a.y_loc.max())).unsqueeze(
+                -1)
+            box_a_list.append(box_a)
+            box_b = torch.tensor(
+                (shift_x + b.x_loc.min(), shift_y + b.y_loc.min(), shift_x + b.x_loc.max(),
+                 shift_y + b.y_loc.max())).unsqueeze(
+                -1)
+            box_b_list.append(box_b)
+
+        return self.base_fn(torch.stack(box_a_list), torch.stack(box_b_list))
+
+
+class HistogramMSE(RayLoss):
+    """
+    Calculates the histograms of two ray_outputs and the MSE between those two histograms.
+    :param n_bins The amount of bins the histograms are generated with.
+    """
+    def __init__(self, n_bins: int):
+        self.n_bins: int = n_bins
+    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
+                exported_plane: str) -> torch.Tensor:
+        a_dict = a['ray_output'][exported_plane]
+        b_dict = b['ray_output'][exported_plane]
+        hist_a_list = []
+        hist_b_list = []
+
+        for key, a in a_dict.items():
+            b = b_dict[key]
+            x_min = min(a.x_loc.min(), b.x_loc.min())
+            x_max = max(a.x_loc.max(), b.x_loc.max())
+            y_min = min(a.y_loc.min(), b.y_loc.min())
+            y_max = max(a.y_loc.max(), b.y_loc.max())
+            hist_a_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)['histogram'])
+            hist_b_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)['histogram'])
+        return ((torch.stack(hist_a_list) - torch.stack(hist_b_list)) ** 2).mean()
 
 
 def ssim(a, b):
     a = RayOptimizer.ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')[0].unsqueeze(0)
     b = RayOptimizer.ray_output_to_tensor(ray_output=b, exported_plane='ImagePlane')[0].unsqueeze(0)
-    #ssim_fun.update((a, b))
-    #return ssim_fun.compute()
+    # ssim_fun.update((a, b))
+    # return ssim_fun.compute()
 
 
 def cov_mse(a, b, exported_plane: str):
@@ -35,30 +140,6 @@ def cov_mse(a, b, exported_plane: str):
     cov_a = torch.stack([torch.cov(element) for element in a])
     cov_b = torch.stack([torch.cov(element) for element in b])
     return ((cov_a - cov_b) ** 2).mean()
-
-
-def box_iou(a, b, exported_plane):
-    a_dict = a['ray_output'][exported_plane]
-    b_dict = b['ray_output'][exported_plane]
-    box_a_list = []
-    box_b_list = []
-
-    for key, a in a_dict.items():
-        b = b_dict[key]
-        global_x_min = min(a.x_loc.min(), b.x_loc.min())
-        global_y_min = min(a.y_loc.min(), b.y_loc.min())
-        shift_x = - global_x_min if global_x_min < 0 else 0
-        shift_y = - global_y_min if global_y_min < 0 else 0
-        box_a = torch.tensor(
-            (shift_x + a.x_loc.min(), shift_y + a.y_loc.min(), shift_x + a.x_loc.max(), shift_y + a.y_loc.max())).unsqueeze(
-            0)
-        box_a_list.append(box_a)
-        box_b = torch.tensor(
-            (shift_x + b.x_loc.min(), shift_y + b.y_loc.min(), shift_x + b.x_loc.max(), shift_y + b.y_loc.max())).unsqueeze(
-            0)
-        box_b_list.append(box_b)
-
-    return torchvision.ops.generalized_box_iou_loss(torch.stack(box_a_list), torch.stack(box_b_list))
 
 
 def histogram_ssim(a, b):
@@ -78,26 +159,8 @@ def histogram_ssim(a, b):
     # plt.savefig('b.png')
     # plt.imshow((hist_a - hist_b)**2)
     # plt.savefig('a-b.png')
-    ssim_fun.update((hist_a, hist_b))
-    return torch.tensor(ssim_fun.compute())
-
-
-def histogram_mse(a, b):
-    a = a[0]['ray_output']['ImagePlane']['0']
-    b = b[0]['ray_output']['ImagePlane']['0']
-    x_min = min(a.x_loc.min(), b.x_loc.min())
-    x_max = max(a.x_loc.max(), b.x_loc.max())
-    y_min = min(a.y_loc.min(), b.y_loc.min())
-    y_max = max(a.y_loc.max(), b.y_loc.max())
-    hist_a = Histogram(10, (x_min, x_max), (y_min, y_max))(a)['histogram']
-    hist_b = Histogram(10, (x_min, x_max), (y_min, y_max))(b)['histogram']
-    # plt.imshow(hist_a)
-    # plt.savefig('a.png')
-    # plt.imshow(hist_b)
-    # plt.savefig('b.png')
-    # plt.imshow((hist_a - hist_b)**2)
-    # plt.savefig('a-b.png')
-    return ((hist_a - hist_b) ** 2).mean()
+    ## ssim_fun.update((hist_a, hist_b))
+    ## return torch.tensor(ssim_fun.compute())
 
 
 def to_tensor(a):

@@ -1,5 +1,6 @@
 import os
 
+import torchvision.ops
 from optuna.samplers import TPESampler
 
 from ray_tools.base.backend import RayBackendDockerRAYUI
@@ -7,6 +8,7 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, RandomOutputParameter
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
+from sub_projects.testing.loss_exploration import BoxIoULoss
 
 # paths
 ROOT_DIR = '../../'
@@ -75,6 +77,7 @@ MULTI_OBJECTIVE = False
 MULTI_OBJECTIVE_DIRECTIONS = ['minimize', 'minimize']
 
 # optimization
+CRITERION = BoxIoULoss(torchvision.ops.complete_box_iou_loss)
 ITERATIONS = 1000
 OPTIMIZER = ['optuna', 'evotorch'][0]
 SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.samplers.CmaEsSampler()

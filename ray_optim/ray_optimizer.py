@@ -19,6 +19,7 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
     NumericalOutputParameter, OutputParameter
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
+from sub_projects.testing.loss_exploration import RayLoss
 
 plt.switch_backend('Agg')
 
@@ -275,7 +276,7 @@ class BestSample:
 
 
 class RayOptimizer:
-    def __init__(self, optimizer_backend: OptimizerBackend, criterion, exported_plane: str,
+    def __init__(self, optimizer_backend: OptimizerBackend, criterion: RayLoss, exported_plane: str,
                  engine: RayEngine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
                  log_times: bool = False, plot_interval: int = 10, iterations=1000):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
@@ -631,7 +632,7 @@ class RayOptimizer:
         #target_rays = self.ray_output_to_tensor(target_rays, self.exported_plane)
         num_rays = torch.tensor([element.shape[1] for element in output_tensor], dtype=output_tensor[0].dtype,
                                 device=output_tensor[0].device)
-        losses = [self.criterion(target_rays[i], output[i], exported_plane=self.exported_plane) for i in range(len(output))]
+        losses = [self.criterion.loss_fn(target_rays[i], output[i], exported_plane=self.exported_plane) for i in range(len(output))]
         if isinstance(losses[0], tuple):
             output_losses = []
             for i in range(len(losses[0])):
