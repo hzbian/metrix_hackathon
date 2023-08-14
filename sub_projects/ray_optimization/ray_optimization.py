@@ -3,7 +3,6 @@ import sys
 import optuna
 
 import wandb
-from losses import multi_objective_loss, sinkhorn_loss
 from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')

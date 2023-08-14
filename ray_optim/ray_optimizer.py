@@ -19,7 +19,8 @@ from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
     NumericalOutputParameter, OutputParameter
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
-from sub_projects.testing.loss_exploration import RayLoss
+from sub_projects.ray_optimization.losses import RayLoss
+from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 plt.switch_backend('Agg')
 
@@ -93,7 +94,8 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
                 bounds.append([value.value_lims[0], value.value_lims[1]])
                 x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
         ret = self.basinhopping_function(self.basinhopping_objective(objective, optimization_target), x0,
-                                         niter=iterations, interval=iterations, stepsize=1, T=0.01, minimizer_kwargs={"bounds": bounds}, disp=True)
+                                         niter=iterations, interval=iterations, stepsize=1, T=0.01,
+                                         minimizer_kwargs={"bounds": bounds}, disp=True)
         return ret.x, ret.fun
 
 
@@ -352,11 +354,14 @@ class RayOptimizer:
                             epoch: Optional[int] = None) -> np.array:
         y_label = ['w/o comp.', 'observed', 'compensated']
         suptitle = 'Epoch' + str(epoch) if epoch is not None else None
-        return RayOptimizer.fixed_position_plot_base([without_compensation, target, compensated], xlim, ylim, y_label, suptitle)
+        return RayOptimizer.fixed_position_plot_base([without_compensation, target, compensated], xlim, ylim, y_label,
+                                                     suptitle)
 
     @staticmethod
-    def fixed_position_plot_base(tensor_list_list: list[list[torch.Tensor]], xlim, ylim, ylabel, suptitle: Optional[str] = None):
-        fig, axs = plt.subplots(len(tensor_list_list), len(tensor_list_list[0]), squeeze=False, gridspec_kw={'wspace': 0, 'hspace':0})
+    def fixed_position_plot_base(tensor_list_list: list[list[torch.Tensor]], xlim, ylim, ylabel,
+                                 suptitle: Optional[str] = None):
+        fig, axs = plt.subplots(len(tensor_list_list), len(tensor_list_list[0]), squeeze=False,
+                                gridspec_kw={'wspace': 0, 'hspace': 0})
         for idx_list_list in range(len(tensor_list_list)):
             for beamline_idx in range(len(tensor_list_list[0])):
                 element = tensor_list_list[idx_list_list][beamline_idx]
@@ -376,7 +381,6 @@ class RayOptimizer:
         fig.set_dpi(200)
         return fig
 
-
     @staticmethod
     def normalize_parameters(parameters: RayParameterContainer,
                              search_space: RayParameterContainer) -> RayParameterContainer:
@@ -390,7 +394,7 @@ class RayOptimizer:
 
     @staticmethod
     def parameters_rmse(parameters_a: RayParameterContainer, parameters_b: RayParameterContainer,
-                            search_space: RayParameterContainer):
+                        search_space: RayParameterContainer):
         counter: int = 0
         mse: float = 0.
         normalized_parameters_a: RayParameterContainer = RayOptimizer.normalize_parameters(parameters_a, search_space)
@@ -464,17 +468,6 @@ class RayOptimizer:
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
-    def ray_output_to_tensor(ray_output: Union[Dict, List[Dict], Iterable[Dict]], exported_plane: str):
-        if not isinstance(ray_output, Dict):
-            return [RayOptimizer.ray_output_to_tensor(element, exported_plane) for element in
-                    ray_output]
-        else:
-            rays: dict = ray_output['ray_output'][exported_plane]
-            x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
-            y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
-            return torch.stack((x_locs, y_locs), -1)
-
-    @staticmethod
     def get_evaluation_parameters(uncompensated_parameters_list: List[RayParameterContainer], offsets) -> List[
         RayParameterContainer]:
         evaluation_parameters_list = [element.clone() for element in uncompensated_parameters_list]
@@ -515,7 +508,7 @@ class RayOptimizer:
         if isinstance(optimization_target, OffsetOptimizationTarget):
             if optimization_target.target_params is not None:
                 rmse = RayOptimizer.parameters_rmse(optimization_target.target_params, initial_parameters[0],
-                                                             optimization_target.search_space)
+                                                    optimization_target.search_space)
                 self.logging_backend.add_to_log({"params_rmse": rmse})
 
         begin_loss_time: float = time.time() if self.log_times else None
@@ -535,9 +528,9 @@ class RayOptimizer:
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
                 best_rays_list = self.overall_best.rays
-                target_perturbed_parameters_rays_list = RayOptimizer.ray_output_to_tensor(
+                target_perturbed_parameters_rays_list = ray_output_to_tensor(
                     optimization_target.observed_rays, self.exported_plane)
-                target_initial_parameters_rays_list = self.ray_output_to_tensor(
+                target_initial_parameters_rays_list = ray_output_to_tensor(
                     optimization_target.uncompensated_rays, self.exported_plane)
                 fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list,
                                                                target_initial_parameters_rays_list,
@@ -549,12 +542,12 @@ class RayOptimizer:
 
                 if optimization_target.validation_scan is not None:
                     validation_scan = optimization_target.validation_scan
-                    validation_rays_list = self.ray_output_to_tensor(
+                    validation_rays_list = ray_output_to_tensor(
                         validation_scan.observed_rays, exported_plane=self.exported_plane)
-                    validation_parameters_rays_list = self.ray_output_to_tensor(
+                    validation_parameters_rays_list = ray_output_to_tensor(
                         validation_scan.uncompensated_rays, self.exported_plane)
                     compensated_rays_list = self.engine.run(validation_parameters, transforms)
-                    compensated_rays_list = self.ray_output_to_tensor(compensated_rays_list,
+                    compensated_rays_list = ray_output_to_tensor(compensated_rays_list,
                                                                       exported_plane=self.exported_plane)
                     validation_fixed_position_plot = self.fixed_position_plot(compensated_rays_list,
                                                                               validation_rays_list,
@@ -570,19 +563,19 @@ class RayOptimizer:
                 image = self.plot_data(self.plot_interval_best.rays, epoch=self.plot_interval_best.epoch)
                 self.logging_backend.image("footprint", image)
                 if isinstance(optimization_target, OffsetOptimizationTarget):
-                    compensation_image = self.compensation_plot(self.plot_interval_best.rays, self.ray_output_to_tensor(
-                        optimization_target.observed_rays, self.exported_plane), self.ray_output_to_tensor(
+                    compensation_image = self.compensation_plot(self.plot_interval_best.rays, ray_output_to_tensor(
+                        optimization_target.observed_rays, self.exported_plane), ray_output_to_tensor(
                         optimization_target.uncompensated_rays, self.exported_plane),
                                                                 epoch=self.plot_interval_best.epoch)
                     self.logging_backend.image("compensation", compensation_image)
                 max_ray_index = torch.argmax(
-                    torch.Tensor([self.ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
+                    torch.Tensor([ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
                                   optimization_target.observed_rays])).item()
                 fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
-                                                               [self.ray_output_to_tensor(
+                                                               [ray_output_to_tensor(
                                                                    optimization_target.observed_rays[
                                                                        max_ray_index], self.exported_plane)],
-                                                               [self.ray_output_to_tensor(
+                                                               [ray_output_to_tensor(
                                                                    optimization_target.uncompensated_rays[
                                                                        max_ray_index], self.exported_plane)],
                                                                epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
@@ -595,7 +588,7 @@ class RayOptimizer:
                 self.logging_backend.image("parameter_comparison", parameter_comparison_image)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                target_tensor = self.ray_output_to_tensor(optimization_target.observed_rays,
+                target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
                                                           self.exported_plane)
                 if isinstance(target_tensor, torch.Tensor):
                     target_tensor = [target_tensor]
@@ -628,11 +621,12 @@ class RayOptimizer:
         return output_loss
 
     def calculate_loss_epoch(self, output, target_rays):
-        output_tensor = self.ray_output_to_tensor(output, self.exported_plane)
-        #target_rays = self.ray_output_to_tensor(target_rays, self.exported_plane)
+        output_tensor = ray_output_to_tensor(output, self.exported_plane)
+        # target_rays = self.ray_output_to_tensor(target_rays, self.exported_plane)
         num_rays = torch.tensor([element.shape[1] for element in output_tensor], dtype=output_tensor[0].dtype,
                                 device=output_tensor[0].device)
-        losses = [self.criterion.loss_fn(target_rays[i], output[i], exported_plane=self.exported_plane) for i in range(len(output))]
+        losses = [self.criterion.loss_fn(target_rays[i], output[i], exported_plane=self.exported_plane) for i in
+                  range(len(output))]
         if isinstance(losses[0], tuple):
             output_losses = []
             for i in range(len(losses[0])):
