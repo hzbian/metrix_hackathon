@@ -1,6 +1,7 @@
 datasets/metrix_real_world
 datasets/metrix_simulation/ray_enhance
 /ray_docker/rayui/RAY-UI-development/
+sub_projects/testing/plots
 .idea
 ray_workdir/
 wandb/
