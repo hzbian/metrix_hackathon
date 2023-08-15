@@ -3,13 +3,13 @@ import os
 
 import numpy as np
 import torch.nn
+import torchvision
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from sub_projects.ray_optimization.losses import RayLoss, SinkhornLoss, RayCountMSE, ScheduledLoss, HistogramMSE, \
-    CovMSE, KLDLoss, MSELoss, JSLoss, SSIMHistogramLoss
-
 sys.path.insert(0, '../../')
+from sub_projects.ray_optimization.losses import RayLoss, SinkhornLoss, RayCountMSE, ScheduledLoss, HistogramMSE, \
+    CovMSE, KLDLoss, MSELoss, JSLoss, SSIMHistogramLoss, BoxIoULoss
 
 from ray_tools.base.engine import GaussEngine
 
@@ -26,11 +26,11 @@ def to_tensor(a):
     return ray_output_to_tensor(ray_output=a, exported_plane='ImagePlane')
 
 
-def evaluate_single_var(var_name: str, value: float, loss_function):
-    params_list, offset_list = create_params_offset_list(var_name=var_name, num_samples=2, value_lims=(value, value))
+def evaluate_single_var(var_name: str, value: float, ray_loss: RayLoss):
+    params_list, offset_list = create_params_offset_list(var_name=var_name, num_samples=1, value_lims=(value, value))
     engine = GaussEngine()
     outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10])) for params_entry in params_list]
-    distance = loss_function(outputs_list[0], outputs_list[1])
+    distance = ray_loss.loss_fn(outputs_list[0], outputs_list[1], exported_plane='ImagePlane')
     RayOptimizer.fixed_position_plot_base([to_tensor(list_entry) for list_entry in outputs_list],
                                           xlim=[-2, 2], ylim=[-2, 2],
                                           ylabel=['reference'] + ["{:10.2f}".format(distance.item())])
@@ -53,10 +53,13 @@ def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
         ("y_var", NumericalParameter(value=0.005)),
     ])
     params = [PARAM_FUNC() for _ in range(3)]
-    offset = lambda: RayParameterContainer([(var_name, RandomParameter(value_lims=value_lims, rg=RG))])
+
+    def offset():
+        return RayParameterContainer([(var_name, RandomParameter(value_lims=value_lims, rg=RG))])
+
     offset_list = []
     params_list = []
-    for i in range(num_samples+1):
+    for i in range(num_samples + 1):
         perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in params]
         offset_instance = offset()
         if i != 0:
@@ -76,7 +79,7 @@ def investigate_var(var_name: str, value_lims, loss: RayLoss, loss_string):
     distances_list = []
     for i in range(num_samples):
         distance = torch.stack(
-            [loss.loss_fn(outputs_list[0][j], outputs_list[i+1][j], exported_plane="ImagePlane") for j in
+            [loss.loss_fn(outputs_list[0][j], outputs_list[i + 1][j], exported_plane="ImagePlane") for j in
              range(len(outputs_list[0]))]).mean()
         if isinstance(loss, ScheduledLoss):
             loss.end_epoch()
@@ -94,19 +97,40 @@ def investigate_var(var_name: str, value_lims, loss: RayLoss, loss_string):
 
 
 if __name__ == '__main__':
-    # investigate_loss = {"generalized_box_iou_loss": BoxIoULoss(torchvision.ops.generalized_box_iou_loss,
-    # reduction='mean')} investigate_loss = {"sinkhorn_loss": SinkhornLoss()} investigate_loss = {"raycount_mse":
-    # RayCountMSE()}
-    # investigate_loss = {"scheduled_loss": ScheduledLoss(RayCountMSE(), SinkhornLoss(), 150)}
-    # investigate_loss = {"histogram_mse_10": HistogramMSE(n_bins=10)}
+    iou_loss = {
+        "complete_box_iou_loss": BoxIoULoss(torchvision.ops.complete_box_iou_loss, reduction='mean'),
+        "distance_box_iou_loss": BoxIoULoss(torchvision.ops.distance_box_iou_loss, reduction='mean'),
+        "generalized_box_iou_loss": BoxIoULoss(torchvision.ops.generalized_box_iou_loss, reduction='mean'),
+    }
+    sinkhorn_loss = {
+        "sinkhorn_loss": SinkhornLoss(),
+    }
+    ray_count_loss = {
+        "ray_count_mse": RayCountMSE(),
+    }
+    scheduled_loss = {
+        "scheduled_loss": ScheduledLoss(RayCountMSE(), SinkhornLoss(), 150),
+    }
+    histogram_mse = {
+        "histogram_mse_10": HistogramMSE(n_bins=10),
+        "histogram_mse_100": HistogramMSE(n_bins=100),
+    }
+    cov_mse = {
+        "cov_mse": CovMSE(),
+    }
+    ssim_loss = {
+        "ssim_histogram_10": SSIMHistogramLoss(n_bins=10),
+        "ssim_histogram_100": SSIMHistogramLoss(n_bins=100),
+    }
+    torch_loss = {
+        "js_loss": JSLoss(),
+        "kld_loss": KLDLoss(),
+        "mse_loss": MSELoss(),
 
-    # investigate_loss = {"cov_mse": CovMSE()}
-
-    investigate_loss = {"ssim_histogram_loss": SSIMHistogramLoss(100)}
-    #investigate_loss = {"js_loss": JSLoss()}
+    }
+    investigate_loss = torch_loss | ssim_loss | cov_mse | histogram_mse | scheduled_loss | ray_count_loss | sinkhorn_loss | iou_loss
     for loss_string, loss in tqdm(investigate_loss.items()):
         investigate_var('y_mean', value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
         if isinstance(loss, ScheduledLoss):
             loss.reset_passed_epochs()
         investigate_var('y_var', value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
-
