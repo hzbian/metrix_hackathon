@@ -30,7 +30,7 @@ def evaluate_single_var(var_name: str, value: float, ray_loss: RayLoss):
     params_list, offset_list = create_params_offset_list(var_name=var_name, num_samples=1, value_lims=(value, value))
     engine = GaussEngine()
     outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10])) for params_entry in params_list]
-    distance = ray_loss.loss_fn(outputs_list[0], outputs_list[1], exported_plane='ImagePlane')
+    distance = ray_loss.loss_fn(outputs_list[0][0], outputs_list[1][0], exported_plane='ImagePlane')
     RayOptimizer.fixed_position_plot_base([to_tensor(list_entry) for list_entry in outputs_list],
                                           xlim=[-2, 2], ylim=[-2, 2],
                                           ylabel=['reference'] + ["{:10.2f}".format(distance.item())])
@@ -50,7 +50,7 @@ def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
         ("x_mean", NumericalParameter(value=0)),
         ("y_mean", NumericalParameter(value=0)),
         ("x_var", NumericalParameter(value=0.005)),
-        ("y_var", NumericalParameter(value=0.005)),
+        ("y_var", NumericalParameter(value=0.05)),
     ])
     params = [PARAM_FUNC() for _ in range(3)]
 
@@ -133,4 +133,4 @@ if __name__ == '__main__':
         investigate_var('y_mean', value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
         if isinstance(loss, ScheduledLoss):
             loss.reset_passed_epochs()
-        investigate_var('y_var', value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
+        investigate_var('y_var', value_lims=(0.0, 0.1), loss=loss, loss_string=loss_string)
