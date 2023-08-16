@@ -49,7 +49,7 @@ class RayOptimizerTest(unittest.TestCase):
             ("tX", RandomParameter(value_lims=(0., 0.5), rg=rg))])
         params_a = param_func()
         params_b = param_func()
-        mse = RayOptimizer.parameters_mse(params_a, params_b, param_func())
+        mse = RayOptimizer.parameters_rmse(params_a, params_b, param_func())
         tXa = params_a['tX']
         tXb = params_b['tX']
         second_mse = ((tXa.get_value() * 2) - (tXb.get_value() * 2)) ** 2
