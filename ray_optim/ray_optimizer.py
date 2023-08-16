@@ -280,10 +280,10 @@ class BestSample:
 class RayOptimizer:
     def __init__(self, optimizer_backend: OptimizerBackend, criterion: RayLoss, exported_plane: str,
                  engine: RayEngine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
-                 log_times: bool = False, plot_interval: int = 10, iterations=1000):
+                 log_times: bool = False, plot_interval: int = 10, iterations: int = 1000):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: RayEngine = engine
-        self.criterion = criterion
+        self.criterion: RayLoss = criterion
         self.exported_plane: str = exported_plane
         self.transforms: Optional[RayTransform] = transforms
         self.logging_backend: LoggingBackend = logging_backend
@@ -292,7 +292,7 @@ class RayOptimizer:
         self.iterations: int = iterations
         self.plot_interval_best: BestSample = BestSample()
         self.overall_best: BestSample = BestSample()
-        self.plot_interval = plot_interval
+        self.plot_interval: int = plot_interval
 
     @staticmethod
     def fig_to_image(fig: plt.Figure) -> np.array:
@@ -548,7 +548,7 @@ class RayOptimizer:
                         validation_scan.uncompensated_rays, self.exported_plane)
                     compensated_rays_list = self.engine.run(validation_parameters, transforms)
                     compensated_rays_list = ray_output_to_tensor(compensated_rays_list,
-                                                                      exported_plane=self.exported_plane)
+                                                                 exported_plane=self.exported_plane)
                     validation_fixed_position_plot = self.fixed_position_plot(compensated_rays_list,
                                                                               validation_rays_list,
                                                                               validation_parameters_rays_list,
@@ -589,7 +589,7 @@ class RayOptimizer:
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
                 target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
-                                                          self.exported_plane)
+                                                     self.exported_plane)
                 if isinstance(target_tensor, torch.Tensor):
                     target_tensor = [target_tensor]
                 target_image = self.plot_data(target_tensor)
