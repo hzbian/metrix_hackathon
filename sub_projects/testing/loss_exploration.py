@@ -49,8 +49,8 @@ def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
         ("direction_spread", NumericalParameter(value=0.)),
         ("x_mean", NumericalParameter(value=0)),
         ("y_mean", NumericalParameter(value=0)),
-        ("x_var", NumericalParameter(value=0.005)),
-        ("y_var", NumericalParameter(value=0.05)),
+        ("x_var", NumericalParameter(value=0.0001)),
+        ("y_var", NumericalParameter(value=0.0001)),
     ])
     params = [PARAM_FUNC() for _ in range(3)]
 
