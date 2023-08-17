@@ -26,11 +26,14 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("correlation_factor", RandomParameter(value_lims=(-0.8, 0.8), rg=RG)),
     ("x_mean", RandomParameter(value_lims=(-2, 2.), rg=RG)),
     ("y_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
-    ("x_var", RandomParameter(value_lims=(0.5, 1.0), rg=RG)),
-    ("y_var", RandomParameter(value_lims=(0.5, 1.0), rg=RG)),
+    ("x_var", RandomParameter(value_lims=(1e-10, 0.01), rg=RG)),
+    ("y_var", RandomParameter(value_lims=(1e-10, 0.01), rg=RG)),
 ])
 
 FIXED_PARAMS = []#[k for k, v in PARAM_FUNC().items() if k not in 'y_var' and isinstance(v, RandomParameter)]
+OVERWRITE_OFFSET = lambda: RayParameterContainer([
+    ("y_var", RandomParameter(value_lims=(1e-10, 0.00001), rg=RG)),
+])
 
 # multi objective
 MULTI_OBJECTIVE = False
