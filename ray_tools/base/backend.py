@@ -10,7 +10,7 @@ import subprocess
 import shlex
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import docker
 import docker.errors
@@ -57,6 +57,7 @@ class RayBackend(metaclass=ABCMeta):
     :param run_id: Run identifier (as string).
     :return: Dict with 'exported_planes' as keys and generated :class:`RayOutput` instances as values.
     """
+
     pass
 
 
@@ -68,6 +69,7 @@ class RayBackendDockerRAYUI(RayBackend):
     :param docker_container_name: Name of corresponding docker container (``docker_image`` + '_backend' is None)
     :param max_retry: Number of retries if Ray-UI fails.
     :param verbose: Show detailed outputs.
+    :param additional_mount_files: Paths to additional files that will be mounted in working directory
     """
 
     def __init__(self,
@@ -76,7 +78,8 @@ class RayBackendDockerRAYUI(RayBackend):
                  dockerfile_path: str = None,
                  docker_container_name: str = None,
                  max_retry: int = 1000,
-                 verbose=True) -> None:
+                 verbose=True,
+                 additional_mount_files: Optional[List[str]] = None) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
@@ -86,6 +89,7 @@ class RayBackendDockerRAYUI(RayBackend):
         self.verbose = verbose
         self.container_system = "podman"
         self.print_device = STDOUT if self.verbose else DEVNULL
+        self.additional_mount_files = additional_mount_files
 
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
@@ -100,7 +104,8 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.container_system == "docker":
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
-                build_command = "podman build --security-opt label=disable -f {} -t {}".format(os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
+                build_command = "podman build --security-opt label=disable -f {} -t {}".format(
+                    os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
                 if self.verbose:
                     print(build_command)
                 output = subprocess.check_output(shlex.split(build_command), stderr=self.print_device)
@@ -151,7 +156,6 @@ class RayBackendDockerRAYUI(RayBackend):
                     print("Could not run podman.")
                 pass
 
-
         bind_volumes = [
             {
                 'type': 'bind',
@@ -195,6 +199,8 @@ class RayBackendDockerRAYUI(RayBackend):
         # create sub-workdir (required for multi-threading with Ray-UI)
         run_workdir = os.path.join(self.ray_workdir, run_id)
         os.makedirs(run_workdir, exist_ok=True)
+        for file in self.additional_mount_files:
+            shutil.copy(file, run_workdir)
 
         tic = time.perf_counter()
 
@@ -324,7 +330,7 @@ class RayBackendDockerRAYX(RayBackend):
     def run(self,
             raypyng_rml: RMLFile,
             exported_planes: List[str],
-            run_id: str = None) -> Dict[str, RayOutput]:
+            run_id: str = None, additional_mount_files: Optional[List[str]] = None) -> Dict[str, RayOutput]:
 
         if run_id is None:
             run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))

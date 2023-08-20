@@ -3,16 +3,16 @@ import sys
 import optuna
 
 import wandb
-from sub_projects.ray_optimization.real_data import import_data
 
 sys.path.insert(0, '../../')
+from sub_projects.ray_optimization.real_data import import_data
 from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
     OffsetOptimizationTarget, OptimizerBackendBasinhopping, OptimizerBackendEvoTorch, RayScan
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter
 from scipy.optimize import basinhopping
-import config.config_gauss as CFG
+import config.config_ue48 as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
