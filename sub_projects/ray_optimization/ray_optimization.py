@@ -73,6 +73,8 @@ overwrite_offset = CFG.OVERWRITE_OFFSET
 def offset_search_space():
     ray_parameters = []
     for k, v in all_params.items():
+        if not isinstance(v, MutableParameter):
+            continue  # Numerical parameters do not need offset search
         if k in overwrite_offset:
             ray_parameter = overwrite_offset[k].clone()
         else:
