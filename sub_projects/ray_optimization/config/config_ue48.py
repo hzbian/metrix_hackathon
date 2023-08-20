@@ -14,7 +14,7 @@ from sub_projects.testing.loss_exploration import BoxIoULoss
 # paths
 ROOT_DIR = '../../'
 RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'UE48-PGM-CAT.rml')
-ADDITIONAL_MOUNT_FILES = [os.path.join(ROOT_DIR, 'rml_src', 'UE48-PGM-CAT.rml')]
+ADDITIONAL_MOUNT_FILES = [os.path.join(ROOT_DIR, 'rml_src', 'wave_linhor_3_Harm_600eV.ray')]
 RAY_WORKDIR = '/dev/shm'
 
 # objective
@@ -42,6 +42,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
 ])
 FIXED_PARAMS = []  # [k for k in PARAM_FUNC().keys()][1:-3]
+OVERWRITE_OFFSET = []
 
 # multi objective
 MULTI_OBJECTIVE = False

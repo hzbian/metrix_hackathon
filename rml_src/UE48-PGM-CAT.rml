@@ -5,7 +5,7 @@
   <object name="Undulator" type="Undulator File">
    <param id="numberRays" enabled="T">500000</param>
    <param id="undulatorFileClassType" comment="WAVE" enabled="T">1</param>
-   <param id="undulatorFile" absolute="X:/EMIL_Beamlines/Optisches Layout/Strahlrohre/Performance data calculated/Raytrace-Files/WAVEforRAY/WAVE_UE48_RAY_2019/wave_linhor_3_Harm_600eV.ray" enabled="F">X:/EMIL_Beamlines/Optisches Layout/Strahlrohre/Performance data calculated/Raytrace-Files/WAVEforRAY/WAVE_UE48_RAY_2019/wave_linhor_3_Harm_600eV.ray</param>
+   <param id="undulatorFile" absolute="/opt/ray-ui-workdir/wave_linhor_3_Harm_600eV.ray" enabled="F">/opt/ray-ui-workdir/wave_linhor_3_Harm_600eV.ray</param>
    <param id="additionalParameters" comment="from file" enabled="T">0</param>
    <param id="distributionDistance" enabled="T">10000</param>
    <param id="undulatorPeriodLength" enabled="T">4.8</param>
