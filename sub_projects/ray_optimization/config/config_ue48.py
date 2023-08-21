@@ -34,15 +34,19 @@ NUM_BEAMLINE_PARAM_SAMPLES = 22
 RG = RandomGenerator(seed=42)
 PARAM_FUNC = lambda: RayParameterContainer([
     ("Undulator.numberRays", NumericalParameter(value=1e4)),
-    ("Toroid.rotationXerror", RandomParameter(value_lims=(-0.15, 0.15), rg=RG)),
-    ("Cylinder.rotationXerror", RandomParameter(value_lims=(-40.0, 40.0), rg=RG)),
-    ("Cylinder.translationYerror", RandomParameter(value_lims=(-0.4, 0.4), rg=RG)),
+    ("Toroid.rotationXerror", RandomParameter(value_lims=(-0.015, 0.015), rg=RG)),
+    ("Cylinder.rotationXerror", RandomParameter(value_lims=(-0.001, 0.001), rg=RG)),
+    ("Cylinder.translationYerror", RandomParameter(value_lims=(-0.001, 0.001), rg=RG)),
     ("ImagePlane.translationXerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
     ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
     ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
 ])
 FIXED_PARAMS = []  # [k for k in PARAM_FUNC().keys()][1:-3]
-OVERWRITE_OFFSET = []
+OVERWRITE_OFFSET = lambda: RayParameterContainer([
+    ("Toroid.rotationXerror", RandomParameter(value_lims=(-0.15, 0.15), rg=RG)),
+    ("Cylinder.rotationXerror", RandomParameter(value_lims=(-40.0, 40.0), rg=RG)),
+    ("Cylinder.translationYerror", RandomParameter(value_lims=(-0.4, 0.4), rg=RG)),
+])
 
 # multi objective
 MULTI_OBJECTIVE = False
@@ -57,7 +61,7 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 # logging
 STUDY_NAME = '-'.join(
     [str(len(PARAM_FUNC()) - len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_DEVIATION),
-     OPTIMIZER, 'v1'])
+     OPTIMIZER, 'v333'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'emil_offsets'
 OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"

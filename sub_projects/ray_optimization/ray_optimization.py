@@ -1,4 +1,5 @@
 import sys
+from typing import Optional
 
 import optuna
 
@@ -62,20 +63,20 @@ ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=crit
                              logging_backend=WandbLoggingBackend(), plot_interval=CFG.PLOT_INTERVAL,
                              iterations=CFG.ITERATIONS)
 
+
 # target_rays = engine.run(target_params, transforms=transforms)
 # best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
 #                                                  iterations=100)
 # print(best_parameters, metrics)
 
-overwrite_offset = CFG.OVERWRITE_OFFSET
 
-
-def offset_search_space():
+def offset_search_space(input_parameter_container: RayParameterContainer,
+                        overwrite_offset: Optional[RayParameterContainer] = None):
     ray_parameters = []
-    for k, v in all_params.items():
+    for k, v in input_parameter_container.items():
         if not isinstance(v, MutableParameter):
             continue  # Numerical parameters do not need offset search
-        if k in overwrite_offset:
+        if overwrite_offset is not None and k in overwrite_offset:
             ray_parameter = overwrite_offset[k].clone()
         else:
             ray_parameter = (k, type(v)(
@@ -88,7 +89,7 @@ def offset_search_space():
 
 
 if CFG.REAL_DATA_DIR is None:
-    target_offset = offset_search_space()
+    target_offset = offset_search_space(all_params, None)
     uncompensated_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
     compensated_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in
                                                                               uncompensated_parameters]
@@ -118,7 +119,7 @@ if CFG.REAL_DATA_DIR is not None:
 else:
     validation_scan = None
 offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
-                                                      offset_search_space=offset_search_space(),
+                                                      offset_search_space=offset_search_space(all_params, CFG.OVERWRITE_OFFSET()),
                                                       uncompensated_parameters=uncompensated_parameters,
                                                       uncompensated_rays=uncompensated_rays,
                                                       target_offset=target_offset, validation_scan=validation_scan)
