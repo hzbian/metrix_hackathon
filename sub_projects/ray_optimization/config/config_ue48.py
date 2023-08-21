@@ -28,15 +28,15 @@ REAL_DATA_DIR = None #'../../datasets/metrix_real_data/2021_march_complete'
 EXPORTED_PLANE = "ImagePlane"
 MAX_TARGET_DEVIATION = 0.1
 MAX_OFFSET_SEARCH_DEVIATION = 0.3
-N_RAYS = ['1e4']
+N_RAYS = ['5e4']
 Z_LAYERS = [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
 NUM_BEAMLINE_PARAM_SAMPLES = 22
 RG = RandomGenerator(seed=42)
 PARAM_FUNC = lambda: RayParameterContainer([
-    ("Undulator.numberRays", NumericalParameter(value=1e4)),
-    ("Toroid.rotationXerror", RandomParameter(value_lims=(-0.15, 0.15), rg=RG)),
-    ("Cylinder.rotationXerror", RandomParameter(value_lims=(-40.0, 40.0), rg=RG)),
+    ("Undulator.numberRays", NumericalParameter(value=5e4)),
+    ("Toroid.rotationXerror", RandomParameter(value_lims=(-0.015, 0.015), rg=RG)),
+    ("Cylinder.rotationXerror", RandomParameter(value_lims=(-0.04, 0.04), rg=RG)),
     ("Cylinder.translationYerror", RandomParameter(value_lims=(-0.4, 0.4), rg=RG)),
     ("ImagePlane.translationXerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
     ("ImagePlane.translationYerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
