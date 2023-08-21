@@ -13,7 +13,7 @@ from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbL
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter
 from scipy.optimize import basinhopping
-import config.config_ue48 as CFG
+import config.config_tpe as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
@@ -24,6 +24,14 @@ wandb.init(entity=CFG.WANDB_ENTITY,
 engine = CFG.ENGINE
 # optimize only some all_params
 all_params = CFG.PARAM_FUNC()
+
+big_parameter = int(sys.argv[1])
+key, value = list(all_params.items())[big_parameter]
+value_lim_center = (value.value_lims[1] + value.value_lims[0]) / 2
+old_interval_half = (value.value_lims[1] - value.value_lims[0]) / 2
+old_interval_half *= 3
+all_params[key] = type(value)(value_lims=(value_lim_center-old_interval_half, value_lim_center+old_interval_half), rg=CFG.RG)
+CFG.STUDY_NAME += '_' + key
 
 for key in all_params:
     old_param = all_params[key]
@@ -119,7 +127,9 @@ if CFG.REAL_DATA_DIR is not None:
 else:
     validation_scan = None
 offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
-                                                      offset_search_space=offset_search_space(all_params, CFG.MAX_OFFSET_SEARCH_DEVIATION, CFG.OVERWRITE_OFFSET()),
+                                                      offset_search_space=offset_search_space(all_params,
+                                                                                              CFG.MAX_OFFSET_SEARCH_DEVIATION,
+                                                                                              CFG.OVERWRITE_OFFSET()),
                                                       uncompensated_parameters=uncompensated_parameters,
                                                       uncompensated_rays=uncompensated_rays,
                                                       target_offset=target_offset, validation_scan=validation_scan)
