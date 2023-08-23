@@ -199,8 +199,9 @@ class RayBackendDockerRAYUI(RayBackend):
         # create sub-workdir (required for multi-threading with Ray-UI)
         run_workdir = os.path.join(self.ray_workdir, run_id)
         os.makedirs(run_workdir, exist_ok=True)
-        for file in self.additional_mount_files:
-            shutil.copy(file, self.ray_workdir)
+        if self.additional_mount_files is not None:
+            for file in self.additional_mount_files:
+                shutil.copy(file, self.ray_workdir)
 
         tic = time.perf_counter()
 
