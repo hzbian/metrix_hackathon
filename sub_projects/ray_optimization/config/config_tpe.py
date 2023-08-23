@@ -25,7 +25,8 @@ REAL_DATA_TRAIN_SET = ['M03', 'M10', 'M18', 'M22', 'M23', 'M24', 'M25', 'M27', '
 REAL_DATA_VALIDATION_SET = ['M04', 'M05', 'M06', 'M07', 'M08', 'M09', 'M11', 'M12', 'M13', 'M14', 'M15', 'M16', 'M17',
                             'M18', 'M19', 'M20', 'M21', 'M26', 'M31', 'M34', 'M35', 'M38', 'M39']
 EXPORTED_PLANE = "ImagePlane"
-MAX_DEVIATION = 0.3
+MAX_TARGET_DEVIATION = 0.3
+MAX_OFFSET_SEARCH_DEVIATION = 0.3
 N_RAYS = ['1e4']
 Z_LAYERS = [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
@@ -72,6 +73,7 @@ PARAM_FUNC = lambda: RayParameterContainer([
     ("ImagePlane.translationZerror", RandomOutputParameter(value_lims=(-3.33, 3.33), rg=RG)),
 ])
 FIXED_PARAMS = []  # [k for k in PARAM_FUNC().keys()][1:-3]
+OVERWRITE_OFFSET = lambda: RayParameterContainer([])
 
 # multi objective
 MULTI_OBJECTIVE = False
@@ -85,7 +87,7 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 
 # logging
 STUDY_NAME = '-'.join(
-    [str(len(PARAM_FUNC()) - len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_DEVIATION),
+    [str(len(PARAM_FUNC()) - len(FIXED_PARAMS)), 'real' if REAL_DATA_DIR is not None else 'sim', str(MAX_TARGET_DEVIATION),
      OPTIMIZER, 'v7'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_offsets'
@@ -93,13 +95,13 @@ OPTUNA_STORAGE_PATH = "sqlite:////dev/shm/db.sqlite2"
 PLOT_INTERVAL = 10
 LOGGING = False
 VERBOSE = False
-
+import random
 ENGINE = RayEngine(rml_basefile=RML_BASEFILE,
           exported_planes=[EXPORTED_PLANE],
           ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                             dockerfile_path='../../ray_docker/rayui',
                                             docker_container_name=STUDY_NAME,
-                                            ray_workdir=os.path.join(RAY_WORKDIR, STUDY_NAME),
+                                            ray_workdir=os.path.join(RAY_WORKDIR, STUDY_NAME+str(random.random())),
                                             verbose=VERBOSE),
           num_workers=-2,
           as_generator=False)
