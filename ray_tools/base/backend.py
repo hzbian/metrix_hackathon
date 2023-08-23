@@ -104,7 +104,13 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.container_system == "docker":
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
-                build_command = "podman build --security-opt label=disable -f {} -t {}".format(
+                cleanup_command = "systemd-run --scope --user podman system prune -f"
+                if self.verbose:
+                    print(cleanup_command)
+                output = subprocess.check_output(shlex.split(cleanup_command), stderr=self.print_device)
+                if self.verbose:
+                    print(output)
+                build_command = "systemd-run --scope --user podman build --security-opt label=disable -f {} -t {}".format(
                     os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
                 if self.verbose:
                     print(build_command)
