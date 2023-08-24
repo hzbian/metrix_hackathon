@@ -54,18 +54,19 @@ class NumericalParameter(RayParameter):
 
 class MutableParameter(NumericalParameter):
     """
-    Extends :class:`NumericalParameter` by value_lims, specifying lower and upper limits for value.
+    Extends :class:`NumericalParameter` by value_lims, specifying lower and upper limits for value. If `enforce_lims` is True, the limits of this parameter should always be enforced, e.g. in an optimization.
     """
 
-    def __init__(self, value: float, value_lims: Tuple[float, float] = None):
+    def __init__(self, value: float, value_lims: Tuple[float, float] = None, enforce_lims: bool = False):
         super().__init__(value)
         self.value_lims = value_lims
+        self.enforce_lims: bool = enforce_lims
 
     def get_value(self) -> float:
         return self.value
 
     def clone(self) -> MutableParameter:
-        return MutableParameter(value=self.value, value_lims=self.value_lims)
+        return MutableParameter(value=self.value, value_lims=self.value_lims, enforce_lims=self.enforce_lims)
 
 
 class RandomParameter(MutableParameter):
@@ -73,10 +74,10 @@ class RandomParameter(MutableParameter):
     Draws a random value in the interval value_lims.
     """
 
-    def __init__(self, value_lims: Tuple[float, float] = None, rg: RandomGenerator = None):
+    def __init__(self, value_lims: Tuple[float, float] = None, rg: RandomGenerator = None, enforce_lims: bool = False):
         self.rg = rg if rg is not None else RandomGenerator()
         value = self.rg.rg_random.uniform(*value_lims)
-        super().__init__(value, value_lims)
+        super().__init__(value, value_lims, enforce_lims=enforce_lims)
 
     def resample(self) -> None:
         """
@@ -86,7 +87,7 @@ class RandomParameter(MutableParameter):
 
     def clone(self) -> RandomParameter:
         # Note: the value of the cloned parameter is not resampled but also copied.
-        param = RandomParameter(self.value_lims, rg=self.rg)
+        param = RandomParameter(self.value_lims, rg=self.rg, enforce_lims=self.enforce_lims)
         param.value = self.value
         return param
 
@@ -100,16 +101,17 @@ class RandomOutputParameter(RandomParameter, OutputParameter):
     """
     A random parameter that affects only the output of the engine and not its inputs
     """
-    
+
     def clone(self) -> RandomOutputParameter:
         # Note: the value of the cloned parameter is not resampled but also copied.
-        param = RandomOutputParameter(self.value_lims, rg=self.rg)
+        param = RandomOutputParameter(self.value_lims, rg=self.rg, enforce_lims=self.enforce_lims)
         param.value = self.value
         return param
 
+
 class NumericalOutputParameter(NumericalParameter, OutputParameter):
     def clone(self) -> NumericalOutputParameter:
-       return NumericalOutputParameter(value=self.value)
+        return NumericalOutputParameter(value=self.value)
 
 
 class GridParameter(RayParameter):
