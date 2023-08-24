@@ -8,6 +8,6 @@ def ray_output_to_tensor(ray_output: Union[Dict, List[Dict], Iterable[Dict]], ex
                 ray_output]
     else:
         rays: dict = ray_output['ray_output'][exported_plane]
-        x_locs = torch.stack([torch.tensor(value.x_loc) for value in rays.values()])
-        y_locs = torch.stack([torch.tensor(value.y_loc) for value in rays.values()])
+        x_locs = torch.stack([value.x_loc.clone().detach() for value in rays.values()])
+        y_locs = torch.stack([value.y_loc.clone().detach() for value in rays.values()])
         return torch.stack((x_locs, y_locs), -1)

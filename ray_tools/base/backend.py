@@ -18,6 +18,7 @@ import docker.types
 
 import h5py
 import numpy as np
+import torch
 import pandas as pd
 
 from raypyng import RMLFile
@@ -34,13 +35,13 @@ class RayOutput:
 
     ``energy``: energy of rays at exported plane.
     """
-    x_loc: np.ndarray
-    y_loc: np.ndarray
-    z_loc: np.ndarray
-    x_dir: np.ndarray
-    y_dir: np.ndarray
-    z_dir: np.ndarray
-    energy: np.ndarray
+    x_loc: torch.Tensor
+    y_loc: torch.Tensor
+    z_loc: torch.Tensor
+    x_dir: torch.Tensor
+    y_dir: torch.Tensor
+    z_dir: torch.Tensor
+    energy: torch.Tensor
 
 
 class RayBackend(metaclass=ABCMeta):
@@ -256,13 +257,13 @@ class RayBackendDockerRAYUI(RayBackend):
                                               exported_plane + '_DX', exported_plane + '_DY', exported_plane + '_DZ',
                                               exported_plane + '_EN', exported_plane + '_PL'])
 
-            ray_output[exported_plane] = RayOutput(x_loc=raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float32),
-                                                   y_loc=raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float32),
-                                                   z_loc=raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float32),
-                                                   x_dir=raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float32),
-                                                   y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float32),
-                                                   z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float32),
-                                                   energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float32))
+            ray_output[exported_plane] = RayOutput(x_loc=torch.from_numpy(raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float32)),
+                                                   y_loc=torch.from_numpy(raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float32)),
+                                                   z_loc=torch.from_numpy(raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float32)),
+                                                   x_dir=torch.from_numpy(raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float32)),
+                                                   y_dir=torch.from_numpy(raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float32)),
+                                                   z_dir=torch.from_numpy(raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float32)),
+                                                   energy=torch.from_numpy(raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float32)))
 
         # remove sub-workdir
         shutil.rmtree(run_workdir)
