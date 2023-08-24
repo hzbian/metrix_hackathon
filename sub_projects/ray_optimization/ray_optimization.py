@@ -13,7 +13,7 @@ from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbL
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter
 from scipy.optimize import basinhopping
-import config.config_tpe as CFG
+import config.config_gauss as CFG
 
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
@@ -25,13 +25,14 @@ engine = CFG.ENGINE
 # optimize only some all_params
 all_params = CFG.PARAM_FUNC()
 
-big_parameter = int(sys.argv[1])
-key, value = list(all_params.items())[big_parameter]
-value_lim_center = (value.value_lims[1] + value.value_lims[0]) / 2
-old_interval_half = (value.value_lims[1] - value.value_lims[0]) / 2
-old_interval_half *= 3
-all_params[key] = type(value)(value_lims=(value_lim_center-old_interval_half, value_lim_center+old_interval_half), rg=CFG.RG)
-CFG.STUDY_NAME += '_' + key
+if len(sys.argv) > 1:
+    big_parameter = int(sys.argv[1])
+    key, value = list(all_params.items())[big_parameter]
+    value_lim_center = (value.value_lims[1] + value.value_lims[0]) / 2
+    old_interval_half = (value.value_lims[1] - value.value_lims[0]) / 2
+    old_interval_half *= 3
+    all_params[key] = type(value)(value_lims=(value_lim_center-old_interval_half, value_lim_center+old_interval_half), rg=CFG.RG)
+    CFG.STUDY_NAME += '_' + key
 
 for key in all_params:
     old_param = all_params[key]
@@ -87,11 +88,13 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
         if overwrite_offset is not None and k in overwrite_offset:
             ray_parameter = (k, overwrite_offset[k].clone())
         else:
-            ray_parameter = (k, type(v)(
-                value_lims=(
-                    -max_deviation * (v.value_lims[1] - v.value_lims[0]),
-                    max_deviation * (v.value_lims[1] - v.value_lims[0])),
-                rg=CFG.RG))
+            new_min = -max_deviation * (v.value_lims[1] - v.value_lims[0])
+            if v.enforce_lims and new_min < v.value_lims[0]:
+                new_min = v.value_lims[0]
+            new_max = max_deviation * (v.value_lims[1] - v.value_lims[0])
+            if v.enforce_lims and new_max > v.value_lims[1]:
+                new_max = v.value_lims[1]
+            ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=CFG.RG))
         ray_parameters.append(ray_parameter)
     return RayParameterContainer(ray_parameters)
 
