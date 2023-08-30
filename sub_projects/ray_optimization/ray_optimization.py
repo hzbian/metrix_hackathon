@@ -1,8 +1,8 @@
 import sys
+import os
 from typing import Optional
 
 import optuna
-
 import wandb
 
 sys.path.insert(0, '../../')
@@ -13,8 +13,8 @@ from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbL
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter
 from scipy.optimize import basinhopping
-import config.config_gauss as CFG
-
+import config.config_tpe as CFG
+os.environ["WANDB__SERVICE_WAIT"] = "300"
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
            name=CFG.STUDY_NAME,
