@@ -11,7 +11,7 @@ from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbL
     OffsetOptimizationTarget, OptimizerBackendBasinhopping, OptimizerBackendEvoTorch, RayScan
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
-    RayParameter
+    RayParameter, RandomParameter
 from scipy.optimize import basinhopping
 import config.config_tpe as CFG
 os.environ["WANDB__SERVICE_WAIT"] = "300"
@@ -83,7 +83,7 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
                         overwrite_offset: Optional[RayParameterContainer] = None):
     ray_parameters = []
     for k, v in input_parameter_container.items():
-        if not isinstance(v, MutableParameter):
+        if not isinstance(v, RandomParameter):
             continue  # Numerical parameters do not need offset search
         if overwrite_offset is not None and k in overwrite_offset:
             ray_parameter = (k, overwrite_offset[k].clone())
@@ -110,6 +110,8 @@ if CFG.REAL_DATA_DIR is None:
                                                                               compensated_parameters, CFG.TRANSFORMS)
     observed_rays = engine.run(compensated_parameters, transforms=compensated_transforms)
     validation_scan = None
+    uncompensated_validation_parameters = None
+    observed_validation_rays = None
 else:
     observed_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(),
                                 check_value_lims=True)
