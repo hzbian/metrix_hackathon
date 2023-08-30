@@ -13,8 +13,9 @@ from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbL
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter
 from scipy.optimize import basinhopping
-import config.config_tpe as CFG
 os.environ["WANDB__SERVICE_WAIT"] = "300"
+import config.config_gauss as CFG
+
 wandb.init(entity=CFG.WANDB_ENTITY,
            project=CFG.WANDB_PROJECT,
            name=CFG.STUDY_NAME,

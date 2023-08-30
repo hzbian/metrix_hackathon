@@ -1,7 +1,6 @@
 import os
 from typing import Tuple
 
-import numpy as np
 import pandas as pd
 import torch
 import torchvision
@@ -91,10 +90,12 @@ def import_data(real_data_dir, imported_measurements, included_z_layers, param_c
 
                 scatter = transform_weight(hist=image[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
                                            num_rays=1000)
-                ray_output = RayOutput(x_loc=scatter[0, :, 0].float().numpy(), y_loc=scatter[0, :, 1].float().numpy(),
-                                       z_loc=np.array([], dtype=float), y_dir=np.array([], dtype=float),
-                                       x_dir=np.array([], dtype=float), z_dir=np.array([], dtype=float),
-                                       energy=np.array([], dtype=float))
+                ray_output = RayOutput(x_loc=scatter[0, :, 0].float(), y_loc=scatter[0, :, 1].float(),
+                                       z_loc=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       y_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       x_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       z_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       energy=torch.tensor([], dtype=torch.float32, device=scatter.device))
                 z_layer_id = file[:-4]
                 if int(z_layer_id) in included_z_layers:
                     z_direction_dict[z_layer_id] = ray_output

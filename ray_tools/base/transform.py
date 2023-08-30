@@ -4,7 +4,7 @@ import functools
 from abc import ABCMeta, abstractmethod
 from typing import Any, Tuple, Dict, List
 
-import numpy as np
+import torch
 
 from . import RayOutput
 
@@ -97,6 +97,8 @@ class Crop(RayTransform):
         self.z_lims = z_lims if z_lims else (-float('inf'), float('inf'))
 
     def __call__(self, ray_output: RayOutput) -> RayOutput:
+        import numpy as np
+        # TODO this need to be torchified
         idx = np.logical_and.reduce([self.x_lims[0] < ray_output.x_loc,
                                      ray_output.x_loc < self.x_lims[1],
                                      self.y_lims[0] < ray_output.y_loc,
@@ -144,7 +146,7 @@ class Histogram(RayTransform):
             return return_dict
         return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
 
-    def compute_histogram(self, x_loc: np.ndarray, y_loc: np.ndarray) -> Dict:
+    def compute_histogram(self, x_loc: torch.Tensor, y_loc: torch.Tensor) -> Dict:
         # store number of rays
         out = {'n_rays': x_loc.size}
 
@@ -152,19 +154,20 @@ class Histogram(RayTransform):
         if out['n_rays'] == 0:
             out['x_lims'] = (0.0, 0.0)
             out['y_lims'] = (0.0, 0.0)
-            out['histogram'] = np.zeros((self.n_bins, self.n_bins))
+            out['histogram'] = torch.zeros((self.n_bins, self.n_bins), dtype=x_loc.dtype, device=x_loc.device)
             return out
 
         # if x_lims is not given, compute histogram with automatic limits
         if self.x_lims is None:
-            out['histogram'], x_lims, y_lims = np.histogram2d(x_loc, y_loc, bins=(self.n_bins, self.n_bins))
+            out['histogram'], x_lims, y_lims = torch.histogramdd(torch.stack([x_loc, y_loc]),
+                                                                 bins=(self.n_bins, self.n_bins))
             out['x_lims'] = (x_lims[0], x_lims[-1])
             out['y_lims'] = (y_lims[0], y_lims[-1])
         else:
             if self.auto_center:
                 # compute center of mass and adapt limits
-                x_com = np.sum(x_loc) / x_loc.size
-                y_com = np.sum(y_loc) / y_loc.size
+                x_com = torch.sum(x_loc) / x_loc.size
+                y_com = torch.sum(y_loc) / y_loc.size
                 x_lims = (self.x_lims[0] + x_com, self.x_lims[1] + x_com)
                 y_lims = (self.y_lims[0] + y_com, self.y_lims[1] + y_com)
             else:
@@ -174,9 +177,9 @@ class Histogram(RayTransform):
             # compute histogram with given limits
             out['x_lims'] = x_lims
             out['y_lims'] = y_lims
-            out['histogram'] = np.histogram2d(x_loc, y_loc,
-                                              bins=(self.n_bins, self.n_bins),
-                                              range=[[x_lims[0], x_lims[1]], [y_lims[0], y_lims[1]]])[0]
+            out['histogram'] = torch.histogramdd(torch.stack([x_loc, y_loc]),
+                                                 bins=(self.n_bins, self.n_bins),
+                                                 range=[x_lims[0], x_lims[1], y_lims[0], y_lims[1]])
 
         return out
 
@@ -208,10 +211,10 @@ class MultiLayer(RayTransform):
             z_cur = ray_output.z_loc + dist
             layers[str(dist)] = RayOutput(
                 x_loc=x_cur, y_loc=y_cur, z_loc=z_cur,
-                x_dir=ray_output.x_dir.copy() if self.copy_directions else ray_output.x_dir,
-                y_dir=ray_output.y_dir.copy() if self.copy_directions else ray_output.y_dir,
-                z_dir=ray_output.z_dir.copy() if self.copy_directions else ray_output.z_dir,
-                energy=ray_output.energy.copy() if self.copy_directions else ray_output.energy)
+                x_dir=ray_output.x_dir.detach().clone() if self.copy_directions else ray_output.x_dir,
+                y_dir=ray_output.y_dir.detach().clone() if self.copy_directions else ray_output.y_dir,
+                z_dir=ray_output.z_dir.detach().clone() if self.copy_directions else ray_output.z_dir,
+                energy=ray_output.energy.detach().clone() if self.copy_directions else ray_output.energy)
 
         # apply transform if given
         if self.transform:

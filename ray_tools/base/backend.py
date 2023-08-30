@@ -17,7 +17,7 @@ import docker.errors
 import docker.types
 
 import h5py
-import numpy as np
+import torch
 import pandas as pd
 
 from raypyng import RMLFile
@@ -34,13 +34,13 @@ class RayOutput:
 
     ``energy``: energy of rays at exported plane.
     """
-    x_loc: np.ndarray
-    y_loc: np.ndarray
-    z_loc: np.ndarray
-    x_dir: np.ndarray
-    y_dir: np.ndarray
-    z_dir: np.ndarray
-    energy: np.ndarray
+    x_loc: torch.Tensor
+    y_loc: torch.Tensor
+    z_loc: torch.Tensor
+    x_dir: torch.Tensor
+    y_dir: torch.Tensor
+    z_dir: torch.Tensor
+    energy: torch.Tensor
 
 
 class RayBackend(metaclass=ABCMeta):
@@ -79,7 +79,7 @@ class RayBackendDockerRAYUI(RayBackend):
                  docker_container_name: str = None,
                  max_retry: int = 1000,
                  verbose=True,
-                 additional_mount_files: Optional[List[str]] = None) -> None:
+                 additional_mount_files: Optional[List[str]] = None, device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
@@ -90,6 +90,7 @@ class RayBackendDockerRAYUI(RayBackend):
         self.container_system = "podman"
         self.print_device = STDOUT if self.verbose else DEVNULL
         self.additional_mount_files = additional_mount_files
+        self.device = device
 
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
@@ -251,19 +252,19 @@ class RayBackendDockerRAYUI(RayBackend):
         for exported_plane in exported_planes:
             ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\", "/")
 
-            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c',
+            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c', dtype='float32',
                                      usecols=[exported_plane + '_OX', exported_plane + '_OY', exported_plane + '_OZ',
                                               exported_plane + '_DX', exported_plane + '_DY', exported_plane + '_DZ',
                                               exported_plane + '_EN', exported_plane + '_PL'])
 
-            ray_output[exported_plane] = RayOutput(x_loc=raw_output[exported_plane + '_OX'].to_numpy(dtype=np.float32),
-                                                   y_loc=raw_output[exported_plane + '_OY'].to_numpy(dtype=np.float32),
-                                                   z_loc=raw_output[exported_plane + '_OZ'].to_numpy(dtype=np.float32),
-                                                   x_dir=raw_output[exported_plane + '_DX'].to_numpy(dtype=np.float32),
-                                                   y_dir=raw_output[exported_plane + '_DY'].to_numpy(dtype=np.float32),
-                                                   z_dir=raw_output[exported_plane + '_DZ'].to_numpy(dtype=np.float32),
-                                                   energy=raw_output[exported_plane + '_EN'].to_numpy(dtype=np.float32))
-
+            ray_output[exported_plane] = RayOutput(
+                x_loc=torch.tensor(raw_output[exported_plane + '_OX'].values, dtype=torch.float, device=self.device),
+                y_loc=torch.tensor(raw_output[exported_plane + '_OY'].values, dtype=torch.float, device=self.device),
+                z_loc=torch.tensor(raw_output[exported_plane + '_OZ'].values, dtype=torch.float, device=self.device),
+                x_dir=torch.tensor(raw_output[exported_plane + '_DX'].values, dtype=torch.float, device=self.device),
+                y_dir=torch.tensor(raw_output[exported_plane + '_DY'].values, dtype=torch.float, device=self.device),
+                z_dir=torch.tensor(raw_output[exported_plane + '_DZ'].values, dtype=torch.float, device=self.device),
+                energy=torch.tensor(raw_output[exported_plane + '_EN'].values, dtype=torch.float, device=self.device))
         # remove sub-workdir
         shutil.rmtree(run_workdir)
 

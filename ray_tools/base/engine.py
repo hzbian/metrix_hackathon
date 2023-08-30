@@ -166,11 +166,11 @@ class GaussEngine(Engine):
                                                                                          [correlation, y_var]]))
             samples = m.rsample(torch.Size([n_rays]))
             samples_directions = torch.rand([n_rays, 3]) * param_container['direction_spread'].get_value()
-            ray_out = RayOutput(samples[:, 0].numpy(), samples[:, 1].numpy(), torch.zeros_like(samples[:, 0]).numpy(),
-                                param_container['x_dir'].get_value() + samples_directions[:, 0].numpy(),
-                                param_container['y_dir'].get_value() + samples_directions[:, 1].numpy(),
-                                param_container['z_dir'].get_value() + samples_directions[:, 2].numpy(),
-                                torch.ones_like(samples[:, 0]).numpy())
+            ray_out = RayOutput(samples[:, 0], samples[:, 1], torch.zeros_like(samples[:, 0]),
+                                param_container['x_dir'].get_value() + samples_directions[:, 0],
+                                param_container['y_dir'].get_value() + samples_directions[:, 1],
+                                param_container['z_dir'].get_value() + samples_directions[:, 2],
+                                torch.ones_like(samples[:, 0]))
             if transforms[param_container_num] is not None:
                 ray_out = transforms[param_container_num](ray_out)
 
