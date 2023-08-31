@@ -1,11 +1,14 @@
 import os
 import sys
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Tuple
 
 import wandb
-from ray_tools.base.engine import Engine
-
 sys.path.insert(0, '../../')
+from ray_tools.base import RayTransform
+from ray_tools.base.utils import RandomGenerator
+
+from ray_tools.base.engine import Engine
+from sub_projects.ray_optimization.losses import RayLoss
 from sub_projects.ray_optimization.real_data import import_data
 from ray_optim.ray_optimizer import RayOptimizer, WandbLoggingBackend, \
     OffsetOptimizationTarget, RayScan, OptimizerBackend
@@ -13,83 +16,116 @@ from ray_optim.ray_optimizer import RayOptimizer, WandbLoggingBackend, \
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter
 
-os.environ["WANDB__SERVICE_WAIT"] = "300"
-import config.config_gauss as CFG
-
 
 class RealDataConfiguration:
-    def __init__(self, real_data_dir):
-        self.real_data_dir = real_data_dir
+    def __init__(self, real_data_dir: str, real_data_train_set: List[str],
+                 real_data_validation_set: Optional[List[str]] = None):
+        self.real_data_dir: str = real_data_dir
+        self.real_data_train_set: List[str] = real_data_train_set
+        self.real_data_validation_set: Optional[List[str]] = real_data_validation_set
 
 
 class RayOptimization:
-    def __init__(self, engine: Engine, param_func: Callable, optimizer_backend: OptimizerBackend,
+    def __init__(self, engine: Engine, param_func: Callable, optimizer_backend: OptimizerBackend, exported_plane: str,
+                 criterion: RayLoss, wandb_entity: str, wandb_project: str, study_name: str, rg: RandomGenerator,
+                 logging: bool = True,
+                 plot_interval: int = 10, iterations: int = 1000, num_beamline_samples: int = 20,
+                 overwrite_offset_func: Optional[Callable] = None, max_offset_search_deviation: float = 0.3,
+                 max_target_deviation: float = 0.3, fixed_params: Optional[List[str]] = (),
+                 z_layers: List[float] = 0., transforms: Optional[RayTransform] = None,
                  real_data_configuration: Optional[RealDataConfiguration] = None):
-        wandb.init(entity=CFG.WANDB_ENTITY,
-                   project=CFG.WANDB_PROJECT,
-                   name=CFG.STUDY_NAME,
-                   mode='online' if CFG.LOGGING else 'disabled',
-                   )
+        self.rg: RandomGenerator = rg
         self.engine: Engine = engine
         self.real_data_configuration: RealDataConfiguration = real_data_configuration
         self.optimizer_backend: OptimizerBackend = optimizer_backend
+        self.exported_plane: str = exported_plane
+        self.criterion: RayLoss = criterion
+        self.wandb_entity: str = wandb_entity
+        self.wandb_project: str = wandb_project
+        self.study_name: str = study_name
+        self.logging: bool = logging
+        self.plot_interval: int = plot_interval
+        self.iterations: int = iterations
+        self.num_beamline_samples: int = num_beamline_samples
+        self.z_layers: List[float] = z_layers
+        self.fixed_params: Optional[Tuple[str]] = fixed_params
+        self.transforms: Optional[RayTransform] = transforms
+        self.param_func: Callable = param_func
+        self.max_target_deviation = max_target_deviation
+        self.overwrite_offset_func: Optional[Callable] = overwrite_offset_func
+        self.max_offset_search_deviation = max_offset_search_deviation
+        os.environ["WANDB__SERVICE_WAIT"] = "300"
+        wandb.init(entity=self.wandb_entity,
+                   project=self.wandb_project,
+                   name=self.study_name,
+                   mode='online' if self.logging else 'disabled',
+                   )
 
         # optimize only some all_params
         self.all_params = param_func()
         for key in self.all_params:
             old_param = self.all_params[key]
-            if isinstance(old_param, MutableParameter) and key in CFG.FIXED_PARAMS:
+            if isinstance(old_param, MutableParameter) and key in self.fixed_params:
                 self.all_params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
-        self.criterion = CFG.CRITERION
 
         self.ray_optimizer = RayOptimizer(optimizer_backend=self.optimizer_backend, criterion=self.criterion,
                                           engine=self.engine,
-                                          log_times=True, exported_plane=CFG.EXPORTED_PLANE,
-                                          transforms=CFG.TRANSFORMS,
-                                          logging_backend=WandbLoggingBackend(), plot_interval=CFG.PLOT_INTERVAL,
-                                          iterations=CFG.ITERATIONS)
+                                          log_times=True, exported_plane=self.exported_plane,
+                                          transforms=self.transforms,
+                                          logging_backend=WandbLoggingBackend(), plot_interval=self.plot_interval,
+                                          iterations=self.iterations)
 
         if self.real_data_configuration is None:
-            target_offset = offset_search_space(self.all_params, CFG.MAX_TARGET_DEVIATION, None)
-            uncompensated_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
+            target_offset = offset_search_space(self.all_params, self.max_target_deviation, self.rg, None)
+            uncompensated_parameters = [self.param_func() for _ in range(self.num_beamline_samples)]
             compensated_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in
                                                                                       uncompensated_parameters]
             for configuration in compensated_parameters:
                 configuration.perturb(target_offset)
-            compensated_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE,
-                                                                                      compensated_parameters, CFG.TRANSFORMS)
+            compensated_transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane,
+                                                                                      compensated_parameters,
+                                                                                      self.transforms)
             observed_rays = self.engine.run(compensated_parameters, transforms=compensated_transforms)
             uncompensated_validation_parameters = None
             observed_validation_rays = None
         else:
-            observed_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(),
+            observed_rays = import_data(self.real_data_configuration.real_data_dir,
+                                        self.real_data_configuration.real_data_train_set, self.z_layers,
+                                        self.param_func(),
                                         check_value_lims=True)
             uncompensated_parameters = [element['param_container_dict'] for element in observed_rays]
             target_offset = None
-            observed_validation_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_VALIDATION_SET, CFG.Z_LAYERS,
-                                                   CFG.PARAM_FUNC(), check_value_lims=False)
-            uncompensated_validation_parameters = [element['param_container_dict'] for element in observed_validation_rays]
+            observed_validation_rays = import_data(self.real_data_configuration.real_data_dir,
+                                                   self.real_data_configuration.real_data_validation_set, self.z_layers,
+                                                   self.param_func(), check_value_lims=False)
+            uncompensated_validation_parameters = [element['param_container_dict'] for element in
+                                                   observed_validation_rays]
 
-        initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, uncompensated_parameters,
-                                                                              CFG.TRANSFORMS)
+        initial_transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane,
+                                                                              uncompensated_parameters,
+                                                                              self.transforms)
         uncompensated_rays = self.engine.run(uncompensated_parameters, transforms=initial_transforms)
 
         if self.real_data_configuration is not None:
-            validation_parameters_rays = self.engine.run(uncompensated_validation_parameters, transforms=initial_transforms)
+            validation_parameters_rays = self.engine.run(uncompensated_validation_parameters,
+                                                         transforms=initial_transforms)
             validation_scan = RayScan(uncompensated_parameters=uncompensated_validation_parameters,
-                                      uncompensated_rays=validation_parameters_rays, observed_rays=observed_validation_rays)
+                                      uncompensated_rays=validation_parameters_rays,
+                                      observed_rays=observed_validation_rays)
         else:
             validation_scan = None
         offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
                                                               offset_search_space=offset_search_space(self.all_params,
-                                                                                                      CFG.MAX_OFFSET_SEARCH_DEVIATION,
-                                                                                                      CFG.OVERWRITE_OFFSET()),
+                                                                                                      self.max_offset_search_deviation,
+                                                                                                      self.rg,
+                                                                                                      self.overwrite_offset_func()),
                                                               uncompensated_parameters=uncompensated_parameters,
                                                               uncompensated_rays=uncompensated_rays,
-                                                              target_offset=target_offset, validation_scan=validation_scan)
+                                                              target_offset=target_offset,
+                                                              validation_scan=validation_scan)
 
         self.ray_optimizer.optimize(optimization_target=offset_optimization_target)
+
 
 # if len(sys.argv) > 1:
 #    big_parameter = int(sys.argv[1])
@@ -107,7 +143,7 @@ class RayOptimization:
 
 # optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
-def offset_search_space(input_parameter_container: RayParameterContainer, max_deviation: float,
+def offset_search_space(input_parameter_container: RayParameterContainer, max_deviation: float, rg: RandomGenerator,
                         overwrite_offset: Optional[RayParameterContainer] = None):
     ray_parameters = []
     for k, v in input_parameter_container.items():
@@ -122,6 +158,6 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
             new_max = max_deviation * (v.value_lims[1] - v.value_lims[0])
             if v.enforce_lims and new_max > v.value_lims[1]:
                 new_max = v.value_lims[1]
-            ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=CFG.RG))
+            ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=rg))
         ray_parameters.append(ray_parameter)
     return RayParameterContainer(ray_parameters)

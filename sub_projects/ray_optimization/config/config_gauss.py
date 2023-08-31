@@ -17,7 +17,7 @@ EXPORTED_PLANE = "ImagePlane"
 MAX_TARGET_DEVIATION = 0.3
 MAX_OFFSET_SEARCH_DEVIATION = 0.3
 N_RAYS = ['1e4']
-Z_LAYERS = [0, 5]#[-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+Z_LAYERS = [0., 5.]#(-15, -10, -5, 0, 5, 10, 15, 20, 25, 30)
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
 NUM_BEAMLINE_PARAM_SAMPLES = 4
 RG = RandomGenerator(seed=42)
@@ -75,5 +75,4 @@ else:
     optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
 
 OPTIMIZER_BACKEND = optimizer_backend
-RayOptimization(ENGINE, PARAM_FUNC, OPTIMIZER_BACKEND)
-
+RayOptimization(engine=ENGINE, optimizer_backend=OPTIMIZER_BACKEND, z_layers=Z_LAYERS, criterion=CRITERION, param_func=PARAM_FUNC, fixed_params=FIXED_PARAMS, overwrite_offset_func=OVERWRITE_OFFSET, max_offset_search_deviation=MAX_OFFSET_SEARCH_DEVIATION, max_target_deviation=MAX_TARGET_DEVIATION, iterations=ITERATIONS, study_name=STUDY_NAME, transforms=TRANSFORMS, wandb_entity=WANDB_ENTITY, wandb_project=WANDB_PROJECT, exported_plane=EXPORTED_PLANE, plot_interval=PLOT_INTERVAL, num_beamline_samples=NUM_BEAMLINE_PARAM_SAMPLES, real_data_configuration=None, logging=LOGGING, rg=RG)
