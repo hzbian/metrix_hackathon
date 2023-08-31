@@ -1,7 +1,7 @@
 import os
 import sys
-from dataclasses import dataclass
-from typing import Optional, Callable, List, Tuple
+from dataclasses import dataclass, field
+from typing import Optional, Callable, List, Tuple, Dict, Union
 
 from hydra.core.config_store import ConfigStore
 
@@ -187,8 +187,18 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
 class MySQLConfig:
     host: str = "localhost"
     port: int = 3306
-    lise: List[float] = (1., 3., 4.)
-
+    params: Dict[str, List[float]] = field(default_factory=lambda: ({
+        "number_rays": (1e2,),
+        "x_dir": (0.,),
+        "y_dir": (0.,),
+        "z_dir": (1.,),
+        "direction_spread": (0.,),
+        "correlation_factor": (-0.8, 0.8),
+        "x_mean": (-2., 2.),
+        "y_mean": (-2., 2.),
+        "x_var": (1e-10, 0.01),
+        "y_var": (1e-10, 0.01),
+    }))
 
 cs = ConfigStore.instance()
 # Registering the Config class with the name 'config'.
