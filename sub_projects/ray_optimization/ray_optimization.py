@@ -1,8 +1,14 @@
 import os
 import sys
+from dataclasses import dataclass
 from typing import Optional, Callable, List, Tuple
 
+from hydra.core.config_store import ConfigStore
+
 import wandb
+import hydra
+from omegaconf import DictConfig, OmegaConf
+
 sys.path.insert(0, '../../')
 from ray_tools.base import RayTransform
 from ray_tools.base.utils import RandomGenerator
@@ -161,3 +167,38 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
             ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=rg))
         ray_parameters.append(ray_parameter)
     return RayParameterContainer(ray_parameters)
+
+
+def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = ()):
+    elements = []
+    for k, v in parameters.items():
+        if isinstance(v, Tuple):
+            elements.append((k, RandomParameter(value_lims=v, rg=rg, enforce_lims=k in enforce_lims_keys)))
+        else:
+            elements.append((k, NumericalParameter(value=v)))
+
+    def output_func():
+        return RayParameterContainer(elements)
+
+    return output_func
+
+
+@dataclass
+class MySQLConfig:
+    host: str = "localhost"
+    port: int = 3306
+    lise: List[float] = (1., 3., 4.)
+
+
+cs = ConfigStore.instance()
+# Registering the Config class with the name 'config'.
+cs.store(name="config", node=MySQLConfig)
+
+
+@hydra.main(version_base=None, config_name="config")
+def run_optimization(cfg: MySQLConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
+
+
+if __name__ == "__main__":
+    run_optimization()

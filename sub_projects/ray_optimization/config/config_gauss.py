@@ -1,3 +1,5 @@
+from typing import Tuple, Optional, List
+
 import optuna
 import torchvision.ops
 from optuna.samplers import TPESampler
@@ -9,7 +11,7 @@ from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, 
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 from sub_projects.ray_optimization.losses import BoxIoULoss
-from sub_projects.ray_optimization.ray_optimization import RayOptimization
+from sub_projects.ray_optimization.ray_optimization import RayOptimization, params_to_func
 
 # objective
 REAL_DATA_DIR = None
@@ -17,27 +19,28 @@ EXPORTED_PLANE = "ImagePlane"
 MAX_TARGET_DEVIATION = 0.3
 MAX_OFFSET_SEARCH_DEVIATION = 0.3
 N_RAYS = ['1e4']
-Z_LAYERS = [0., 5.]#(-15, -10, -5, 0, 5, 10, 15, 20, 25, 30)
+Z_LAYERS = [0., 5.]  # (-15, -10, -5, 0, 5, 10, 15, 20, 25, 30)
 TRANSFORMS = MultiLayer(Z_LAYERS, copy_directions=False)
 NUM_BEAMLINE_PARAM_SAMPLES = 4
 RG = RandomGenerator(seed=42)
 
-PARAM_FUNC = lambda: RayParameterContainer([
-    ("number_rays", NumericalParameter(value=1e2)),
-    ("x_dir", NumericalParameter(value=0.)),
-    ("y_dir", NumericalParameter(value=0.)),
-    ("z_dir", NumericalParameter(value=1.)),
-    ("direction_spread", NumericalParameter(value=0.)),
-    ("correlation_factor", RandomParameter(value_lims=(-0.8, 0.8), rg=RG)),
-    ("x_mean", RandomParameter(value_lims=(-2, 2.), rg=RG)),
-    ("y_mean", RandomParameter(value_lims=(-2., 2.), rg=RG)),
-    ("x_var", RandomParameter(value_lims=(1e-10, 0.01), rg=RG, enforce_lims=True)),
-    ("y_var", RandomParameter(value_lims=(1e-10, 0.01), rg=RG, enforce_lims=True)),
-])
+params = {
+    "number_rays": 1e2,
+    "x_dir": 0.,
+    "y_dir": 0.,
+    "z_dir": 1.,
+    "direction_spread": 0.,
+    "correlation_factor": (-0.8, 0.8),
+    "x_mean": (-2., 2.),
+    "y_mean": (-2., 2.),
+    "x_var": (1e-10, 0.01),
+    "y_var": (1e-10, 0.01),
+}
 
-FIXED_PARAMS = []#[k for k, v in PARAM_FUNC().items() if k not in 'y_var' and isinstance(v, RandomParameter)]
+PARAM_FUNC = params_to_func(params, rg=RG, enforce_lims_keys=["x_var", "y_var"])
+FIXED_PARAMS = []  # [k for k, v in PARAM_FUNC().items() if k not in 'y_var' and isinstance(v, RandomParameter)]
 OVERWRITE_OFFSET = lambda: RayParameterContainer([
-#    ("y_var", RandomParameter(value_lims=(1e-10, 0.00001), rg=RG)),
+    #    ("y_var", RandomParameter(value_lims=(1e-10, 0.00001), rg=RG)),
 ])
 
 # multi objective
@@ -52,7 +55,8 @@ SAMPLER = TPESampler()  # n_startup_trials=100, n_ei_candidates=100) #optuna.sam
 
 # logging
 STUDY_NAME = '-'.join(
-    [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss', str(MAX_TARGET_DEVIATION),
+    [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss',
+     str(MAX_TARGET_DEVIATION),
      OPTIMIZER, '-v23'])
 WANDB_ENTITY = 'hzb-aos'
 WANDB_PROJECT = 'metrix_hackathon_gauss'
@@ -75,4 +79,9 @@ else:
     optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
 
 OPTIMIZER_BACKEND = optimizer_backend
-RayOptimization(engine=ENGINE, optimizer_backend=OPTIMIZER_BACKEND, z_layers=Z_LAYERS, criterion=CRITERION, param_func=PARAM_FUNC, fixed_params=FIXED_PARAMS, overwrite_offset_func=OVERWRITE_OFFSET, max_offset_search_deviation=MAX_OFFSET_SEARCH_DEVIATION, max_target_deviation=MAX_TARGET_DEVIATION, iterations=ITERATIONS, study_name=STUDY_NAME, transforms=TRANSFORMS, wandb_entity=WANDB_ENTITY, wandb_project=WANDB_PROJECT, exported_plane=EXPORTED_PLANE, plot_interval=PLOT_INTERVAL, num_beamline_samples=NUM_BEAMLINE_PARAM_SAMPLES, real_data_configuration=None, logging=LOGGING, rg=RG)
+RayOptimization(engine=ENGINE, optimizer_backend=OPTIMIZER_BACKEND, z_layers=Z_LAYERS, criterion=CRITERION,
+                param_func=PARAM_FUNC, fixed_params=FIXED_PARAMS, overwrite_offset_func=OVERWRITE_OFFSET,
+                max_offset_search_deviation=MAX_OFFSET_SEARCH_DEVIATION, max_target_deviation=MAX_TARGET_DEVIATION,
+                iterations=ITERATIONS, study_name=STUDY_NAME, transforms=TRANSFORMS, wandb_entity=WANDB_ENTITY,
+                wandb_project=WANDB_PROJECT, exported_plane=EXPORTED_PLANE, plot_interval=PLOT_INTERVAL,
+                num_beamline_samples=NUM_BEAMLINE_PARAM_SAMPLES, real_data_configuration=None, logging=LOGGING, rg=RG)
