@@ -1,84 +1,111 @@
-import sys
 import os
-from typing import Optional
+import sys
+from typing import Optional, Callable
 
-import optuna
 import wandb
+from ray_tools.base.engine import Engine
 
 sys.path.insert(0, '../../')
 from sub_projects.ray_optimization.real_data import import_data
-from ray_optim.ray_optimizer import OptimizerBackendOptuna, RayOptimizer, WandbLoggingBackend, \
-    OffsetOptimizationTarget, OptimizerBackendBasinhopping, OptimizerBackendEvoTorch, RayScan
+from ray_optim.ray_optimizer import RayOptimizer, WandbLoggingBackend, \
+    OffsetOptimizationTarget, RayScan, OptimizerBackend
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter
-from scipy.optimize import basinhopping
+
 os.environ["WANDB__SERVICE_WAIT"] = "300"
 import config.config_gauss as CFG
 
-wandb.init(entity=CFG.WANDB_ENTITY,
-           project=CFG.WANDB_PROJECT,
-           name=CFG.STUDY_NAME,
-           mode='online' if CFG.LOGGING else 'disabled',
-           )
 
-engine = CFG.ENGINE
-# optimize only some all_params
-all_params = CFG.PARAM_FUNC()
+class RealDataConfiguration:
+    def __init__(self, real_data_dir):
+        self.real_data_dir = real_data_dir
 
-if len(sys.argv) > 1:
-    big_parameter = int(sys.argv[1])
-    key, value = list(all_params.items())[big_parameter]
-    value_lim_center = (value.value_lims[1] + value.value_lims[0]) / 2
-    old_interval_half = (value.value_lims[1] - value.value_lims[0]) / 2
-    old_interval_half *= 3
-    all_params[key] = type(value)(value_lims=(value_lim_center-old_interval_half, value_lim_center+old_interval_half), rg=CFG.RG)
-    CFG.STUDY_NAME += '_' + key
 
-for key in all_params:
-    old_param = all_params[key]
-    if isinstance(old_param, MutableParameter) and key in CFG.FIXED_PARAMS:
-        all_params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+class RayOptimization:
+    def __init__(self, engine: Engine, param_func: Callable, optimizer_backend: OptimizerBackend,
+                 real_data_configuration: Optional[RealDataConfiguration] = None):
+        wandb.init(entity=CFG.WANDB_ENTITY,
+                   project=CFG.WANDB_PROJECT,
+                   name=CFG.STUDY_NAME,
+                   mode='online' if CFG.LOGGING else 'disabled',
+                   )
+        self.engine: Engine = engine
+        self.real_data_configuration: RealDataConfiguration = real_data_configuration
+        self.optimizer_backend: OptimizerBackend = optimizer_backend
 
-target_params = RayParameterContainer()
-for key, value in all_params.items():
-    if isinstance(value, MutableParameter):
-        value = (value.value_lims[1] + value.value_lims[0]) / 2
-    if isinstance(value, NumericalParameter):
-        value = value.get_value()
-    target_params[key] = NumericalParameter(value)
+        # optimize only some all_params
+        self.all_params = param_func()
+        for key in self.all_params:
+            old_param = self.all_params[key]
+            if isinstance(old_param, MutableParameter) and key in CFG.FIXED_PARAMS:
+                self.all_params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+
+        self.criterion = CFG.CRITERION
+
+        self.ray_optimizer = RayOptimizer(optimizer_backend=self.optimizer_backend, criterion=self.criterion,
+                                          engine=self.engine,
+                                          log_times=True, exported_plane=CFG.EXPORTED_PLANE,
+                                          transforms=CFG.TRANSFORMS,
+                                          logging_backend=WandbLoggingBackend(), plot_interval=CFG.PLOT_INTERVAL,
+                                          iterations=CFG.ITERATIONS)
+
+        if self.real_data_configuration is None:
+            target_offset = offset_search_space(self.all_params, CFG.MAX_TARGET_DEVIATION, None)
+            uncompensated_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
+            compensated_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in
+                                                                                      uncompensated_parameters]
+            for configuration in compensated_parameters:
+                configuration.perturb(target_offset)
+            compensated_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE,
+                                                                                      compensated_parameters, CFG.TRANSFORMS)
+            observed_rays = self.engine.run(compensated_parameters, transforms=compensated_transforms)
+            uncompensated_validation_parameters = None
+            observed_validation_rays = None
+        else:
+            observed_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(),
+                                        check_value_lims=True)
+            uncompensated_parameters = [element['param_container_dict'] for element in observed_rays]
+            target_offset = None
+            observed_validation_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_VALIDATION_SET, CFG.Z_LAYERS,
+                                                   CFG.PARAM_FUNC(), check_value_lims=False)
+            uncompensated_validation_parameters = [element['param_container_dict'] for element in observed_validation_rays]
+
+        initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, uncompensated_parameters,
+                                                                              CFG.TRANSFORMS)
+        uncompensated_rays = self.engine.run(uncompensated_parameters, transforms=initial_transforms)
+
+        if self.real_data_configuration is not None:
+            validation_parameters_rays = self.engine.run(uncompensated_validation_parameters, transforms=initial_transforms)
+            validation_scan = RayScan(uncompensated_parameters=uncompensated_validation_parameters,
+                                      uncompensated_rays=validation_parameters_rays, observed_rays=observed_validation_rays)
+        else:
+            validation_scan = None
+        offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
+                                                              offset_search_space=offset_search_space(self.all_params,
+                                                                                                      CFG.MAX_OFFSET_SEARCH_DEVIATION,
+                                                                                                      CFG.OVERWRITE_OFFSET()),
+                                                              uncompensated_parameters=uncompensated_parameters,
+                                                              uncompensated_rays=uncompensated_rays,
+                                                              target_offset=target_offset, validation_scan=validation_scan)
+
+        self.ray_optimizer.optimize(optimization_target=offset_optimization_target)
+
+# if len(sys.argv) > 1:
+#    big_parameter = int(sys.argv[1])
+#    key, value = list(all_params.items())[big_parameter]
+#    value_lim_center = (value.value_lims[1] + value.value_lims[0]) / 2
+#    old_interval_half = (value.value_lims[1] - value.value_lims[0]) / 2
+#    old_interval_half *= 3
+#    all_params[key] = type(value)(
+#        value_lims=(value_lim_center - old_interval_half, value_lim_center + old_interval_half), rg=CFG.RG)
+#    CFG.STUDY_NAME += '_' + key
+
 
 # Bayesian Optimization
 # ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
 # optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
-
-directions = CFG.MULTI_OBJECTIVE_DIRECTIONS if CFG.MULTI_OBJECTIVE else None
-if CFG.OPTIMIZER == 'optuna':
-    optuna_storage_path = CFG.OPTUNA_STORAGE_PATH if CFG.LOGGING else None
-    optuna_study = optuna.create_study(directions=directions, sampler=CFG.SAMPLER,
-                                       pruner=optuna.pruners.HyperbandPruner(),
-                                       storage=optuna_storage_path, study_name=CFG.STUDY_NAME, load_if_exists=True)
-    optimizer_backend = OptimizerBackendOptuna(optuna_study)
-elif CFG.OPTIMIZER == 'evotorch':
-    optimizer_backend = OptimizerBackendEvoTorch()
-else:
-    optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
-
-criterion = CFG.CRITERION
-
-ray_optimizer = RayOptimizer(optimizer_backend=optimizer_backend, criterion=criterion, engine=engine,
-                             log_times=True, exported_plane=CFG.EXPORTED_PLANE,
-                             transforms=CFG.TRANSFORMS,
-                             logging_backend=WandbLoggingBackend(), plot_interval=CFG.PLOT_INTERVAL,
-                             iterations=CFG.ITERATIONS)
-
-
-# target_rays = engine.run(target_params, transforms=transforms)
-# best_parameters, metrics = ray_optimizer.optimize(target_rays, search_space=all_params, target_params=target_params,
-#                                                  iterations=100)
-# print(best_parameters, metrics)
-
 
 def offset_search_space(input_parameter_container: RayParameterContainer, max_deviation: float,
                         overwrite_offset: Optional[RayParameterContainer] = None):
@@ -98,46 +125,3 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
             ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=CFG.RG))
         ray_parameters.append(ray_parameter)
     return RayParameterContainer(ray_parameters)
-
-
-if CFG.REAL_DATA_DIR is None:
-    target_offset = offset_search_space(all_params, CFG.MAX_TARGET_DEVIATION, None)
-    uncompensated_parameters = [CFG.PARAM_FUNC() for _ in range(CFG.NUM_BEAMLINE_PARAM_SAMPLES)]
-    compensated_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in
-                                                                              uncompensated_parameters]
-    for configuration in compensated_parameters:
-        configuration.perturb(target_offset)
-    compensated_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE,
-                                                                              compensated_parameters, CFG.TRANSFORMS)
-    observed_rays = engine.run(compensated_parameters, transforms=compensated_transforms)
-    validation_scan = None
-    uncompensated_validation_parameters = None
-    observed_validation_rays = None
-else:
-    observed_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_TRAIN_SET, CFG.Z_LAYERS, CFG.PARAM_FUNC(),
-                                check_value_lims=True)
-    uncompensated_parameters = [element['param_container_dict'] for element in observed_rays]
-    target_offset = None
-    observed_validation_rays = import_data(CFG.REAL_DATA_DIR, CFG.REAL_DATA_VALIDATION_SET, CFG.Z_LAYERS,
-                                           CFG.PARAM_FUNC(), check_value_lims=False)
-    uncompensated_validation_parameters = [element['param_container_dict'] for element in observed_validation_rays]
-
-initial_transforms = RayOptimizer.translate_exported_plain_transforms(CFG.EXPORTED_PLANE, uncompensated_parameters,
-                                                                      CFG.TRANSFORMS)
-uncompensated_rays = engine.run(uncompensated_parameters, transforms=initial_transforms)
-
-if CFG.REAL_DATA_DIR is not None:
-    validation_parameters_rays = engine.run(uncompensated_validation_parameters, transforms=initial_transforms)
-    validation_scan = RayScan(uncompensated_parameters=uncompensated_validation_parameters,
-                              uncompensated_rays=validation_parameters_rays, observed_rays=observed_validation_rays)
-else:
-    validation_scan = None
-offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
-                                                      offset_search_space=offset_search_space(all_params,
-                                                                                              CFG.MAX_OFFSET_SEARCH_DEVIATION,
-                                                                                              CFG.OVERWRITE_OFFSET()),
-                                                      uncompensated_parameters=uncompensated_parameters,
-                                                      uncompensated_rays=uncompensated_rays,
-                                                      target_offset=target_offset, validation_scan=validation_scan)
-
-ray_optimizer.optimize(optimization_target=offset_optimization_target)

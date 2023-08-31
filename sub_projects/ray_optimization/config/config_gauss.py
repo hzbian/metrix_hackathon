@@ -1,11 +1,15 @@
+import optuna
 import torchvision.ops
 from optuna.samplers import TPESampler
+from scipy.optimize import basinhopping
 
+from ray_optim.ray_optimizer import OptimizerBackendOptuna, OptimizerBackendBasinhopping, OptimizerBackendEvoTorch
 from ray_tools.base.engine import GaussEngine
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.utils import RandomGenerator
 from sub_projects.ray_optimization.losses import BoxIoULoss
+from sub_projects.ray_optimization.ray_optimization import RayOptimization
 
 # objective
 REAL_DATA_DIR = None
@@ -57,6 +61,19 @@ PLOT_INTERVAL = 100
 LOGGING = False
 VERBOSE = False
 
+directions = MULTI_OBJECTIVE_DIRECTIONS if MULTI_OBJECTIVE else None
 ENGINE = GaussEngine()
+if OPTIMIZER == 'optuna':
+    optuna_storage_path = OPTUNA_STORAGE_PATH if LOGGING else None
+    optuna_study = optuna.create_study(directions=directions, sampler=SAMPLER,
+                                       pruner=optuna.pruners.HyperbandPruner(),
+                                       storage=optuna_storage_path, study_name=STUDY_NAME, load_if_exists=True)
+    optimizer_backend = OptimizerBackendOptuna(optuna_study)
+elif OPTIMIZER == 'evotorch':
+    optimizer_backend = OptimizerBackendEvoTorch()
+else:
+    optimizer_backend = OptimizerBackendBasinhopping(basinhopping)
 
+OPTIMIZER_BACKEND = optimizer_backend
+RayOptimization(ENGINE, PARAM_FUNC, OPTIMIZER_BACKEND)
 

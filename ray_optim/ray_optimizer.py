@@ -2,7 +2,7 @@ import copy
 import time
 from abc import ABCMeta, abstractmethod
 from math import sqrt
-from typing import List, Iterable, Union, Dict, Optional, Callable
+from typing import List, Iterable, Union, Optional, Callable
 
 import numpy as np
 import torch
@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 from optuna import Study
 
 from ray_tools.base import RayTransform
-from ray_tools.base.engine import RayEngine
+from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
     NumericalOutputParameter, OutputParameter
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
@@ -79,7 +79,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
             optimize_parameters = optimization_target.search_space.copy()
             for i, (key, value) in enumerate(optimize_parameters.items()):
                 if isinstance(value, MutableParameter):
-                    optimize_parameters[key] = NumericalParameter(input[i])
+                    optimize_parameters[key] = NumericalParameter(input[i].item())
             output = objective(optimize_parameters, optimization_target=optimization_target)
             return tuple(value.mean().item() for value in output[min(output.keys())])
 
@@ -279,10 +279,10 @@ class BestSample:
 
 class RayOptimizer:
     def __init__(self, optimizer_backend: OptimizerBackend, criterion: RayLoss, exported_plane: str,
-                 engine: RayEngine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
+                 engine: Engine, logging_backend: LoggingBackend, transforms: Optional[RayTransform] = None,
                  log_times: bool = False, plot_interval: int = 10, iterations: int = 1000):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
-        self.engine: RayEngine = engine
+        self.engine: Engine = engine
         self.criterion: RayLoss = criterion
         self.exported_plane: str = exported_plane
         self.transforms: Optional[RayTransform] = transforms
