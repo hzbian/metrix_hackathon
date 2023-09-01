@@ -1,7 +1,7 @@
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional, Callable, List, Tuple, Dict, Union
+from typing import Optional, Callable, List, Tuple, Dict, Union, Iterable
 
 from hydra.core.config_store import ConfigStore
 
@@ -58,7 +58,7 @@ class RayOptimization:
         self.transforms: Optional[RayTransform] = transforms
         self.param_func: Callable = param_func
         self.max_target_deviation = max_target_deviation
-        self.overwrite_offset_func: Optional[Callable] = overwrite_offset_func
+        self.overwrite_offset: Optional = overwrite_offset_func() if overwrite_offset_func is not None else None
         self.max_offset_search_deviation = max_offset_search_deviation
         os.environ["WANDB__SERVICE_WAIT"] = "300"
         wandb.init(entity=self.wandb_entity,
@@ -120,11 +120,12 @@ class RayOptimization:
                                       observed_rays=observed_validation_rays)
         else:
             validation_scan = None
+
         offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
                                                               offset_search_space=offset_search_space(self.all_params,
                                                                                                       self.max_offset_search_deviation,
                                                                                                       self.rg,
-                                                                                                      self.overwrite_offset_func()),
+                                                                                                      self.overwrite_offset),
                                                               uncompensated_parameters=uncompensated_parameters,
                                                               uncompensated_rays=uncompensated_rays,
                                                               target_offset=target_offset,
@@ -172,8 +173,8 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
 def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = ()):
     elements = []
     for k, v in parameters.items():
-        if isinstance(v, Tuple):
-            elements.append((k, RandomParameter(value_lims=v, rg=rg, enforce_lims=k in enforce_lims_keys)))
+        if hasattr(v, '__getitem__'):
+            elements.append((k, RandomParameter(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
         else:
             elements.append((k, NumericalParameter(value=v)))
 
@@ -183,32 +184,3 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
     return output_func
 
 
-@dataclass
-class MySQLConfig:
-    host: str = "localhost"
-    port: int = 3306
-    params: Dict[str, List[float]] = field(default_factory=lambda: ({
-        "number_rays": (1e2,),
-        "x_dir": (0.,),
-        "y_dir": (0.,),
-        "z_dir": (1.,),
-        "direction_spread": (0.,),
-        "correlation_factor": (-0.8, 0.8),
-        "x_mean": (-2., 2.),
-        "y_mean": (-2., 2.),
-        "x_var": (1e-10, 0.01),
-        "y_var": (1e-10, 0.01),
-    }))
-
-cs = ConfigStore.instance()
-# Registering the Config class with the name 'config'.
-cs.store(name="config", node=MySQLConfig)
-
-
-@hydra.main(version_base=None, config_name="config")
-def run_optimization(cfg: MySQLConfig) -> None:
-    print(OmegaConf.to_yaml(cfg))
-
-
-if __name__ == "__main__":
-    run_optimization()

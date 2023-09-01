@@ -1,0 +1,49 @@
+test:
+  _target_: "sub_projects.ray_optimization.ray_optimization.RayOptimization"
+  rg:
+      _target_: "ray_tools.base.utils.RandomGenerator"
+      seed: 42
+  param_func:
+    _target_: "sub_projects.ray_optimization.ray_optimization.params_to_func"
+    _convert_: "all"
+    rg: ${test.rg}
+    parameters:
+      number_rays: 1e2
+      x_dir: 0.
+      y_dir: 0.
+      z_dir: 1.
+      direction_spread: 0.
+      correlation_factor: [-0.8, 0.8]
+      x_mean: [-2., 2.]
+      y_mean: [-2., 2.]
+      x_var: [1e-10, 0.01]
+      y_var: [1e-10, 0.01]
+    enforce_lims_keys:
+      - "x_var"
+      - "y_var"
+  transforms:
+    _target_: "ray_tools.base.transform.MultiLayer"
+    dist_layers: [0., 1.]
+  exported_plane: "ImagePlane"
+  max_target_deviation: 0.3
+  max_offset_search_deviation: 0.3
+  num_beamline_samples: 4
+  engine:
+    _target_: "ray_tools.base.engine.GaussEngine"
+
+  optimizer_backend:
+    _target_: "ray_optim.ray_optimizer.OptimizerBackendOptuna"
+    optuna_study:
+      _target_: "optuna.create_study"
+      sampler:
+        _target_: "optuna.samplers.TPESampler"
+      pruner:
+        _target_: "optuna.pruners.HyperbandPruner"
+      storage: "sqlite:////dev/shm/db.sqlite2"
+      study_name: ${test.study_name}
+      load_if_exists: True
+  criterion:
+    _target_: "sub_projects.ray_optimization.losses.SinkhornLoss"
+  wandb_entity: "hzb-aos"
+  wandb_project: "metrix_hackathon_gauss"
+  study_name: "test"
