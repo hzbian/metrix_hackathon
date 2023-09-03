@@ -1,0 +1,30 @@
+ test:
+   param_func:
+      _target_: "sub_projects.ray_optimization.ray_optimization.params_to_func"
+      _convert_: "all"
+      rg: ${test.rg}
+      parameters:
+        number_rays: 1e2
+        x_dir: 0.
+        y_dir: 0.
+        z_dir: 1.
+        direction_spread: 0.
+        correlation_factor: [-0.8, 0.8]
+        x_mean: [-2., 2.]
+        y_mean: [-2., 2.]
+        x_var: [1e-10, 0.01]
+        y_var: [1e-10, 0.01]
+      enforce_lims_keys:
+        - "x_var"
+        - "y_var"
+    engine:
+      _target_: "ray_tools.base.engine.GaussEngine"
+    num_beamline_samples: 4
+    exported_plane: "ImagePlane"
+    transforms:
+      _target_: "ray_tools.base.transform.MultiLayer"
+      dist_layers: [0., 1.]
+    max_target_deviation: 0.3
+    wandb_entity: "hzb-aos"
+    wandb_project: "metrix_hackathon_gauss"
+    study_name: "test"
