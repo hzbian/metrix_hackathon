@@ -2,6 +2,9 @@ import os
 import sys
 from typing import Optional, Callable, List, Tuple
 
+import hydra
+from hydra.utils import instantiate
+from omegaconf import OmegaConf
 import wandb
 
 sys.path.insert(0, '../../')
@@ -13,7 +16,7 @@ from sub_projects.ray_optimization.real_data import import_data
 from ray_optim.ray_optimizer import RayOptimizer, OffsetOptimizationTarget, RayScan
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
-    RayParameter, RandomParameter
+    RayParameter, RandomParameter, RandomOutputParameter
 
 
 class RealDataConfiguration:
@@ -26,7 +29,8 @@ class RealDataConfiguration:
 
 class OptimizationTargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
-                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3, transforms: Optional[RayTransform] = None):
+                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
+                 transforms: Optional[RayTransform] = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
         self.transforms: RayTransform = transforms
         self.num_beamline_samples: int = num_beamline_samples
@@ -163,11 +167,17 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
     return RayParameterContainer(ray_parameters)
 
 
-def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = ()):
+def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = (),
+                   output_parameters: List[str] = ()):
     elements = []
     for k, v in parameters.items():
         if hasattr(v, '__getitem__'):
-            elements.append((k, RandomParameter(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
+            if k in output_parameters:
+                typ = RandomOutputParameter
+            else:
+                typ = RandomParameter
+
+            elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
         else:
             elements.append((k, NumericalParameter(value=v)))
 
@@ -175,3 +185,16 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
         return RayParameterContainer(elements)
 
     return output_func
+
+
+os.environ["HYDRA_FULL_ERROR"] = "1"
+
+
+@hydra.main(version_base=None, config_path="./conf", config_name="config")
+def my_app(cfg):
+    print(OmegaConf.to_yaml(cfg))
+    _ = instantiate(cfg)
+
+
+if __name__ == "__main__":
+    my_app()

@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - ray_optimizer: optuna
-  - optimization_target_configuration: gauss_simulation
+  - optimization_target_configuration: emil
 _target_: "sub_projects.ray_optimization.ray_optimization.RayOptimization"
 rg:
     _target_: "ray_tools.base.utils.RandomGenerator"

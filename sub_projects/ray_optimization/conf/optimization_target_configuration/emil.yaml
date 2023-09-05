@@ -1,0 +1,38 @@
+_target_: "sub_projects.ray_optimization.ray_optimization.OptimizationTargetConfiguration"
+param_func:
+    _target_: "sub_projects.ray_optimization.ray_optimization.params_to_func"
+    _convert_: "all"
+    rg: ${rg}
+    parameters:
+      Undulator.numberRays: 50000.0
+      Toroid.rotationXerror: [-0.015, 0.015]
+      Cylinder.rotationXerror: [-0.04, 0.04]
+      Cylinder.translationYerror: [-0.4, 0.4]
+      ImagePlane.translationXerror: [-3.33, 3.33]
+      ImagePlane.translationYerror: [-3.33, 3.33]
+      ImagePlane.translationZerror: [-3.33, 3.33]
+    output_parameters:
+      - "ImagePlane.translationXerror"
+      - "ImagePlane.translationYerror"
+      - "ImagePlane.translationZerror"
+engine:
+  _target_: "ray_tools.base.engine.RayEngine"
+  rml_basefile: "../../rml_src/UE48-PGM-CAT.rml"
+  exported_planes:
+    - ${optimization_target_configuration.exported_plane}
+  ray_backend:
+    _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
+    docker_image: 'ray-ui-service'
+    dockerfile_path: '../../ray_docker/rayui'
+    docker_container_name: ${study_name}
+    ray_workdir: /dev/shm/${study_name}
+    additional_mount_files: "../../rml_src/wave_linhor_3_Harm_600eV.ray"
+    verbose: False
+num_beamline_samples: 22
+exported_plane: "ImagePlane"
+max_target_deviation: 0.3
+max_offset_search_deviation: 0.3
+transforms:
+  _target_: "ray_tools.base.transform.MultiLayer"
+  dist_layers: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+  copy_directions: False

@@ -2,8 +2,7 @@ _target_: "ray_optim.ray_optimizer.RayOptimizer"
 criterion:
   _target_: "sub_projects.ray_optimization.losses.SinkhornLoss"
 exported_plane: ${optimization_target_configuration.exported_plane}
-engine:
-  _target_: "ray_tools.base.engine.GaussEngine"
+engine: ${optimization_target_configuration.engine}
 log_times: True
 plot_interval: 10
 iterations: 1000

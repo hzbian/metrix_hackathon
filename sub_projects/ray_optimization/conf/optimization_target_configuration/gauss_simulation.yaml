@@ -17,7 +17,8 @@ param_func:
     enforce_lims_keys:
       - "x_var"
       - "y_var"
-engine: ${ray_optimizer.engine}
+engine:
+  _target_: "ray_tools.base.engine.GaussEngine"
 num_beamline_samples: 4
 exported_plane: "ImagePlane"
 max_target_deviation: 0.3
