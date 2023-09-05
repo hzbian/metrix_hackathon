@@ -8,8 +8,8 @@ test:
         pruner:
           _target_: "optuna.pruners.HyperbandPruner"
         storage: "sqlite:////dev/shm/db.sqlite2"
-        study_name: ${test.study_name}
+        study_name: "test"
         load_if_exists: True
-    criterion:
-      _target_: "sub_projects.ray_optimization.losses.SinkhornLoss"
-    max_offset_search_deviation: 0.3
+  criterion:
+    _target_: "sub_projects.ray_optimization.losses.SinkhornLoss"
+  max_offset_search_deviation: 0.3

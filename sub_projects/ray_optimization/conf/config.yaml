@@ -4,5 +4,6 @@ test:
       _target_: "ray_tools.base.utils.RandomGenerator"
       seed: 42
 defaults:
-  - test: optimization_target/gauss_simulation
-  - test: optimizer/optuna
+  - _self_
+  - gauss_simulation
+  - optuna
