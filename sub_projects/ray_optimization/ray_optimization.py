@@ -6,6 +6,7 @@ import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 import wandb
+from sub_projects.ray_optimization.losses import RayLoss
 
 sys.path.insert(0, '../../')
 from ray_tools.base import RayTransform
@@ -13,7 +14,7 @@ from ray_tools.base.utils import RandomGenerator
 
 from ray_tools.base.engine import Engine
 from sub_projects.ray_optimization.real_data import import_data
-from ray_optim.ray_optimizer import RayOptimizer, OffsetOptimizationTarget, RayScan
+from ray_optim.ray_optimizer import RayOptimizer, OffsetOptimizationTarget, RayScan, OptimizerBackend
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter, RandomOutputParameter
@@ -29,8 +30,9 @@ class RealDataConfiguration:
 
 class OptimizationTargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
-                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
-                 transforms: Optional[RayTransform] = None, real_data_configuration: Optional[RealDataConfiguration] = None):
+                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3, logging_project: Optional[str]=None,
+                 transforms: Optional[RayTransform] = None,
+                 real_data_configuration: Optional[RealDataConfiguration] = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
         self.transforms: RayTransform = transforms
         self.num_beamline_samples: int = num_beamline_samples
@@ -39,6 +41,7 @@ class OptimizationTargetConfiguration:
         self.max_target_deviation: float = max_target_deviation
         self.param_func: Callable = param_func
         self.real_data_configuration = real_data_configuration
+        self.logging_project = logging_project
 
 
 class RayOptimization:
@@ -59,7 +62,7 @@ class RayOptimization:
         self.fixed_params: Optional[Tuple[str]] = fixed_params
         os.environ["WANDB__SERVICE_WAIT"] = "300"
         wandb.init(entity=self.logging_entity,
-                   project=self.logging_project,
+                   project=self.optimization_target_configuration.logging_project,
                    name=self.study_name,
                    mode='online' if self.logging else 'disabled',
                    )
@@ -186,6 +189,15 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
         return RayParameterContainer(elements)
 
     return output_func
+
+
+def build_study_name(param_func: Callable, loss: RayLoss, max_target_deviation: float, max_offset_search_deviation: float, optimizer_backend: OptimizerBackend) -> str:
+    var_count: int = sum(isinstance(x, RandomParameter) for x in param_func().values())
+    string_list = [str(var_count), 'target', str(max_target_deviation), 'search', str(max_offset_search_deviation), loss.__class__.__name__, optimizer_backend.__class__.__name__]
+    return '-'.join(string_list)
+    #    [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss',
+    #     str(MAX_TARGET_DEVIATION),
+    #     OPTIMIZER, '-v23'])
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
