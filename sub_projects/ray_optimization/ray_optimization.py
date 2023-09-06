@@ -30,7 +30,7 @@ class RealDataConfiguration:
 class OptimizationTargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
                  max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
-                 transforms: Optional[RayTransform] = None):
+                 transforms: Optional[RayTransform] = None, real_data_configuration: Optional[RealDataConfiguration] = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
         self.transforms: RayTransform = transforms
         self.num_beamline_samples: int = num_beamline_samples
@@ -38,6 +38,7 @@ class OptimizationTargetConfiguration:
         self.engine: Engine = engine
         self.max_target_deviation: float = max_target_deviation
         self.param_func: Callable = param_func
+        self.real_data_configuration = real_data_configuration
 
 
 class RayOptimization:
