@@ -26,7 +26,8 @@ engine:
     dockerfile_path: '../../ray_docker/rayui'
     docker_container_name: ${study_name}
     ray_workdir: /dev/shm/${study_name}
-    additional_mount_files: "../../rml_src/wave_linhor_3_Harm_600eV.ray"
+    additional_mount_files:
+      - "../../rml_src/wave_linhor_3_Harm_600eV.ray"
     verbose: False
 num_beamline_samples: 22
 exported_plane: "ImagePlane"
