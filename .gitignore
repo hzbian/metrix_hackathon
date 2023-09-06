@@ -5,6 +5,7 @@ sub_projects/testing/plots
 .idea
 ray_workdir/
 wandb/
+outputs/
 datasets/metrix_real_data/
 
 # Created by .ignore support plugin (hsz.mobi)
