@@ -6,9 +6,9 @@ import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 import wandb
-from sub_projects.ray_optimization.losses import RayLoss
 
 sys.path.insert(0, '../../')
+from sub_projects.ray_optimization.losses import RayLoss
 from ray_tools.base import RayTransform
 from ray_tools.base.utils import RandomGenerator
 
@@ -190,9 +190,13 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
     return output_func
 
 
-def build_study_name(param_func: Callable, loss: RayLoss, max_target_deviation: float, max_offset_search_deviation: float, optimizer_backend: OptimizerBackend) -> str:
+def build_study_name(param_func: Callable, max_target_deviation: float, max_offset_search_deviation: float, loss: Optional[RayLoss]=None, optimizer_backend: Optional[OptimizerBackend]=None) -> str:
     var_count: int = sum(isinstance(x, RandomParameter) for x in param_func().values())
-    string_list = [str(var_count), 'target', str(max_target_deviation), 'search', str(max_offset_search_deviation), loss.__class__.__name__, optimizer_backend.__class__.__name__]
+    string_list = [str(var_count), 'target', str(max_target_deviation), 'search', str(max_offset_search_deviation)]
+    if RayLoss is not None:
+        string_list.append(loss.__class__.__name__.replace('Loss', ''))
+    if OptimizerBackend is not None:
+        string_list.append(optimizer_backend.__class__.__name__.replace('OptimizerBackend', ''))
     return '-'.join(string_list)
     #    [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss',
     #     str(MAX_TARGET_DEVIATION),
