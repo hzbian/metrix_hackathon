@@ -46,7 +46,7 @@ class OptimizationTargetConfiguration:
 
 class RayOptimization:
     def __init__(self, optimization_target_configuration: OptimizationTargetConfiguration, ray_optimizer: RayOptimizer,
-                 logging_entity: str, logging_project: str, study_name: str, rg: RandomGenerator,
+                 logging_entity: str, study_name: str, rg: RandomGenerator,
                  logging: bool = True, fixed_params: Optional[List[str]] = (),
                  z_layers: List[float] = 0.,
                  real_data_configuration: Optional[RealDataConfiguration] = None):
@@ -55,7 +55,6 @@ class RayOptimization:
         self.ray_optimizer = ray_optimizer
         self.real_data_configuration: RealDataConfiguration = real_data_configuration
         self.logging_entity: str = logging_entity
-        self.logging_project: str = logging_project
         self.study_name: str = study_name
         self.logging: bool = logging
         self.z_layers: List[float] = z_layers
