@@ -83,7 +83,8 @@ class RayBackendDockerRAYUI(RayBackend):
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
-        self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + '_backend'
+        ray_workdir_name: str = os.path.basename(os.path.normpath(self.ray_workdir))
+        self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + ray_workdir_name + '_backend'
         self.dockerfile_path = dockerfile_path
         self.max_retry = max_retry
         self.verbose = verbose

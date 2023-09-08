@@ -1,5 +1,6 @@
 import os
 import sys
+import uuid
 from typing import Optional, Callable, List, Tuple
 
 import hydra
@@ -30,7 +31,8 @@ class RealDataConfiguration:
 
 class OptimizationTargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
-                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3, logging_project: Optional[str]=None,
+                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
+                 logging_project: Optional[str] = None,
                  transforms: Optional[RayTransform] = None,
                  real_data_configuration: Optional[RealDataConfiguration] = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
@@ -190,7 +192,8 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
     return output_func
 
 
-def build_study_name(param_func: Callable, max_target_deviation: float, max_offset_search_deviation: float, loss: Optional[RayLoss]=None, optimizer_backend: Optional[OptimizerBackend]=None) -> str:
+def build_study_name(param_func: Callable, max_target_deviation: float, max_offset_search_deviation: float,
+                     loss: Optional[RayLoss] = None, optimizer_backend: Optional[OptimizerBackend] = None) -> str:
     var_count: int = sum(isinstance(x, RandomParameter) for x in param_func().values())
     string_list = [str(var_count), 'target', str(max_target_deviation), 'search', str(max_offset_search_deviation)]
     if RayLoss is not None:
@@ -198,9 +201,10 @@ def build_study_name(param_func: Callable, max_target_deviation: float, max_offs
     if OptimizerBackend is not None:
         string_list.append(optimizer_backend.__class__.__name__.replace('OptimizerBackend', ''))
     return '-'.join(string_list)
-    #    [str(sum(isinstance(x, RandomParameter) for x in PARAM_FUNC().values()) - len(FIXED_PARAMS)), 'gauss',
-    #     str(MAX_TARGET_DEVIATION),
-    #     OPTIMIZER, '-v23'])
+
+
+def build_ray_workdir_path(parent_path: str):
+    return os.path.join(parent_path, str(uuid.uuid5(uuid.NAMESPACE_DNS, 'python.org')))
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"

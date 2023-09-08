@@ -7,10 +7,11 @@ rg:
     _target_: "ray_tools.base.utils.RandomGenerator"
     seed: 42
 logging_entity: "hzb-aos"
+
 study_name:
   _target_: "sub_projects.ray_optimization.ray_optimization.build_study_name"
   param_func: ${optimization_target_configuration.param_func}
   loss: ${ray_optimizer.criterion}
-  #optimizer_backend: ${ray_optimizer.optimizer_backend}
+  optimizer_backend: ${ray_optimizer.optimizer_backend}
   max_target_deviation: ${optimization_target_configuration.max_target_deviation}
   max_offset_search_deviation: ${optimization_target_configuration.max_offset_search_deviation}

@@ -55,8 +55,9 @@ engine:
     _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
     docker_image: 'ray-ui-service'
     dockerfile_path: '../../ray_docker/rayui'
-    docker_container_name: test #${study_name}
-    ray_workdir: /dev/shm/test ${study_name}
+    ray_workdir:
+      _target_: 'sub_projects.ray_optimization.ray_optimization.build_ray_workdir_path'
+      parent_path: '/dev/shm'
     verbose: False
 num_beamline_samples: 22
 exported_plane: "ImagePlane"
