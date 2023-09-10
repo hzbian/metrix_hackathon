@@ -104,14 +104,14 @@ class BoxIoULoss(RayLoss):
     """
     Implementation of box intersection-over-union losses. This class is meant to be used with a Torchvision function
     as input as described in the `PyTorch documentation <https://pytorch.org/vision/master/ops.html#losses>`_
-    :param base_fn can be one of `torchvision.ops.complete_box_iou`, ``torchvision.ops.distance_box_iou_loss`` or
+    :param base_fn can be one of ``torchvision.ops.complete_box_iou_loss``, ``torchvision.ops.distance_box_iou_loss`` or
     ``torchvision.ops.generalized_box_iou_loss``.
     """
 
     def __init__(self, base_fn: Union[Callable[..., torch.Tensor], str], reduction='none'):
         if isinstance(base_fn, str):
-            if base_fn == 'torchvision.ops.complete_box_iou':
-                base_fn = torchvision.ops.complete_box_iou
+            if base_fn == 'torchvision.ops.complete_box_iou_loss':
+                base_fn = torchvision.ops.complete_box_iou_loss
             if base_fn == 'torchvision.ops.distance_box_iou_loss':
                 base_fn = torchvision.ops.distance_box_iou_loss
             if base_fn == 'torchvision.ops.generalized_box_iou_loss':
