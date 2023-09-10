@@ -4,6 +4,7 @@ from typing import Union, Dict, List, Iterable, Callable
 
 import ignite
 import torch
+import torchvision
 
 sys.path.insert(0, '../../')
 from ray_tools.base.transform import Histogram
@@ -107,7 +108,14 @@ class BoxIoULoss(RayLoss):
     ``torchvision.ops.generalized_box_iou_loss``.
     """
 
-    def __init__(self, base_fn: Callable[..., torch.Tensor], reduction='none'):
+    def __init__(self, base_fn: Union[Callable[..., torch.Tensor], str], reduction='none'):
+        if isinstance(base_fn, str):
+            if base_fn == 'torchvision.ops.complete_box_iou':
+                base_fn == torchvision.ops.complete_box_iou
+            if base_fn == 'torchvision.ops.distance_box_iou_loss':
+                base_fn == torchvision.ops.distance_box_iou_loss
+            if base_fn == 'torchvision.ops.generalized_box_iou_loss':
+                base_fn == torchvision.ops.generalized_box_iou_loss
         self.base_fn: Callable[..., torch.Tensor] = base_fn
         self.reduction = reduction
 
