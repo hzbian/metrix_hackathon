@@ -177,9 +177,8 @@ class Histogram(RayTransform):
             # compute histogram with given limits
             out['x_lims'] = x_lims
             out['y_lims'] = y_lims
-            out['histogram'] = torch.histogramdd(torch.stack([x_loc, y_loc]),
-                                                 bins=(self.n_bins, self.n_bins),
-                                                 range=[x_lims[0], x_lims[1], y_lims[0], y_lims[1]])
+            out['histogram'] = torch.histogramdd(torch.stack([x_loc, y_loc]).T,
+                                                 bins=(self.n_bins, self.n_bins),)[0]
 
         return out
 

@@ -166,8 +166,8 @@ class HistogramMSE(RayLoss):
             x_max = max(a.x_loc.max(), b.x_loc.max())
             y_min = min(a.y_loc.min(), b.y_loc.min())
             y_max = max(a.y_loc.max(), b.y_loc.max())
-            hist_a_list.append(torch.from_numpy(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)['histogram']))
-            hist_b_list.append(torch.from_numpy(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)['histogram']))
+            hist_a_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)['histogram'])
+            hist_b_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)['histogram'])
         return ((torch.stack(hist_a_list) - torch.stack(hist_b_list)) ** 2).mean()
 
 
