@@ -189,7 +189,7 @@ class TorchLoss(RayLoss):
     """
     Implementation of PyTorch losses. This class is meant to be used with a Torchvision function
     as input as described in the `PyTorch documentation <https://pytorch.org/vision/master/ops.html#losses>`_
-    :param base_fn can be one of `torchvision.ops.complete_box_iou`, ``torchvision.ops.distance_box_iou_loss`` or
+    :param base_fn can be one of `torchvision.ops.complete_box_iou_loss`, ``torchvision.ops.distance_box_iou_loss`` or
     ``torchvision.ops.generalized_box_iou_loss``.
     """
 
