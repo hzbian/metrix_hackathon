@@ -7,4 +7,4 @@
 #SBATCH --partition=main
 #SBATCH --spread-job
 
-python3 ray_optimization.py
+python3 -m  "sub_projects.ray_optimization.ray_optimization"

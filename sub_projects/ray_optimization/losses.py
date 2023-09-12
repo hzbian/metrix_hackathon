@@ -185,26 +185,6 @@ class CovMSE(RayLoss):
         return ((cov_a - cov_b) ** 2).mean()
 
 
-class TorchLoss(RayLoss):
-    """
-    Implementation of PyTorch losses. This class is meant to be used with a Torchvision function
-    as input as described in the `PyTorch documentation <https://pytorch.org/vision/master/ops.html#losses>`_
-    :param base_fn can be one of `torchvision.ops.complete_box_iou_loss`, ``torchvision.ops.distance_box_iou_loss`` or
-    ``torchvision.ops.generalized_box_iou_loss``.
-    """
-
-    def __init__(self, base_fn: torch.nn.Module):
-        self.base_fn: torch.nn.Module = base_fn
-
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
-        a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
-        b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
-
-        losses = torch.stack([self.base_fn(element, b[i]) for i, element in enumerate(a)])
-        return losses.mean()
-
-
 class KLDLoss(TorchLoss):
     def __init__(self, reduction='none'):
         super().__init__(torch.nn.KLDivLoss(reduction=reduction, log_target=True))
@@ -252,8 +232,8 @@ class SSIMHistogramLoss(RayLoss):
             x_max = max(a.x_loc.max(), b.x_loc.max())
             y_min = min(a.y_loc.min(), b.y_loc.min())
             y_max = max(a.y_loc.max(), b.y_loc.max())
-            hist_a_list.append(torch.from_numpy(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)['histogram']))
-            hist_b_list.append(torch.from_numpy(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)['histogram']))
+            hist_a_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)['histogram'])
+            hist_b_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)['histogram'])
         stack_a = torch.stack(hist_a_list).unsqueeze(1).float()
         stack_b = torch.stack(hist_b_list).unsqueeze(1).float()
         self.ssim_fun.update((stack_a, stack_b))
