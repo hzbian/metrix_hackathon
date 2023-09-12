@@ -92,6 +92,7 @@ class RayBackendDockerRAYUI(RayBackend):
         self.print_device = STDOUT if self.verbose else DEVNULL
         self.additional_mount_files = additional_mount_files
         self.device = device
+        self.container_executable = "systemd-run --scope --user podman"
 
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
@@ -106,13 +107,13 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.container_system == "docker":
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
-                cleanup_command = "systemd-run --scope --user podman system prune -f"
+                cleanup_command = self.container_executable + " system renumber"
                 if self.verbose:
                     print(cleanup_command)
                 output = subprocess.check_output(shlex.split(cleanup_command), stderr=self.print_device)
                 if self.verbose:
                     print(output)
-                build_command = "systemd-run --scope --user podman build --security-opt label=disable -f {} -t {}".format(
+                build_command = self.container_executable + " build --security-opt label=disable -f {} -t {}".format(
                     os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
                 if self.verbose:
                     print(build_command)
@@ -133,13 +134,13 @@ class RayBackendDockerRAYUI(RayBackend):
                 pass
         else:
             try:
-                stop_command = f"podman kill {self.docker_container_name}"
+                stop_command = f"{self.container_executable} kill {self.docker_container_name}"
                 if self.verbose:
                     print(stop_command)
                 output = subprocess.check_output(shlex.split(stop_command), stderr=self.print_device)
                 if self.verbose:
                     print(output)
-                rm_command = f"podman rm {self.docker_container_name}"
+                rm_command = f"{self.container_executable} rm {self.docker_container_name}"
                 if self.verbose:
                     print(rm_command)
                 output = subprocess.check_output(shlex.split(rm_command), stderr=self.print_device)
@@ -149,7 +150,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 if self.verbose:
                     print("Could not stop and remove podman.")
                 pass
-            podman_command = f"podman run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
+            podman_command = f"{self.container_executable} run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
                              f"=type=bind,src={self.ray_workdir}," \
                              f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
                              f"/dev/null"
@@ -231,7 +232,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 )
             else:
 
-                podman_command = f"systemd-run --scope --user podman exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
+                podman_command = f"{self.container_executable} exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
                 if self.verbose:
                     print(podman_command)
                 output = subprocess.check_output(shlex.split(podman_command), stderr=self.print_device)

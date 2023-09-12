@@ -48,13 +48,13 @@ param_func:
       - "ImagePlane.translationZerror"
 engine:
   _target_: "ray_tools.base.engine.RayEngine"
-  rml_basefile: "../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml"
+  rml_basefile: "rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml"
   exported_planes:
     - ${optimization_target_configuration.exported_plane}
   ray_backend:
     _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
     docker_image: 'ray-ui-service'
-    dockerfile_path: '../../ray_docker/rayui'
+    dockerfile_path: 'ray_docker/rayui'
     ray_workdir:
       _target_: 'sub_projects.ray_optimization.ray_optimization.build_ray_workdir_path'
       parent_path: '/dev/shm'
