@@ -9,7 +9,10 @@
             "type": "python",
             "request": "launch",
             "module": "sub_projects.ray_optimization.ray_optimization",
-            "justMyCode": true
+            "justMyCode": true,
+            "args": [
+                "logging=False",
+            ],
         }
     ]
 }

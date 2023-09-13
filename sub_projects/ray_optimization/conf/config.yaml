@@ -7,6 +7,7 @@ rg:
     _target_: "ray_tools.base.utils.RandomGenerator"
     seed: 42
 logging_entity: "hzb-aos"
+logging: True
 
 study_name:
   _target_: "sub_projects.ray_optimization.ray_optimization.build_study_name"
