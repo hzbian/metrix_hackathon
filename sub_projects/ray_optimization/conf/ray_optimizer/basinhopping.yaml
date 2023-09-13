@@ -1,7 +1,7 @@
 defaults:
   - base
 optimizer_backend:
-  _target_: "ray_optim.ray_optimizer.OptimizerBackendBasinhopping"
+  _target_: "ray_optim.basinhopping.OptimizerBackendBasinhopping"
   basinhopping_function:
     _target_: hydra.utils.get_method
     path: "scipy.optimize.basinhopping"
