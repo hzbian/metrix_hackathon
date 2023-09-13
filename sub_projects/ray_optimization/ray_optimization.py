@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 import wandb
 
 sys.path.insert(0, '../../')
-from sub_projects.ray_optimization.losses import RayLoss
+from sub_projects.ray_optimization.losses.losses import RayLoss
 from ray_tools.base import RayTransform
 from ray_tools.base.utils import RandomGenerator
 

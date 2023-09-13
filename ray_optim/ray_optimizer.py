@@ -19,7 +19,7 @@ from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, NumericalParameter, RandomParameter, \
     NumericalOutputParameter, OutputParameter
 from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
-from sub_projects.ray_optimization.losses import RayLoss
+from sub_projects.ray_optimization.losses.losses import RayLoss
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 plt.switch_backend('Agg')

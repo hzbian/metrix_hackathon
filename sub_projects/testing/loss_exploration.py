@@ -8,8 +8,10 @@ from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 sys.path.insert(0, '../../')
-from sub_projects.ray_optimization.losses import RayLoss, SinkhornLoss, RayCountMSE, ScheduledLoss, HistogramMSE, \
-    CovMSE, KLDLoss, MSELoss, JSLoss, SSIMHistogramLoss, BoxIoULoss
+from sub_projects.ray_optimization.losses.losses import RayLoss, RayCountMSE, ScheduledLoss
+from sub_projects.ray_optimization.losses.geometric import SinkhornLoss
+from sub_projects.ray_optimization.losses.torch import HistogramMSE, CovMSE, KLDLoss, MSELoss, JSLoss, BoxIoULoss
+from sub_projects.ray_optimization.losses.ignite import SSIMHistogramLoss
 
 from ray_tools.base.engine import GaussEngine
 
