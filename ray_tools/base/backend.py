@@ -107,19 +107,24 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.container_system == "docker":
                 self.client.images.build(path=dockerfile_path, tag=self.docker_image)
             else:
-                cleanup_command = self.container_executable + " system renumber"
-                if self.verbose:
-                    print(cleanup_command)
-                output = subprocess.check_output(shlex.split(cleanup_command), stderr=self.print_device)
-                if self.verbose:
-                    print(output)
-                build_command = self.container_executable + " build --security-opt label=disable -f {} -t {}".format(
-                    os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
-                if self.verbose:
-                    print(build_command)
-                output = subprocess.check_output(shlex.split(build_command), stderr=self.print_device)
-                if self.verbose:
-                    print(output)
+                try:
+                    stop_command = f"{self.container_executable} kill {self.docker_container_name}"
+                    if self.verbose:
+                        print(stop_command)
+                    output = subprocess.check_output(shlex.split(stop_command), stderr=self.print_device)
+                    if self.verbose:
+                        print(output)
+                    rm_command = f"{self.container_executable} rm {self.docker_container_name}"
+                    if self.verbose:
+                        print(rm_command)
+                    output = subprocess.check_output(shlex.split(rm_command), stderr=self.print_device)
+                    if self.verbose:
+                        print(output)
+                except Exception:
+                    if self.verbose:
+                        print("Could not stop and remove podman.")
+                    pass
+
         # if container already exists, stop and remove it
         if self.container_system == "docker":
             try:
@@ -133,27 +138,24 @@ class RayBackendDockerRAYUI(RayBackend):
             except docker.errors.NotFound:
                 pass
         else:
-            try:
-                stop_command = f"{self.container_executable} kill {self.docker_container_name}"
-                if self.verbose:
-                    print(stop_command)
-                output = subprocess.check_output(shlex.split(stop_command), stderr=self.print_device)
-                if self.verbose:
-                    print(output)
-                rm_command = f"{self.container_executable} rm {self.docker_container_name}"
-                if self.verbose:
-                    print(rm_command)
-                output = subprocess.check_output(shlex.split(rm_command), stderr=self.print_device)
-                if self.verbose:
-                    print(output)
-            except Exception:
-                if self.verbose:
-                    print("Could not stop and remove podman.")
-                pass
+            cleanup_command = self.container_executable + " system renumber"
+            if self.verbose:
+                print(cleanup_command)
+            output = subprocess.check_output(shlex.split(cleanup_command), stderr=self.print_device)
+            if self.verbose:
+                print(output)
+            build_command = self.container_executable + " build --security-opt label=disable -f {} -t {}".format(
+                os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
+            if self.verbose:
+                print(build_command)
+            output = subprocess.check_output(shlex.split(build_command), stderr=self.print_device)
+            if self.verbose:
+                print(output)
+
             podman_command = f"{self.container_executable} run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
-                             f"=type=bind,src={self.ray_workdir}," \
-                             f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
-                             f"/dev/null"
+                 f"=type=bind,src={self.ray_workdir}," \
+                 f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
+                 f"/dev/null"
             if self.verbose:
                 print(podman_command)
             try:
