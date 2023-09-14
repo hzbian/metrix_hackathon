@@ -1,7 +1,6 @@
 _target_: "ray_optim.ray_optimizer.RayOptimizer"
 criterion:
-  _target_: "sub_projects.ray_optimization.losses.torch.BoxIoULoss"
-  base_fn: 'torchvision.ops.distance_box_iou_loss'
+  _target_: "sub_projects.ray_optimization.losses.geometric.SinkhornLoss"
 exported_plane: ${optimization_target_configuration.exported_plane}
 engine: ${optimization_target_configuration.engine}
 log_times: True
