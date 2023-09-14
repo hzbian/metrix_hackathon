@@ -234,7 +234,9 @@ class RayBackendDockerRAYUI(RayBackend):
                 )
             else:
 
-                podman_command = f"{self.container_executable} exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane > /dev/null"
+                podman_command = f"{self.container_executable} exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane"
+                if not self.verbose:
+                    podman_command += " > /dev/null"
                 if self.verbose:
                     print(podman_command)
                 output = subprocess.check_output(shlex.split(podman_command), stderr=self.print_device)
