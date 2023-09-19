@@ -204,7 +204,7 @@ def build_study_name(param_func: Callable, max_target_deviation: float, max_offs
 
 
 def build_ray_workdir_path(parent_path: str):
-    return os.path.join(parent_path, str(uuid.uuid5(uuid.NAMESPACE_DNS, 'python.org')))
+    return os.path.join(parent_path, str(uuid.uuid4()))
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
