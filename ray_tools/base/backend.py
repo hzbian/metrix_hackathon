@@ -92,7 +92,7 @@ class RayBackendDockerRAYUI(RayBackend):
         self.print_device = STDOUT if self.verbose else DEVNULL
         self.additional_mount_files = additional_mount_files
         self.device = device
-        self.container_executable = "systemd-run --scope --user podman"
+        self.container_executable = "podman"
 
         # Ray-UI workdir in docker container
         self._rayui_workdir = '/opt/ray-ui-workdir'
@@ -138,7 +138,7 @@ class RayBackendDockerRAYUI(RayBackend):
             except docker.errors.NotFound:
                 pass
         else:
-            cleanup_command = self.container_executable + " system renumber"
+            cleanup_command = self.container_executable + " system prune -f"
             if self.verbose:
                 print(cleanup_command)
             output = subprocess.check_output(shlex.split(cleanup_command), stderr=self.print_device)
@@ -152,7 +152,7 @@ class RayBackendDockerRAYUI(RayBackend):
             if self.verbose:
                 print(output)
 
-            podman_command = f"{self.container_executable} run -d --security-opt label=disable --name {self.docker_container_name} --mount" \
+            podman_command = f"{self.container_executable} run -d --cgroups=disabled --security-opt label=disable --name {self.docker_container_name} --mount" \
                  f"=type=bind,src={self.ray_workdir}," \
                  f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
                  f"/dev/null"
