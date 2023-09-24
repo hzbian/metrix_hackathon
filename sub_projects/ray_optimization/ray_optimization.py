@@ -195,9 +195,12 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
 
 
 def build_study_name(param_func: Callable, max_target_deviation: float, max_offset_search_deviation: float,
-                     loss: Optional[RayLoss] = None, optimizer_backend: Optional[OptimizerBackend] = None) -> str:
+                     loss: Optional[RayLoss] = None, optimizer_backend: Optional[OptimizerBackend] = None, appendix: Optional[str] = None) -> str:
     var_count: int = sum(isinstance(x, RandomParameter) for x in param_func().values())
     string_list = [str(var_count), 'target', str(max_target_deviation), 'search', str(max_offset_search_deviation)]
+
+    if appendix is not None:
+        string_list.append(appendix)
     if RayLoss is not None:
         string_list.append(loss.__class__.__name__.replace('Loss', ''))
     if OptimizerBackend is not None:
