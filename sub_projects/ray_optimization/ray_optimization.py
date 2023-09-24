@@ -68,13 +68,6 @@ class RayOptimization:
                    mode='online' if self.logging else 'disabled',
                    )
 
-        # optimize only some all_params
-        self.all_params = self.optimization_target_configuration.param_func()
-        for key in self.all_params:
-            old_param = self.all_params[key]
-            if isinstance(old_param, MutableParameter) and key in self.fixed_params:
-                self.all_params[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
         if self.real_data_configuration is None:
             target_offset = offset_search_space(self.all_params,
                                                 self.optimization_target_configuration.max_target_deviation, self.rg,
@@ -173,7 +166,7 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
 
 
 def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = (),
-                   output_parameters: List[str] = ()):
+                   output_parameters: List[str] = (), fixed_parameters: List[str] = ()):
     elements = []
     for k, v in parameters.items():
         if hasattr(v, '__getitem__'):
@@ -185,6 +178,13 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
             elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
         else:
             elements.append((k, NumericalParameter(value=v)))
+        
+        # do not optimize the fixed parameters, set them to the center of interval
+        for key in fixed_parameters:
+            old_param = elements[key]
+            if isinstance(old_param, MutableParameter) and key in fixed_parameters:
+                elements[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+
 
     def output_func():
         return RayParameterContainer(elements)
