@@ -2,6 +2,7 @@ import os
 import sys
 import uuid
 from typing import Optional, Callable, List, Tuple
+from collections import OrderedDict
 
 import hydra
 from hydra.utils import instantiate
@@ -49,7 +50,8 @@ class OptimizationTargetConfiguration:
 class RayOptimization:
     def __init__(self, optimization_target_configuration: OptimizationTargetConfiguration, ray_optimizer: RayOptimizer,
                  logging_entity: str, study_name: str, rg: RandomGenerator,
-                 logging: bool = True, z_layers: List[float] = 0.,
+                 logging: bool = True,
+                 z_layers: List[float] = 0.,
                  real_data_configuration: Optional[RealDataConfiguration] = None):
         self.optimization_target_configuration = optimization_target_configuration
         self.rg: RandomGenerator = rg
@@ -59,6 +61,7 @@ class RayOptimization:
         self.study_name: str = study_name
         self.logging: bool = logging
         self.z_layers: List[float] = z_layers
+        self.all_params = self.optimization_target_configuration.param_func()
         os.environ["WANDB__SERVICE_WAIT"] = "300"
         wandb.init(entity=self.logging_entity,
                    project=self.optimization_target_configuration.logging_project,
@@ -177,11 +180,12 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
         else:
             elements.append((k, NumericalParameter(value=v)))
         
-        # do not optimize the fixed parameters, set them to the center of interval
-        for key in fixed_parameters:
-            old_param = elements[key]
-            if isinstance(old_param, MutableParameter) and key in fixed_parameters:
-                elements[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+    elements = OrderedDict(elements)
+    # do not optimize the fixed parameters, set them to the center of interval
+    for key in fixed_parameters:
+        old_param = elements[key]
+        if isinstance(old_param, MutableParameter) and key in fixed_parameters:
+            elements[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
 
 
     def output_func():
