@@ -217,6 +217,9 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 
 @hydra.main(version_base=None, config_path="./conf", config_name="config")
 def my_app(cfg):
+    wandb.config = OmegaConf.to_container(
+        cfg, resolve=True, throw_on_missing=True
+    )
     print(OmegaConf.to_yaml(cfg))
     _ = instantiate(cfg)
 
