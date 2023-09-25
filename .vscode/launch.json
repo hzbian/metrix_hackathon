@@ -12,6 +12,7 @@
             "justMyCode": true,
             "args": [
                 "logging=False",
+                "optimization_target_configuration=metrixs_real"
             ],
         }
     ]
