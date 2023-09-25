@@ -74,7 +74,7 @@ def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
 
 def investigate_var(var_name: str, value_lims, loss: RayLoss, loss_string):
     engine = GaussEngine()
-    num_samples = 300
+    num_samples = 1000
     params_list, offset_list = create_params_offset_list(var_name, value_lims, num_samples=num_samples)
     outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10])) for params_entry in params_list]
 
@@ -86,17 +86,29 @@ def investigate_var(var_name: str, value_lims, loss: RayLoss, loss_string):
         if isinstance(loss, ScheduledLoss):
             loss.end_epoch()
         distances_list.append(distance.item())
-    plt.scatter(np.array(offset_list[1:]), np.array(distances_list[:]), s=0.2)
+    return offset_list, distances_list
+
+
+def plot_investigated_var(offsets, distances, loss_string):
+    plt.scatter(np.array(offsets), np.array(distances), s=0.5, alpha=0.7, label=loss_string)
+
+def save_plot(var_name: str, output_directory: str='plots/'):
+    ax = plt.gca()
+    ax.set_yscale('log')
+    ax.set_xscale('log')
     plt.xlabel('Absolute error')
-    plt.ylabel(loss_string + ' distance')
+    plt.ylabel('Loss distance')
     plt.tight_layout()
-    output_directory = 'plots/'
+    plt.legend()
+
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-
-    plt.savefig(os.path.join(output_directory, loss_string + '_' + var_name + '.png'))
+    plt.savefig(os.path.join(output_directory, var_name + '.png'), dpi=300)
     plt.clf()
 
+def investigate_and_plot_var(var_name, value_lims, loss, loss_string): 
+    offsets, distances = investigate_var(var_name, value_lims=value_lims, loss=loss, loss_string=loss_string)
+    plot_investigated_var(offsets=offsets[1:], distances=distances, loss_string=loss_string)
 
 if __name__ == '__main__':
     iou_loss = {
@@ -108,7 +120,7 @@ if __name__ == '__main__':
         "sinkhorn_loss": SinkhornLoss(),
     }
     ray_count_loss = {
-        "ray_count_mse": RayCountMSE(),
+    #    "ray_count_mse": RayCountMSE(),
     }
     scheduled_loss = {
         "scheduled_loss": ScheduledLoss(RayCountMSE(), SinkhornLoss(), 150),
@@ -122,17 +134,18 @@ if __name__ == '__main__':
     }
     ssim_loss = {
         "ssim_histogram_10": SSIMHistogramLoss(n_bins=10),
-        "ssim_histogram_100": SSIMHistogramLoss(n_bins=100),
+    #    "ssim_histogram_100": SSIMHistogramLoss(n_bins=100),
     }
     torch_loss = {
-        "js_loss": JSLoss(),
+    #    "js_loss": JSLoss(),
         "kld_loss": KLDLoss(),
         "mse_loss": MSELoss(),
 
     }
-    investigate_loss = torch_loss | ssim_loss | cov_mse | histogram_mse | scheduled_loss | ray_count_loss | sinkhorn_loss | iou_loss
-    for loss_string, loss in tqdm(investigate_loss.items()):
-        investigate_var('y_mean', value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
-        if isinstance(loss, ScheduledLoss):
-            loss.reset_passed_epochs()
-        investigate_var('y_var', value_lims=(0.0, 0.1), loss=loss, loss_string=loss_string)
+    investigate_loss = torch_loss | ssim_loss | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
+    for var_name in ['y_mean', 'y_var']:
+        for loss_string, loss in tqdm(investigate_loss.items()):
+            investigate_and_plot_var(var_name=var_name, value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
+            if isinstance(loss, ScheduledLoss):
+                loss.reset_passed_epochs()
+        save_plot(var_name)
