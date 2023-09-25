@@ -63,8 +63,9 @@ num_beamline_samples: 22
 exported_plane: "ImagePlane"
 max_target_deviation: 0.3
 max_offset_search_deviation: 0.3
+z_layers: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 transforms:
   _target_: "ray_tools.base.transform.MultiLayer"
-  dist_layers: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+  dist_layers: ${optimization_target_configuration.z_layers}
   copy_directions: False
 logging_project: "metrix"

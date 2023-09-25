@@ -34,9 +34,11 @@ class OptimizationTargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
                  max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
                  logging_project: Optional[str] = None,
+                 z_layers: List[float] = (0.),
                  transforms: Optional[RayTransform] = None,
                  real_data_configuration: Optional[RealDataConfiguration] = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
+        self.z_layers = z_layers
         self.transforms: RayTransform = transforms
         self.num_beamline_samples: int = num_beamline_samples
         self.exported_plane: str = exported_plane
@@ -50,17 +52,15 @@ class OptimizationTargetConfiguration:
 class RayOptimization:
     def __init__(self, optimization_target_configuration: OptimizationTargetConfiguration, ray_optimizer: RayOptimizer,
                  logging_entity: str, study_name: str, rg: RandomGenerator,
-                 logging: bool = True,
-                 z_layers: List[float] = 0.,
-                 real_data_configuration: Optional[RealDataConfiguration] = None):
+                 logging: bool = True):
         self.optimization_target_configuration = optimization_target_configuration
         self.rg: RandomGenerator = rg
         self.ray_optimizer = ray_optimizer
-        self.real_data_configuration: RealDataConfiguration = real_data_configuration
+        self.real_data_configuration: RealDataConfiguration = optimization_target_configuration.real_data_configuration
         self.logging_entity: str = logging_entity
         self.study_name: str = study_name
         self.logging: bool = logging
-        self.z_layers: List[float] = z_layers
+        self.z_layers: List[float] = optimization_target_configuration.z_layers
         self.all_params = self.optimization_target_configuration.param_func()
         os.environ["WANDB__SERVICE_WAIT"] = "300"
         wandb.init(entity=self.logging_entity,
