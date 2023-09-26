@@ -59,6 +59,7 @@ engine:
       _target_: 'sub_projects.ray_optimization.ray_optimization.build_ray_workdir_path'
       parent_path: '/dev/shm'
     verbose: False
+  num_workers: -1
 num_beamline_samples: 22
 exported_plane: "ImagePlane"
 max_target_deviation: 0.3
