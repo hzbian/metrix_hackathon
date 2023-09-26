@@ -1,8 +1,7 @@
 defaults:
   - metrixs
 param_func:
-  parameters:
-    fixed_parameters:
+  fixed_parameters:
     - "U41_318eV.translationXerror"
     - "U41_318eV.translationYerror"
     - "U41_318eV.rotationXerror"
@@ -25,18 +24,18 @@ param_func:
     - "ExitSlit.rotationZerror"
     - "E1.longHalfAxisA"
     - "E1.shortHalfAxisB"
-    - "E1.rotationXerror"
-    - "E1.rotationYerror"
+    #- "E1.rotationXerror"
+    #- "E1.rotationYerror"
     - "E1.rotationZerror"
-    - "E1.translationYerror"
+    #- "E1.translationYerror"
     - "E1.translationZerror"
     - "E2.longHalfAxisA"
     - "E2.shortHalfAxisB"
-    - "E2.rotationXerror"
-    - "E2.rotationYerror"
+    #- "E2.rotationXerror"
+    #- "E2.rotationYerror"
     - "E2.rotationZerror"
-    - "E2.translationYerror"
+    #- "E2.translationYerror"
     - "E2.translationZerror"
-    #- "ImagePlane.translationXerror"
-    #- "ImagePlane.translationYerror"
-    #- "ImagePlane.translationZerror"
+    - "ImagePlane.translationXerror"
+    - "ImagePlane.translationYerror"
+    - "ImagePlane.translationZerror"
