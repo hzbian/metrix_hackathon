@@ -18,7 +18,7 @@ from ray_tools.base.engine import Engine
 from sub_projects.ray_optimization.real_data import import_data
 from ray_optim.ray_optimizer import RayOptimizer, OffsetOptimizationTarget, RayScan, OptimizerBackend
 
-from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, MutableParameter, \
+from ray_tools.base.parameter import NumericalOutputParameter, RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter, RandomOutputParameter
 
 
@@ -178,14 +178,24 @@ def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lim
 
             elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
         else:
-            elements.append((k, NumericalParameter(value=v)))
+            if k in output_parameters:
+                typ = NumericalOutputParameter
+            else:
+                typ = NumericalParameter
+           
+            elements.append((k, typ(value=v)))
         
     elements = OrderedDict(elements)
     # do not optimize the fixed parameters, set them to the center of interval
     for key in fixed_parameters:
         old_param = elements[key]
         if isinstance(old_param, MutableParameter) and key in fixed_parameters:
-            elements[key] = NumericalParameter((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+            if key in output_parameters:
+                typ = NumericalOutputParameter
+            else:
+                typ = NumericalParameter
+  
+            elements[key] = typ((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
 
 
     def output_func():
