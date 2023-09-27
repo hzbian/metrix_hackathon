@@ -8,7 +8,7 @@ from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 class TorchLoss(RayLoss):
     """
-    Implementation of PyTorch losses. This class is meant to be used with a Torch loss function module.
+    Implementation of PyTorch losses. This class is meant to be used with a Torch loss function module. If shapes of `a` and `b` are different, the smaller sizes are taken and the excessing rays get discarded.
     """
 
     def __init__(self, base_fn: torch.nn.Module):
@@ -18,6 +18,10 @@ class TorchLoss(RayLoss):
                 exported_plane: str) -> torch.Tensor:
         a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
         b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
+
+        new_size = torch.min(torch.tensor(a.shape), torch.tensor(b.shape))
+        a = a[[slice(0, new_size[i]) for i in range(len(new_size))]]
+        b = b[[slice(0, new_size[i]) for i in range(len(new_size))]]
 
         losses = torch.stack([self.base_fn(element, b[i]) for i, element in enumerate(a)])
         return losses.mean()
