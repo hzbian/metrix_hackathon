@@ -11,7 +11,7 @@ from raypyng.xmltools import XmlElement
 
 from . import RayTransformType
 from .backend import RayBackend, RayOutput
-from .parameter import RayParameterContainer, OutputParameter
+from .parameter import RandomParameter, RayParameterContainer, OutputParameter
 from .transform import RayTransform
 
 
@@ -175,4 +175,73 @@ class GaussEngine(Engine):
                 ray_out = transforms[param_container_num](ray_out)
 
             outputs.append({'ray_output': {'ImagePlane': ray_out}, 'param_container_dict': param_container})
+        return outputs
+
+class SurrogateEngine(Engine):
+    def __init__(self,  checkpoint_path:str, model: torch.nn.module, device: torch.device, is_vae:bool = True):
+        super(SurrogateEngine, self).__init__()
+        self.is_vae = is_vae
+        self.device = device
+        # if is_vae:
+        #     self.latent_size = 200
+        #     model = CVAE(20 * 20, self.latent_size, 5).to(device)
+        # else:
+        #     model = Transformer(hist_dim=(20, 20), param_dim=36, transformer_dim=2048,
+        #                         n_hist_layers_inp=3, use_inp_template=True, n_hist_layers_out=1,
+        #                         transformer_heads=2, transformer_layers=3)
+        # checkpoint = torch.load(checkpoint_path)
+        # model_weights = checkpoint["state_dict"]
+        # for key in list(model_weights):
+        #     model_weights[key.replace("backbone.", "")] = model_weights.pop(key)
+        # model.load_state_dict(model_weights)
+        # model.eval()
+
+        self.model = model
+
+
+    def run(self,
+            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
+            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+
+        if isinstance(param_containers, RayParameterContainer):
+            param_containers = [param_containers]
+
+        # convert transforms into list if it was a singleton
+        if isinstance(param_containers, RayParameterContainer):
+            param_containers = [param_containers]
+
+        # convert transforms into list if it was a singleton
+        if transforms is None or isinstance(transforms, (RayTransform, dict)):
+            transforms = len(param_containers) * [transforms]
+
+        outputs = []
+        for param_container_num, param_container in enumerate(param_containers):
+            params = param_container
+            keys = []
+            for key in params.keys():
+                if isinstance(params[key], RandomParameter):
+                    value_lims = params[key].value_lims
+                    norm_value = (params[key].get_value() - value_lims[0]) / (value_lims[1] - value_lims[0])
+                    params[key].set_value(value=norm_value)
+                else:
+                    keys.append(key)
+            if keys != list(params.keys()):
+                for key in keys:
+                    params.pop(key)
+            params_list = []
+            for key in params.keys():
+                params_list.append(torch.Tensor([params[key].get_value()]))
+            params_tensor = torch.cat(params_list, dim=0)
+            params_tensor = torch.unsqueeze(params_tensor,0)
+            if self.is_vae:
+                means = torch.zeros(self.latent_size).to(self.device)
+                std = torch.ones(self.latent_size).to(self.device)
+                draw = torch.normal(means, std).to(self.device)
+                draw = torch.reshape(draw, (1, -1))
+                model_out = self.model.decode(draw, params_tensor.to(self.device))
+                outputs.append(model_out)
+            else:
+                model_out = self.model(params, 1, 1, 1)
+                outputs.append(model_out)
         return outputs
