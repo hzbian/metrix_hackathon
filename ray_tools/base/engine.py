@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import torch
-from typing import Iterable, Union, Dict, List
+from typing import Iterable, Optional, Union, Dict, List
 
 from joblib import Parallel, delayed
 
@@ -137,9 +137,13 @@ class RayEngine(Engine):
 
 
 class GaussEngine(Engine):
+    def __init__(self, device: Optional[torch.device] = None) -> None:
+        super().__init__()
+        self.device = device
+
     def run(self,
             param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None
             ) -> Union[Dict, Iterable[Dict], List[Dict]]:
 
         if isinstance(param_containers, RayParameterContainer):
@@ -160,12 +164,12 @@ class GaussEngine(Engine):
                 correlation_factor = param_container['correlation_factor'].get_value()
             else:
                 correlation_factor = 0.
-            correlation = correlation_factor * torch.sqrt(torch.tensor(x_var)) * torch.sqrt(torch.tensor(y_var))
-            m = torch.distributions.multivariate_normal.MultivariateNormal(torch.Tensor([x_mean, y_mean]),
-                                                                           torch.Tensor([[x_var, correlation],
-                                                                                         [correlation, y_var]]))
+            correlation = correlation_factor * torch.sqrt(torch.tensor(x_var, device=self.device)) * torch.sqrt(torch.tensor(y_var, device=self.device))
+            m = torch.distributions.multivariate_normal.MultivariateNormal(torch.tensor([x_mean, y_mean], device=self.device),
+                                                                           torch.tensor([[x_var, correlation],
+                                                                                         [correlation, y_var]], device=self.device))
             samples = m.rsample(torch.Size([n_rays]))
-            samples_directions = torch.rand([n_rays, 3]) * param_container['direction_spread'].get_value()
+            samples_directions = torch.rand([n_rays, 3], device=self.device) * param_container['direction_spread'].get_value()
             ray_out = RayOutput(samples[:, 0], samples[:, 1], torch.zeros_like(samples[:, 0]),
                                 param_container['x_dir'].get_value() + samples_directions[:, 0],
                                 param_container['y_dir'].get_value() + samples_directions[:, 1],

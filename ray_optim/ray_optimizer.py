@@ -326,6 +326,10 @@ class RayOptimizer:
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
+    def tensor_list_to_cpu(tensor_list: List[torch.Tensor]):
+        return [element.cpu() for element in tensor_list]
+    
+    @staticmethod
     def get_evaluation_parameters(uncompensated_parameters_list: List[RayParameterContainer], offsets) -> List[
         RayParameterContainer]:
         evaluation_parameters_list = [element.clone() for element in uncompensated_parameters_list]
@@ -385,11 +389,11 @@ class RayOptimizer:
                 self.overall_best.loss = loss_mean
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
-                best_rays_list = self.overall_best.rays
+                best_rays_list = self.tensor_list_to_cpu(self.overall_best.rays)
                 target_perturbed_parameters_rays_list = ray_output_to_tensor(
-                    optimization_target.observed_rays, self.exported_plane)
+                    optimization_target.observed_rays, self.exported_plane, to_cpu=True)
                 target_initial_parameters_rays_list = ray_output_to_tensor(
-                    optimization_target.uncompensated_rays, self.exported_plane)
+                    optimization_target.uncompensated_rays, self.exported_plane, to_cpu=True)
                 fixed_position_plot = self.fixed_position_plot(best_rays_list, target_perturbed_parameters_rays_list,
                                                                target_initial_parameters_rays_list,
                                                                epoch=self.overall_best.epoch,
@@ -434,12 +438,12 @@ class RayOptimizer:
         self.evaluation_counter += len(output) // num_combinations
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
     def plot(self, optimization_target:OptimizationTarget):
-        image = self.plot_data(self.plot_interval_best.rays, epoch=self.plot_interval_best.epoch)
+        image = self.plot_data(self.plot_interval_best.rays.cpu(), epoch=self.plot_interval_best.epoch)
         self.logging_backend.image("footprint", image)
         if isinstance(optimization_target, OffsetOptimizationTarget):
             compensation_image = self.compensation_plot(self.plot_interval_best.rays, ray_output_to_tensor(
-                optimization_target.observed_rays, self.exported_plane), ray_output_to_tensor(
-                optimization_target.uncompensated_rays, self.exported_plane),
+                optimization_target.observed_rays, self.exported_plane).cpu(), ray_output_to_tensor(
+                optimization_target.uncompensated_rays, self.exported_plane).cpu(),
                                                         epoch=self.plot_interval_best.epoch)
             self.logging_backend.image("compensation", compensation_image)
         max_ray_index = torch.argmax(
@@ -448,10 +452,10 @@ class RayOptimizer:
         fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
                                                         [ray_output_to_tensor(
                                                             optimization_target.observed_rays[
-                                                                max_ray_index], self.exported_plane)],
+                                                                max_ray_index], self.exported_plane).cpu()],
                                                         [ray_output_to_tensor(
                                                             optimization_target.uncompensated_rays[
-                                                                max_ray_index], self.exported_plane)],
+                                                                max_ray_index], self.exported_plane).cpu()],
                                                         epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
                                                         ylim=[-2, 2])
         fixed_position_plot = self.fig_to_image(fixed_position_plot)
