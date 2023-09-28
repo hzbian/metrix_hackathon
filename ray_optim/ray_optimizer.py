@@ -3,6 +3,7 @@ import time
 from abc import ABCMeta, abstractmethod
 from math import sqrt
 from typing import List, Iterable, Union, Optional, Callable
+import multiprocessing as mp
 
 import numpy as np
 import torch
@@ -417,32 +418,8 @@ class RayOptimizer:
                     self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % self.plot_interval == 0 for i in current_range]:
-                image = self.plot_data(self.plot_interval_best.rays, epoch=self.plot_interval_best.epoch)
-                self.logging_backend.image("footprint", image)
-                if isinstance(optimization_target, OffsetOptimizationTarget):
-                    compensation_image = self.compensation_plot(self.plot_interval_best.rays, ray_output_to_tensor(
-                        optimization_target.observed_rays, self.exported_plane), ray_output_to_tensor(
-                        optimization_target.uncompensated_rays, self.exported_plane),
-                                                                epoch=self.plot_interval_best.epoch)
-                    self.logging_backend.image("compensation", compensation_image)
-                max_ray_index = torch.argmax(
-                    torch.Tensor([ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
-                                  optimization_target.observed_rays])).item()
-                fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
-                                                               [ray_output_to_tensor(
-                                                                   optimization_target.observed_rays[
-                                                                       max_ray_index], self.exported_plane)],
-                                                               [ray_output_to_tensor(
-                                                                   optimization_target.uncompensated_rays[
-                                                                       max_ray_index], self.exported_plane)],
-                                                               epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
-                                                               ylim=[-2, 2])
-                fixed_position_plot = self.fig_to_image(fixed_position_plot)
-                self.logging_backend.image("fixed_position_plot", fixed_position_plot)
-                parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best.params,
-                                                                        search_space=optimization_target.search_space,
-                                                                        real_params=optimization_target.target_params)
-                self.logging_backend.image("parameter_comparison", parameter_comparison_image)
+                mp.Process(target=self.plot, args=(optimization_target,))
+                #plot(optimization_target=optimization_target)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
                 target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
@@ -456,7 +433,33 @@ class RayOptimizer:
         self.logging_backend.log()
         self.evaluation_counter += len(output) // num_combinations
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
-
+    def plot(self, optimization_target:OptimizationTarget):
+        image = self.plot_data(self.plot_interval_best.rays, epoch=self.plot_interval_best.epoch)
+        self.logging_backend.image("footprint", image)
+        if isinstance(optimization_target, OffsetOptimizationTarget):
+            compensation_image = self.compensation_plot(self.plot_interval_best.rays, ray_output_to_tensor(
+                optimization_target.observed_rays, self.exported_plane), ray_output_to_tensor(
+                optimization_target.uncompensated_rays, self.exported_plane),
+                                                        epoch=self.plot_interval_best.epoch)
+            self.logging_backend.image("compensation", compensation_image)
+        max_ray_index = torch.argmax(
+            torch.Tensor([ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
+                            optimization_target.observed_rays])).item()
+        fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
+                                                        [ray_output_to_tensor(
+                                                            optimization_target.observed_rays[
+                                                                max_ray_index], self.exported_plane)],
+                                                        [ray_output_to_tensor(
+                                                            optimization_target.uncompensated_rays[
+                                                                max_ray_index], self.exported_plane)],
+                                                        epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
+                                                        ylim=[-2, 2])
+        fixed_position_plot = self.fig_to_image(fixed_position_plot)
+        self.logging_backend.image("fixed_position_plot", fixed_position_plot)
+        parameter_comparison_image = self.plot_param_comparison(predicted_params=self.plot_interval_best.params,
+                                                                search_space=optimization_target.search_space,
+                                                                real_params=optimization_target.target_params)
+        self.logging_backend.image("parameter_comparison", parameter_comparison_image)
     def calculate_loss_from_output(self, output, target_rays):
         # if isinstance(output, List):
         #    return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in
