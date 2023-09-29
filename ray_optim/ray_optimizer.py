@@ -357,6 +357,8 @@ class RayOptimizer:
             if optimization_target.validation_scan is not None:
                 validation_parameters = RayOptimizer.get_evaluation_parameters(
                     optimization_target.validation_scan.uncompensated_parameters, initial_parameters)
+            else:
+                validation_parameters = None
 
         begin_execution_time: float = time.time() if self.log_times else None
         transforms = RayOptimizer.translate_exported_plain_transforms(self.exported_plane, parameters, self.transforms)
@@ -389,6 +391,21 @@ class RayOptimizer:
                 self.overall_best.loss = loss_mean
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
+                mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms))
+            current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
+            if True in [i % self.plot_interval == 0 for i in current_range]:
+                mp.Process(target=self.plot, args=(optimization_target,))
+                #plot(optimization_target=optimization_target)
+                self.plot_interval_best = BestSample()
+            if self.evaluation_counter == 0:
+                mp.Process(target=self.plot_initial_plots, args=(optimization_target,))
+        if self.log_times:
+            self.logging_backend.add_to_log({"System/total_time": time.time() - begin_total_time})
+        self.logging_backend.log()
+        self.evaluation_counter += len(output) // num_combinations
+        return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
+
+    def on_better_solution_found(self, optimization_target: OptimizationTarget, validation_parameters, transforms: List[RayTransform]):
                 best_rays_list = self.tensor_list_to_cpu(self.overall_best.rays)
                 target_perturbed_parameters_rays_list = ray_output_to_tensor(
                     optimization_target.observed_rays, self.exported_plane, to_cpu=True)
@@ -420,23 +437,15 @@ class RayOptimizer:
 
                     validation_fixed_position_plot = self.fig_to_image(validation_fixed_position_plot)
                     self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
-            current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
-            if True in [i % self.plot_interval == 0 for i in current_range]:
-                mp.Process(target=self.plot, args=(optimization_target,))
-                #plot(optimization_target=optimization_target)
-                self.plot_interval_best = BestSample()
-            if self.evaluation_counter == 0:
-                target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
-                                                     self.exported_plane)
-                if isinstance(target_tensor, torch.Tensor):
-                    target_tensor = [target_tensor]
-                target_image = self.plot_data(target_tensor)
-                self.logging_backend.image("target_footprint", target_image)
-        if self.log_times:
-            self.logging_backend.add_to_log({"System/total_time": time.time() - begin_total_time})
-        self.logging_backend.log()
-        self.evaluation_counter += len(output) // num_combinations
-        return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
+       
+    def plot_initial_plots(self, optimization_target:OptimizationTarget):
+        target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
+                                                         self.exported_plane)
+        if isinstance(target_tensor, torch.Tensor):
+            target_tensor = [target_tensor]
+            target_image = self.plot_data(target_tensor)
+            self.logging_backend.image("target_footprint", target_image)
+
     def plot(self, optimization_target:OptimizationTarget):
         image = self.plot_data(self.plot_interval_best.rays.cpu(), epoch=self.plot_interval_best.epoch)
         self.logging_backend.image("footprint", image)
