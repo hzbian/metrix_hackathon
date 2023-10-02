@@ -50,15 +50,13 @@ class OptimizationTargetConfiguration:
 
 class RayOptimization:
     def __init__(self, optimization_target_configuration: OptimizationTargetConfiguration, ray_optimizer: RayOptimizer,
-                 logging_entity: str, study_name: str, rg: RandomGenerator, logging_backend: LoggingBackend,
+                 rg: RandomGenerator, logging_backend: LoggingBackend,
                  logging: bool = True):
         self.optimization_target_configuration = optimization_target_configuration
         self.rg: RandomGenerator = rg
         self.ray_optimizer = ray_optimizer
         self.real_data_configuration: RealDataConfiguration = optimization_target_configuration.real_data_configuration
-        self.logging_entity: str = logging_entity
         self.logging_backend: LoggingBackend = logging_backend
-        self.study_name: str = study_name
         self.logging: bool = logging
         self.z_layers: List[float] = optimization_target_configuration.z_layers
         self.all_params = self.optimization_target_configuration.param_func()

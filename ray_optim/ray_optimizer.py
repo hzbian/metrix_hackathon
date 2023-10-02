@@ -90,7 +90,7 @@ class WandbLoggingBackend(LoggingBackend):
     def __init__(self, logging_entity: str, project_name: str, study_name: str, logging: bool):
         super().__init__()
         os.environ["WANDB__SERVICE_WAIT"] = "300"
-        wandb.init(entity=logging_entity,
+        self.handle = wandb.init(entity=logging_entity,
                    project=project_name,
                    name=study_name,
                    mode='online' if logging else 'disabled',
@@ -98,7 +98,7 @@ class WandbLoggingBackend(LoggingBackend):
 
 
     def _log(self):
-        wandb.log(self.log_dict)
+        self.handle.log(self.log_dict)
 
     def image(self, key: Union[str, int], image: torch.Tensor):
         image = wandb.Image(image)
@@ -109,7 +109,7 @@ class BestSample:
 
     def __init__(self):
         self._params: RayParameterContainer = RayParameterContainer()
-        self._rays: Union[None, torch.Tensor] = None
+        self._rays: Optional[List[torch.Tensor]] = None
         self._loss: float = float('inf')
         self._epoch: int = 0
 
@@ -402,14 +402,14 @@ class RayOptimizer:
                 self.overall_best.loss = loss_mean
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
-                mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms))
+                mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms)).start()
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % self.plot_interval == 0 for i in current_range]:
-                mp.Process(target=self.plot, args=(optimization_target,))
+                mp.Process(target=self.plot, args=(optimization_target,)).start()
                 #plot(optimization_target=optimization_target)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                mp.Process(target=self.plot_initial_plots, args=(optimization_target,))
+                mp.Process(target=self.plot_initial_plots, args=(optimization_target,)).start()
         if self.log_times:
             self.logging_backend.add_to_log({"System/total_time": time.time() - begin_total_time})
         self.logging_backend.log()
@@ -448,6 +448,7 @@ class RayOptimizer:
 
                     validation_fixed_position_plot = self.fig_to_image(validation_fixed_position_plot)
                     self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
+                self.logging_backend.log()
        
     def plot_initial_plots(self, optimization_target:OptimizationTarget):
         target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
@@ -456,26 +457,28 @@ class RayOptimizer:
             target_tensor = [target_tensor]
             target_image = self.plot_data(target_tensor)
             self.logging_backend.image("target_footprint", target_image)
+        self.logging_backend.log()
 
     def plot(self, optimization_target:OptimizationTarget):
-        image = self.plot_data(self.plot_interval_best.rays.cpu(), epoch=self.plot_interval_best.epoch)
+        interval_best_rays = self.tensor_list_to_cpu(self.plot_interval_best.rays)
+        image = self.plot_data(interval_best_rays, epoch=self.plot_interval_best.epoch)
         self.logging_backend.image("footprint", image)
         if isinstance(optimization_target, OffsetOptimizationTarget):
-            compensation_image = self.compensation_plot(self.plot_interval_best.rays, ray_output_to_tensor(
-                optimization_target.observed_rays, self.exported_plane).cpu(), ray_output_to_tensor(
-                optimization_target.uncompensated_rays, self.exported_plane).cpu(),
+            compensation_image = self.compensation_plot(interval_best_rays, ray_output_to_tensor(
+                optimization_target.observed_rays, self.exported_plane, to_cpu=True), ray_output_to_tensor(
+                optimization_target.uncompensated_rays, self.exported_plane, to_cpu=True),
                                                         epoch=self.plot_interval_best.epoch)
             self.logging_backend.image("compensation", compensation_image)
         max_ray_index = torch.argmax(
             torch.Tensor([ray_output_to_tensor(element, self.exported_plane).shape[1] for element in
                             optimization_target.observed_rays])).item()
-        fixed_position_plot = self.fixed_position_plot([self.plot_interval_best.rays[max_ray_index]],
+        fixed_position_plot = self.fixed_position_plot([interval_best_rays[max_ray_index]],
                                                         [ray_output_to_tensor(
                                                             optimization_target.observed_rays[
-                                                                max_ray_index], self.exported_plane).cpu()],
+                                                                max_ray_index], self.exported_plane, to_cpu=True)],
                                                         [ray_output_to_tensor(
                                                             optimization_target.uncompensated_rays[
-                                                                max_ray_index], self.exported_plane).cpu()],
+                                                                max_ray_index], self.exported_plane, to_cpu=True)],
                                                         epoch=self.plot_interval_best.epoch, xlim=[-2, 2],
                                                         ylim=[-2, 2])
         fixed_position_plot = self.fig_to_image(fixed_position_plot)
@@ -484,6 +487,7 @@ class RayOptimizer:
                                                                 search_space=optimization_target.search_space,
                                                                 real_params=optimization_target.target_params)
         self.logging_backend.image("parameter_comparison", parameter_comparison_image)
+        self.logging_backend.log()
     def calculate_loss_from_output(self, output, target_rays):
         # if isinstance(output, List):
         #    return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in

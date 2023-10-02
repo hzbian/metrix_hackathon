@@ -7,3 +7,4 @@ log_times: True
 plot_interval: 10
 iterations: 1000
 transforms: ${optimization_target_configuration.transforms}
+logging_backend: ${logging_backend}
