@@ -17,11 +17,16 @@ param_func:
     enforce_lims_keys:
       - "x_var"
       - "y_var"
+    fixed_parameters:
+      - "correlation_factor"
+      - "y_mean"
+      - "x_var"
+      - "y_var"
 engine:
   _target_: "ray_tools.base.engine.GaussEngine"
   device:
     _target_: "torch.device"
-    device: "cuda"
+    device: "cpu"
 num_beamline_samples: 4
 exported_plane: "ImagePlane"
 max_target_deviation: 0.3
