@@ -7,7 +7,6 @@ from collections import OrderedDict
 import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
-import wandb
 
 sys.path.insert(0, '../../')
 from sub_projects.ray_optimization.losses.losses import RayLoss
@@ -16,7 +15,7 @@ from ray_tools.base.utils import RandomGenerator
 
 from ray_tools.base.engine import Engine
 from sub_projects.ray_optimization.real_data import import_data
-from ray_optim.ray_optimizer import RayOptimizer, OffsetOptimizationTarget, RayScan, OptimizerBackend
+from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetOptimizationTarget, RayScan, OptimizerBackend
 
 from ray_tools.base.parameter import NumericalOutputParameter, RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter, RandomOutputParameter
@@ -51,24 +50,18 @@ class OptimizationTargetConfiguration:
 
 class RayOptimization:
     def __init__(self, optimization_target_configuration: OptimizationTargetConfiguration, ray_optimizer: RayOptimizer,
-                 logging_entity: str, study_name: str, rg: RandomGenerator,
+                 logging_entity: str, study_name: str, rg: RandomGenerator, logging_backend: LoggingBackend,
                  logging: bool = True):
         self.optimization_target_configuration = optimization_target_configuration
         self.rg: RandomGenerator = rg
         self.ray_optimizer = ray_optimizer
         self.real_data_configuration: RealDataConfiguration = optimization_target_configuration.real_data_configuration
         self.logging_entity: str = logging_entity
+        self.logging_backend: LoggingBackend = logging_backend
         self.study_name: str = study_name
         self.logging: bool = logging
         self.z_layers: List[float] = optimization_target_configuration.z_layers
         self.all_params = self.optimization_target_configuration.param_func()
-        os.environ["WANDB__SERVICE_WAIT"] = "300"
-        wandb.init(entity=self.logging_entity,
-                   project=self.optimization_target_configuration.logging_project,
-                   name=self.study_name,
-                   mode='online' if self.logging else 'disabled',
-                   )
-
         if self.real_data_configuration is None:
             target_offset = offset_search_space(self.all_params,
                                                 self.optimization_target_configuration.max_target_deviation, self.rg,
@@ -227,9 +220,9 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 
 @hydra.main(version_base=None, config_path="./conf", config_name="config")
 def my_app(cfg):
-    wandb.config = OmegaConf.to_container(
-        cfg, resolve=True, throw_on_missing=True
-    )
+    #wandb.config = OmegaConf.to_container(
+    #    cfg, resolve=True, throw_on_missing=True
+    #)
     print(OmegaConf.to_yaml(cfg))
     _ = instantiate(cfg)
 

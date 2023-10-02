@@ -1,5 +1,6 @@
 import copy
 import time
+import os
 from abc import ABCMeta, abstractmethod
 from math import sqrt
 from typing import List, Iterable, Union, Optional, Callable
@@ -86,6 +87,16 @@ class LoggingBackend(metaclass=ABCMeta):
 
 
 class WandbLoggingBackend(LoggingBackend):
+    def __init__(self, logging_entity: str, project_name: str, study_name: str, logging: bool):
+        super().__init__()
+        os.environ["WANDB__SERVICE_WAIT"] = "300"
+        wandb.init(entity=logging_entity,
+                   project=project_name,
+                   name=study_name,
+                   mode='online' if logging else 'disabled',
+                   )
+
+
     def _log(self):
         wandb.log(self.log_dict)
 
