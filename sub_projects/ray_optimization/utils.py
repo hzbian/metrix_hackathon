@@ -2,7 +2,7 @@ from typing import Union, List, Dict, Iterable
 import torch
 
 
-def ray_output_to_tensor(ray_output: Union[Dict, List[Dict], Iterable[Dict]], exported_plane: str, to_cpu=True):
+def ray_output_to_tensor(ray_output: Union[Dict, List[Dict], Iterable[Dict]], exported_plane: str, to_cpu=False):
     if not isinstance(ray_output, Dict):
         return [ray_output_to_tensor(element, exported_plane) for element in
                 ray_output]
