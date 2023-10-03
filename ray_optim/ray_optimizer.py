@@ -73,12 +73,12 @@ class LoggingBackend(metaclass=ABCMeta):
     def empty_log(self):
         self.log_dict = {}
 
-    def log(self):
-        self._log()
+    def log(self, epoch: int):
+        self._log(epoch=epoch)
         self.empty_log()
 
     @abstractmethod
-    def _log(self):
+    def _log(self, epoch: int):
         pass
 
     @abstractmethod
@@ -97,8 +97,8 @@ class WandbLoggingBackend(LoggingBackend):
                    )
 
 
-    def _log(self):
-        self.handle.log(self.log_dict)
+    def _log(self, epoch: int):
+        self.handle.log(self.log_dict, epoch=epoch)
 
     def image(self, key: Union[str, int], image: torch.Tensor):
         image = wandb.Image(image)
@@ -402,21 +402,21 @@ class RayOptimizer:
                 self.overall_best.loss = loss_mean
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
-                mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms)).start()
+                mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms, epoch)).start()
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % self.plot_interval == 0 for i in current_range]:
-                mp.Process(target=self.plot, args=(optimization_target,)).start()
+                mp.Process(target=self.plot, args=(optimization_target, epoch)).start()
                 #plot(optimization_target=optimization_target)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                mp.Process(target=self.plot_initial_plots, args=(optimization_target,)).start()
+                mp.Process(target=self.plot_initial_plots, args=(optimization_target, epoch)).start()
+            self.logging_backend.log(epoch=epoch)
         if self.log_times:
             self.logging_backend.add_to_log({"System/total_time": time.time() - begin_total_time})
-        self.logging_backend.log()
         self.evaluation_counter += len(output) // num_combinations
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
 
-    def on_better_solution_found(self, optimization_target: OptimizationTarget, validation_parameters, transforms: List[RayTransform]):
+    def on_better_solution_found(self, optimization_target: OptimizationTarget, validation_parameters, transforms: List[RayTransform], epoch: int):
                 best_rays_list = self.tensor_list_to_cpu(self.overall_best.rays)
                 target_perturbed_parameters_rays_list = ray_output_to_tensor(
                     optimization_target.observed_rays, self.exported_plane, to_cpu=True)
@@ -448,18 +448,18 @@ class RayOptimizer:
 
                     validation_fixed_position_plot = self.fig_to_image(validation_fixed_position_plot)
                     self.logging_backend.image("validation_fixed_position", validation_fixed_position_plot)
-                self.logging_backend.log()
+                self.logging_backend.log(epoch=epoch)
        
-    def plot_initial_plots(self, optimization_target:OptimizationTarget):
+    def plot_initial_plots(self, optimization_target:OptimizationTarget, epoch: int):
         target_tensor = ray_output_to_tensor(optimization_target.observed_rays,
                                                          self.exported_plane)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
             target_image = self.plot_data(target_tensor)
             self.logging_backend.image("target_footprint", target_image)
-        self.logging_backend.log()
+        self.logging_backend.log(epoch=epoch)
 
-    def plot(self, optimization_target:OptimizationTarget):
+    def plot(self, optimization_target:OptimizationTarget, epoch: int):
         interval_best_rays = self.tensor_list_to_cpu(self.plot_interval_best.rays)
         image = self.plot_data(interval_best_rays, epoch=self.plot_interval_best.epoch)
         self.logging_backend.image("footprint", image)
@@ -487,7 +487,7 @@ class RayOptimizer:
                                                                 search_space=optimization_target.search_space,
                                                                 real_params=optimization_target.target_params)
         self.logging_backend.image("parameter_comparison", parameter_comparison_image)
-        self.logging_backend.log()
+        self.logging_backend.log(epoch=epoch)
     def calculate_loss_from_output(self, output, target_rays):
         # if isinstance(output, List):
         #    return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in
