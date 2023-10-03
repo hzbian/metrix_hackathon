@@ -1,4 +1,4 @@
-_target_: "sub_projects.ray_optimization.ray_optimization.OptimizationTargetConfiguration"
+_target_: "sub_projects.ray_optimization.ray_optimization.TargetConfiguration"
 param_func:
     _target_: "sub_projects.ray_optimization.ray_optimization.params_to_func"
     _convert_: "all"
@@ -50,7 +50,7 @@ engine:
   _target_: "ray_tools.base.engine.RayEngine"
   rml_basefile: "rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml"
   exported_planes:
-    - ${optimization_target_configuration.exported_plane}
+    - ${target_configuration.exported_plane}
   ray_backend:
     _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
     docker_image: 'ray-ui-service'
@@ -67,6 +67,6 @@ max_offset_search_deviation: 0.3
 z_layers: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 transforms:
   _target_: "ray_tools.base.transform.MultiLayer"
-  dist_layers: ${optimization_target_configuration.z_layers}
+  dist_layers: ${target_configuration.z_layers}
   copy_directions: False
 logging_project: "metrix"

@@ -1,4 +1,4 @@
-_target_: "sub_projects.ray_optimization.ray_optimization.OptimizationTargetConfiguration"
+_target_: "sub_projects.ray_optimization.ray_optimization.TargetConfiguration"
 param_func:
     _target_: "sub_projects.ray_optimization.ray_optimization.params_to_func"
     _convert_: "all"

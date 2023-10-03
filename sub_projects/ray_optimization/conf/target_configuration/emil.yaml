@@ -1,4 +1,4 @@
-_target_: "sub_projects.ray_optimization.ray_optimization.OptimizationTargetConfiguration"
+_target_: "sub_projects.ray_optimization.ray_optimization.TargetConfiguration"
 param_func:
     _target_: "sub_projects.ray_optimization.ray_optimization.params_to_func"
     _convert_: "all"
@@ -19,7 +19,7 @@ engine:
   _target_: "ray_tools.base.engine.RayEngine"
   rml_basefile: "../../rml_src/UE48-PGM-CAT.rml"
   exported_planes:
-    - ${optimization_target_configuration.exported_plane}
+    - ${target_configuration.exported_plane}
   ray_backend:
     _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
     docker_image: 'ray-ui-service'

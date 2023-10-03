@@ -12,7 +12,7 @@
             "justMyCode": true,
             "args": [
                 "logging_backend.logging=True",
-                "optimization_target_configuration=gauss"
+                "target_configuration=gauss"
             ],
         }
     ]
