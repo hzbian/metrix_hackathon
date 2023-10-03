@@ -6,6 +6,7 @@ from collections import OrderedDict
 import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from sub_projects.ray_optimization.configuration import RealDataConfiguration, TargetConfiguration
 
 from sub_projects.ray_optimization.losses.losses import RayLoss
 from ray_tools.base import RayTransform
@@ -17,33 +18,6 @@ from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetOptimiza
 
 from ray_tools.base.parameter import NumericalOutputParameter, RayParameterContainer, NumericalParameter, MutableParameter, \
     RayParameter, RandomParameter, RandomOutputParameter
-
-
-class RealDataConfiguration:
-    def __init__(self, real_data_dir: str, real_data_train_set: List[str],
-                 real_data_validation_set: Optional[List[str]] = None):
-        self.real_data_dir: str = real_data_dir
-        self.real_data_train_set: List[str] = real_data_train_set
-        self.real_data_validation_set: Optional[List[str]] = real_data_validation_set
-
-
-class TargetConfiguration:
-    def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
-                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
-                 logging_project: Optional[str] = None,
-                 z_layers: List[float] = (0.),
-                 transforms: Optional[RayTransform] = None,
-                 real_data_configuration: Optional[RealDataConfiguration] = None):
-        self.max_offset_search_deviation: float = max_offset_search_deviation
-        self.z_layers = z_layers
-        self.transforms: RayTransform = transforms
-        self.num_beamline_samples: int = num_beamline_samples
-        self.exported_plane: str = exported_plane
-        self.engine: Engine = engine
-        self.max_target_deviation: float = max_target_deviation
-        self.param_func: Callable = param_func
-        self.real_data_configuration = real_data_configuration
-        self.logging_project = logging_project
 
 
 class RayOptimization:
@@ -77,14 +51,14 @@ class RayOptimization:
             uncompensated_validation_parameters = None
             observed_validation_rays = None
         else:
-            observed_rays = import_data(self.real_data_configuration.real_data_dir,
-                                        self.real_data_configuration.real_data_train_set, self.z_layers,
+            observed_rays = import_data(self.real_data_configuration.path,
+                                        self.real_data_configuration.train_set, self.z_layers,
                                         self.target_configuration.param_func(),
                                         check_value_lims=True)
             uncompensated_parameters = [element['param_container_dict'] for element in observed_rays]
             target_offset = None
-            observed_validation_rays = import_data(self.real_data_configuration.real_data_dir,
-                                                   self.real_data_configuration.real_data_validation_set, self.z_layers,
+            observed_validation_rays = import_data(self.real_data_configuration.path,
+                                                   self.real_data_configuration.validation_set, self.z_layers,
                                                    self.target_configuration.param_func(),
                                                    check_value_lims=False)
             uncompensated_validation_parameters = [element['param_container_dict'] for element in
