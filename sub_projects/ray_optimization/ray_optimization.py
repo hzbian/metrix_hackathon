@@ -1,23 +1,17 @@
 import os
-import uuid
-from typing import Optional, Callable, List
-from collections import OrderedDict
+from typing import Optional, List
 
 import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from sub_projects.ray_optimization.configuration import RealDataConfiguration, TargetConfiguration
 
-from sub_projects.ray_optimization.losses.losses import RayLoss
-from ray_tools.base import RayTransform
 from ray_tools.base.utils import RandomGenerator
 
-from ray_tools.base.engine import Engine
 from sub_projects.ray_optimization.real_data import import_data
-from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetOptimizationTarget, RayScan, OptimizerBackend
+from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetOptimizationTarget, RayScan
 
-from ray_tools.base.parameter import NumericalOutputParameter, RayParameterContainer, NumericalParameter, MutableParameter, \
-    RayParameter, RandomParameter, RandomOutputParameter
+from ray_tools.base.parameter import RayParameterContainer, RayParameter, RandomParameter
 
 
 class RayOptimization:
@@ -129,67 +123,12 @@ def offset_search_space(input_parameter_container: RayParameterContainer, max_de
     return RayParameterContainer(ray_parameters)
 
 
-def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = (),
-                   output_parameters: List[str] = (), fixed_parameters: List[str] = ()):
-    elements = []
-    for k, v in parameters.items():
-        if hasattr(v, '__getitem__'):
-            if k in output_parameters:
-                typ = RandomOutputParameter
-            else:
-                typ = RandomParameter
-
-            elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
-        else:
-            if k in output_parameters:
-                typ = NumericalOutputParameter
-            else:
-                typ = NumericalParameter
-           
-            elements.append((k, typ(value=v)))
-        
-    elements = OrderedDict(elements)
-    # do not optimize the fixed parameters, set them to the center of interval
-    for key in fixed_parameters:
-        old_param = elements[key]
-        if isinstance(old_param, MutableParameter) and key in fixed_parameters:
-            if key in output_parameters:
-                typ = NumericalOutputParameter
-            else:
-                typ = NumericalParameter
-  
-            elements[key] = typ((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
-
-    def output_func():
-        return RayParameterContainer(elements)
-
-    return output_func
-
-
-def build_study_name(param_func: Callable, max_target_deviation: float, max_offset_search_deviation: float,
-                     loss: Optional[RayLoss] = None, optimizer_backend: Optional[OptimizerBackend] = None, appendix: Optional[str] = None) -> str:
-    var_count: int = sum(isinstance(x, RandomParameter) for x in param_func().values())
-    string_list = [str(var_count), 'target', str(max_target_deviation), 'search', str(max_offset_search_deviation)]
-
-    if appendix is not None:
-        string_list.append(appendix)
-    if RayLoss is not None:
-        string_list.append(loss.__class__.__name__.replace('Loss', ''))
-    if OptimizerBackend is not None:
-        string_list.append(optimizer_backend.__class__.__name__.replace('OptimizerBackend', ''))
-    return '-'.join(string_list)
-
-
-def build_ray_workdir_path(parent_path: str):
-    return os.path.join(parent_path, str(uuid.uuid4()))
-
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
 
 
 @hydra.main(version_base=None, config_path="./conf", config_name="config")
-def my_app(cfg):
+def optimization(cfg):
     #wandb.config = OmegaConf.to_container(
     #    cfg, resolve=True, throw_on_missing=True
     #)
@@ -198,4 +137,4 @@ def my_app(cfg):
 
 
 if __name__ == "__main__":
-    my_app()
+    optimization()

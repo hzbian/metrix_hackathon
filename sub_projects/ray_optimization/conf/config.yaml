@@ -12,7 +12,7 @@ logging_backend:
   logging_entity: "hzb-aos"
   project_name: ${target_configuration.logging_project}
   study_name:
-    _target_: "sub_projects.ray_optimization.ray_optimization.build_study_name"
+    _target_: "sub_projects.ray_optimization.configuration.build_study_name"
     param_func: ${target_configuration.param_func}
     loss: ${ray_optimizer.criterion}
     optimizer_backend: ${ray_optimizer.optimizer_backend}

@@ -98,7 +98,9 @@ class WandbLoggingBackend(LoggingBackend):
 
 
     def _log(self, epoch: int):
-        self.handle.log(self.log_dict, epoch=epoch)
+        enumerated_log_dict = {**self.log_dict, **{"global_step": epoch}}
+        print(enumerated_log_dict)
+        self.handle.log(enumerated_log_dict)
 
     def image(self, key: Union[str, int], image: torch.Tensor):
         image = wandb.Image(image)
