@@ -148,7 +148,7 @@ class Histogram(RayTransform):
 
     def compute_histogram(self, x_loc: torch.Tensor, y_loc: torch.Tensor) -> Dict:
         # store number of rays
-        out = {'n_rays': x_loc.size}
+        out = {'n_rays': x_loc.shape[0]}
 
         # if number of rays is zero, create a trivial histogram
         if out['n_rays'] == 0:
@@ -159,10 +159,10 @@ class Histogram(RayTransform):
 
         # if x_lims is not given, compute histogram with automatic limits
         if self.x_lims is None:
-            out['histogram'], x_lims, y_lims = torch.histogramdd(torch.stack([x_loc, y_loc]),
+            out['histogram'], bin_edges = torch.histogramdd(torch.stack([x_loc, y_loc]).T,
                                                                  bins=(self.n_bins, self.n_bins))
-            out['x_lims'] = (x_lims[0], x_lims[-1])
-            out['y_lims'] = (y_lims[0], y_lims[-1])
+            out['x_lims'] = (bin_edges[0][[0]].item(), bin_edges[0][[1]].item())
+            out['y_lims'] = (bin_edges[1][[0]].item(), bin_edges[1][[1]].item())
         else:
             if self.auto_center:
                 # compute center of mass and adapt limits
@@ -178,7 +178,7 @@ class Histogram(RayTransform):
             out['x_lims'] = x_lims
             out['y_lims'] = y_lims
             out['histogram'] = torch.histogramdd(torch.stack([x_loc, y_loc]).T,
-                                                 bins=(self.n_bins, self.n_bins),)[0]
+                                                 bins=(self.n_bins, self.n_bins), range=[x_lims[0], x_lims[1], y_lims[0], y_lims[1]])[0]
 
         return out
 
