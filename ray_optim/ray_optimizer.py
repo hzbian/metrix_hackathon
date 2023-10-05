@@ -390,6 +390,8 @@ class RayOptimizer:
         output_loss_dict = self.calculate_loss_from_output(output, optimization_target.observed_rays)
         if self.log_times:
             self.logging_backend.add_to_log({"System/loss_time": time.time() - begin_loss_time})
+        
+        processes = []
 
         for epoch, (loss, ray_count, loss_mean) in output_loss_dict.items():
             self.logging_backend.add_to_log({"epoch": epoch, "loss": loss_mean, "ray_count": ray_count.mean()})
@@ -402,14 +404,20 @@ class RayOptimizer:
                 self.overall_best.loss = loss_mean
                 self.overall_best.params = initial_parameters[epoch - self.evaluation_counter]
                 self.overall_best.epoch = epoch
-                mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms)).start()
+                p = mp.Process(target=self.on_better_solution_found, args=(optimization_target, validation_parameters, transforms))
+                p.start()
+                processes.append(p)
             current_range = range(self.evaluation_counter, self.evaluation_counter + len(output) // num_combinations)
             if True in [i % self.plot_interval == 0 for i in current_range]:
-                mp.Process(target=self.plot, args=(optimization_target,)).start()
+                p = mp.Process(target=self.plot, args=(optimization_target,))
+                p.start()
+                processes.append(p)
                 #plot(optimization_target=optimization_target)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                mp.Process(target=self.plot_initial_plots, args=(optimization_target,)).start()
+                p = mp.Process(target=self.plot_initial_plots, args=(optimization_target,))
+                p.start()
+                processes.append(p)
         if self.log_times:
             self.logging_backend.add_to_log({"System/total_time": time.time() - begin_total_time})
         self.logging_backend.log()
