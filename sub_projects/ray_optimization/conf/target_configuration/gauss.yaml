@@ -12,8 +12,8 @@ param_func:
       correlation_factor: [-0.8, 0.8]
       x_mean: [-2., 2.]
       y_mean: [-2., 2.]
-      x_var: [1e-10, 0.01]
-      y_var: [1e-10, 0.01]
+      x_var: [0.001, 0.01]
+      y_var: [0.001, 0.01]
     enforce_lims_keys:
       - "x_var"
       - "y_var"
