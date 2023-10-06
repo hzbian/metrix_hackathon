@@ -3,7 +3,7 @@ import time
 import os
 from abc import ABCMeta, abstractmethod
 from math import sqrt
-from typing import Dict, List, Iterable, Union, Optional, Callable
+from typing import Any, Dict, List, Iterable, Union, Optional, Callable
 import multiprocessing as mp
 
 import numpy as np
@@ -44,7 +44,7 @@ class RayScan:
         self.observed_rays: Union[dict, Iterable[dict], List[dict]] = observed_rays
 
 
-class OptimizationTarget:
+class Target:
     def __init__(
         self,
         observed_rays: Union[dict, Iterable[dict], List[dict]],
@@ -56,17 +56,17 @@ class OptimizationTarget:
         self.target_params = target_params
 
 
-class OffsetOptimizationTarget(OptimizationTarget):
+class OffsetTarget(Target):
     def __init__(
         self,
         observed_rays: Union[dict, Iterable[dict], List[dict]],
         offset_search_space: RayParameterContainer,
         uncompensated_parameters: List[RayParameterContainer],
         uncompensated_rays: Union[dict, Iterable[dict], List[dict]],
-        target_offset: Optional[RayParameterContainer] = None,
+        target_compensation: Optional[RayParameterContainer] = None,
         validation_scan: Optional[RayScan] = None,
     ):
-        super().__init__(observed_rays, offset_search_space, target_offset)
+        super().__init__(observed_rays, offset_search_space, target_compensation)
         self.uncompensated_parameters: List[
             RayParameterContainer
         ] = uncompensated_parameters
@@ -86,7 +86,7 @@ class OptimizerBackend(metaclass=ABCMeta):
         self,
         objective: Callable,
         iterations: int,
-        optimization_target: OptimizationTarget,
+        target: Target,
     ):
         pass
 
@@ -138,7 +138,7 @@ class WandbLoggingBackend(LoggingBackend):
 class BestSample:
     def __init__(self):
         self._params: RayParameterContainer = RayParameterContainer()
-        self._rays: Optional[List[torch.Tensor]] = None
+        self._rays: Optional[torch.Tensor] = None
         self._loss: float = float("inf")
         self._epoch: int = 0
 
@@ -155,7 +155,7 @@ class BestSample:
         return self._rays
 
     @rays.setter
-    def rays(self, rays: Union[None, torch.Tensor]):
+    def rays(self, rays: Optional[torch.Tensor]):
         self._rays = rays
 
     @property
@@ -364,6 +364,19 @@ class RayOptimizer:
             return 0
 
     @staticmethod
+    def parameters_list_rmse(
+        parameters_a: RayParameterContainer,
+        parameters_b_list: List[RayParameterContainer],
+        search_space: RayParameterContainer,
+    ):
+        rmse_sum: float = 0.0
+        for parameters_b in parameters_b_list:
+            rmse_sum += RayOptimizer.parameters_rmse(
+                parameters_a, parameters_b, search_space
+            )
+        return rmse_sum / len(parameters_b_list)
+
+    @staticmethod
     def translate_transform(
         transform: RayTransform, xyz_translation: tuple[float, float, float]
     ) -> RayTransform:
@@ -462,14 +475,15 @@ class RayOptimizer:
         return [element.cpu() for element in tensor_list]
 
     @staticmethod
-    def get_evaluation_parameters(
-        uncompensated_parameters_list: List[RayParameterContainer], offsets
+    def compensate_parameters_list(
+        uncompensated_parameters_list: List[RayParameterContainer],
+        compensation: RayParameterContainer,
     ) -> List[RayParameterContainer]:
         evaluation_parameters_list = [
             element.clone() for element in uncompensated_parameters_list
         ]
         for i, uncompensated_parameters in enumerate(uncompensated_parameters_list):
-            for offsets_k, offsets_value in offsets[0].items():
+            for offsets_k, offsets_value in compensation.items():
                 if isinstance(uncompensated_parameters[offsets_k], RandomParameter):
                     value = (
                         uncompensated_parameters[offsets_k].get_value()
@@ -485,61 +499,77 @@ class RayOptimizer:
                         )
         return evaluation_parameters_list
 
-    def evaluation_function(
-        self,
-        parameters: List[List[RayParameterContainer]],
-        optimization_target: OptimizationTarget,
-    ) -> dict:
-        assert isinstance(parameters, list)
-        assert isinstance(parameters[0], list)
-        assert isinstance(parameters[0][0], RayParameterContainer)
-
-        log_dict = {}
-        begin_total_time: float = time.time() if self.log_times else None
-        if not isinstance(parameters, list):
-            parameters = [parameters]
-
-        num_combinations = len(
-            optimization_target.observed_rays
-        )  # TODO might be adapted for multi arm
-        initial_parameters = [element.copy() for element in parameters]
-
-        if isinstance(optimization_target, OffsetOptimizationTarget):
-            parameters = RayOptimizer.get_evaluation_parameters(
-                optimization_target.uncompensated_parameters, parameters
+    @staticmethod
+    def compensate_list_parameters_list(
+        uncompensated_parameters_list: List[RayParameterContainer],
+        compensation_list: List[RayParameterContainer],
+    ):
+        return [
+            RayOptimizer.compensate_parameters_list(
+                uncompensated_parameters_list, compensation
             )
-            if optimization_target.validation_scan is not None:
-                validation_parameters = RayOptimizer.get_evaluation_parameters(
-                    optimization_target.validation_scan.uncompensated_parameters,
-                    initial_parameters,
-                )
-            else:
-                validation_parameters = None
+            for compensation in compensation_list
+        ]
+    @staticmethod
+    def flatten_list_list(list_list: List[List[Any]]):
+        flattened_list = []
+        for list in list_list:
+            for element in list:
+                flattened_list.append(element)
+        return flattened_list
+    def evaluation_function(
+        self, parameters: List[RayParameterContainer], target: Target
+    ) -> List[Any]:
+        assert isinstance(parameters, list)
+        assert isinstance(parameters[0], RayParameterContainer)
+
+        log_dict: Dict[str, Any] = {}
+        begin_total_time: Optional[float] = time.time() if self.log_times else None
+
+        if isinstance(target, OffsetTarget):
+            compensations: List[RayParameterContainer] = parameters
+            evaluation_parameters = RayOptimizer.compensate_list_parameters_list(
+                target.uncompensated_parameters, compensations
+            )
+            evaluation_parameters = RayOptimizer.flatten_list_list(evaluation_parameters)
+        else:
+            evaluation_parameters = parameters
+
+        # if isinstance(target, OffsetTarget):
+        #     if target.validation_scan is not None:
+        #         validation_parameters = RayOptimizer.compensate_parameters(
+        #             target.validation_scan.uncompensated_parameters,
+        #             offset_only,
+        #         )
+        #     else:
+        #         validation_parameters = None
+
+        transforms = RayOptimizer.translate_exported_plain_transforms(
+            self.exported_plane, evaluation_parameters, self.transforms
+        )
 
         begin_execution_time: float = time.time() if self.log_times else None
-        transforms = RayOptimizer.translate_exported_plain_transforms(
-            self.exported_plane, parameters, self.transforms
-        )
-        output = self.engine.run(parameters, transforms=transforms)
+        output = self.engine.run(evaluation_parameters, transforms=transforms)
+        
+        if isinstance(target, OffsetTarget):
+            num_beamline_samples = len(output) // len(compensations)
+            output_dict = {self.evaluation_counter + i: output[i*num_beamline_samples:(i+1)*num_beamline_samples] for i in range(len(compensations))}
+        else:
+            output_dict = {self.evaluation_counter + key: [value] for key, value in enumerate(output)}
         if self.log_times:
             log_dict["System/execution_time"] = time.time() - begin_execution_time
 
-        if not isinstance(output, list):
-            output = [output]
-
-        if isinstance(optimization_target, OffsetOptimizationTarget):
-            if optimization_target.target_params is not None:
-                rmse = RayOptimizer.parameters_rmse(
-                    optimization_target.target_params,
-                    initial_parameters[0],
-                    optimization_target.search_space,
+        if isinstance(target, OffsetTarget):
+            if target.target_params is not None:
+                rmse = RayOptimizer.parameters_list_rmse(
+                    target.target_params,
+                    compensations,
+                    target.search_space,
                 )
                 log_dict["params_rmse"] = rmse
 
         begin_loss_time: float = time.time() if self.log_times else None
-        output_loss_dict = self.calculate_loss_from_output(
-            output, optimization_target.observed_rays
-        )
+        output_loss_dict = self.calculate_loss_from_output(output, target.observed_rays)
         if self.log_times:
             log_dict["System/loss_time"] = time.time() - begin_loss_time
 
@@ -565,22 +595,20 @@ class RayOptimizer:
                     epoch - self.evaluation_counter
                 ]
                 self.overall_best.epoch = epoch
-                self.on_better_solution_found(
-                    optimization_target, validation_parameters, transforms
-                )
+                self.on_better_solution_found(target, validation_parameters, transforms)
             current_range = range(
                 self.evaluation_counter,
                 self.evaluation_counter + len(output) // num_combinations,
             )
             if True in [i % self.plot_interval == 0 for i in current_range]:
-                self.plot(optimization_target=optimization_target)
+                self.plot(target=target)
                 self.plot_interval_best = BestSample()
             if self.evaluation_counter == 0:
-                target = self.plot_initial_plots(optimization_target)
+                target = self.plot_initial_plots(target)
         if self.log_times:
             log_dict["System/total_time"]: time.time() - begin_total_time
         mp.Process(target=self.logger_process, kwargs={"log_dict": log_dict}).start()
-        self.evaluation_counter += len(output) // num_combinations
+        self.evaluation_counter += len(compensations) 
         return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
 
     def logger_process(
@@ -595,17 +623,17 @@ class RayOptimizer:
 
     def on_better_solution_found(
         self,
-        optimization_target: OptimizationTarget,
+        target: Target,
         validation_parameters,
         transforms: List[RayTransform],
         queue: mp.Queue,
     ):
         best_rays_list = self.tensor_list_to_cpu(self.overall_best.rays)
         target_perturbed_parameters_rays_list = ray_output_to_tensor(
-            optimization_target.observed_rays, self.exported_plane, to_cpu=True
+            target.observed_rays, self.exported_plane, to_cpu=True
         )
         target_initial_parameters_rays_list = ray_output_to_tensor(
-            optimization_target.uncompensated_rays, self.exported_plane, to_cpu=True
+            target.uncompensated_rays, self.exported_plane, to_cpu=True
         )
         fixed_position_plot = self.fixed_position_plot(
             best_rays_list,
@@ -622,8 +650,8 @@ class RayOptimizer:
             )
         )
 
-        if optimization_target.validation_scan is not None:
-            validation_scan = optimization_target.validation_scan
+        if target.validation_scan is not None:
+            validation_scan = target.validation_scan
             validation_rays_list = ray_output_to_tensor(
                 validation_scan.observed_rays, exported_plane=self.exported_plane
             )
@@ -652,29 +680,25 @@ class RayOptimizer:
                 )
             )
 
-    def plot_initial_plots(
-        self, optimization_target: OptimizationTarget, queue: mp.Queue
-    ):
-        target_tensor = ray_output_to_tensor(
-            optimization_target.observed_rays, self.exported_plane
-        )
+    def plot_initial_plots(self, target: Target, queue: mp.Queue):
+        target_tensor = ray_output_to_tensor(target.observed_rays, self.exported_plane)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
             target_image = self.plot_data(target_tensor)
             queue.put(self.logging_backend.image("target_footprint", target_image))
 
-    def plot(self, optimization_target: OptimizationTarget, queue: mp.Queue):
+    def plot(self, target: Target, queue: mp.Queue):
         interval_best_rays = self.tensor_list_to_cpu(self.plot_interval_best.rays)
         image = self.plot_data(interval_best_rays, epoch=self.plot_interval_best.epoch)
         queue.put(self.logging_backend.image("footprint", image))
-        if isinstance(optimization_target, OffsetOptimizationTarget):
+        if isinstance(target, OffsetTarget):
             compensation_image = self.compensation_plot(
                 interval_best_rays,
                 ray_output_to_tensor(
-                    optimization_target.observed_rays, self.exported_plane, to_cpu=True
+                    target.observed_rays, self.exported_plane, to_cpu=True
                 ),
                 ray_output_to_tensor(
-                    optimization_target.uncompensated_rays,
+                    target.uncompensated_rays,
                     self.exported_plane,
                     to_cpu=True,
                 ),
@@ -685,7 +709,7 @@ class RayOptimizer:
             torch.Tensor(
                 [
                     ray_output_to_tensor(element, self.exported_plane).shape[1]
-                    for element in optimization_target.observed_rays
+                    for element in target.observed_rays
                 ]
             )
         ).item()
@@ -693,14 +717,14 @@ class RayOptimizer:
             [interval_best_rays[max_ray_index]],
             [
                 ray_output_to_tensor(
-                    optimization_target.observed_rays[max_ray_index],
+                    target.observed_rays[max_ray_index],
                     self.exported_plane,
                     to_cpu=True,
                 )
             ],
             [
                 ray_output_to_tensor(
-                    optimization_target.uncompensated_rays[max_ray_index],
+                    target.uncompensated_rays[max_ray_index],
                     self.exported_plane,
                     to_cpu=True,
                 )
@@ -715,8 +739,8 @@ class RayOptimizer:
         )
         parameter_comparison_image = self.plot_param_comparison(
             predicted_params=self.plot_interval_best.params,
-            search_space=optimization_target.search_space,
-            real_params=optimization_target.target_params,
+            search_space=target.search_space,
+            real_params=target.target_params,
         )
         queue.put(
             self.logging_backend.image(
@@ -725,24 +749,10 @@ class RayOptimizer:
         )
 
     def calculate_loss_from_output(self, output, target_rays):
-        # if isinstance(output, List):
-        #    return [self.calculate_loss_from_output(output_element, target_rays[i]) for i, output_element in
-        #            enumerate(output)]
-        if isinstance(output, dict):
-            if "ray_output" in output.keys():
-                output = [output]
-
-        if isinstance(target_rays, dict):
-            if "ray_output" in target_rays.keys():
-                target_rays = [target_rays]
-
-        if isinstance(output, List):
-            output = {0: output}
-
         output_loss = {
             key
             + self.evaluation_counter: self.calculate_loss_epoch(element, target_rays)
-            for key, element in enumerate(output.values())
+            for key, element in enumerate(output)
         }
         return output_loss
 
@@ -779,11 +789,11 @@ class RayOptimizer:
             self.overall_best.rays = output_tensor
         return losses, num_rays, losses_mean
 
-    def optimize(self, optimization_target: OptimizationTarget):
+    def optimize(self, target: Target):
         self.optimizer_backend.setup_optimization()
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
             iterations=self.iterations,
-            optimization_target=optimization_target,
+            target=target,
         )
         return best_parameters, metrics

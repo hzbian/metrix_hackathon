@@ -29,7 +29,7 @@
 #            minimize=True,
 #        )
 #
-#    def optimize(self, objective, iterations, optimization_target: OptimizationTarget):
+#    def optimize(self, objective, iterations, target: Target):
 #        ranger = trange(iterations)
 #        for _ in ranger:
 #            optimization_time = time.time()
@@ -37,8 +37,8 @@
 #            print("Optimization took {:.2f}s".format(time.time() - optimization_time))
 #
 #            ray_parameter_container_list = self.optimizer_parameter_to_container_list(trials_to_evaluate)
-#            results = objective(ray_parameter_container_list, optimization_target.target_rays,
-#                                target_params=optimization_target.target_params)
+#            results = objective(ray_parameter_container_list, target.target_rays,
+#                                target_params=target.target_params)
 #
 #            for trial_index in results:
 #                self.ax_client.complete_trial(trial_index, results[trial_index])

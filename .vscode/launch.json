@@ -11,7 +11,7 @@
             "module": "sub_projects.ray_optimization.ray_optimization",
             "justMyCode": true,
             "args": [
-                "logging_backend.logging=True",
+                "logging_backend.logging=False",
                 "target_configuration=gauss"
             ],
         }

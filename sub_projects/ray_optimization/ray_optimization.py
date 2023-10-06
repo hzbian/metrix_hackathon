@@ -9,7 +9,7 @@ from sub_projects.ray_optimization.configuration import RealDataConfiguration, T
 from ray_tools.base.utils import RandomGenerator
 
 from sub_projects.ray_optimization.real_data import import_data
-from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetOptimizationTarget, RayScan
+from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetTarget, RayScan
 
 from ray_tools.base.parameter import RayParameterContainer, RayParameter, RandomParameter
 
@@ -75,16 +75,16 @@ class RayOptimization:
         else:
             validation_scan = None
 
-        offset_optimization_target = OffsetOptimizationTarget(observed_rays=observed_rays,
+        offset_target = OffsetTarget(observed_rays=observed_rays,
                                                               offset_search_space=offset_search_space(self.all_params,
                                                                                                       self.target_configuration.max_offset_search_deviation,
                                                                                                       self.rg),
                                                               uncompensated_parameters=uncompensated_parameters,
                                                               uncompensated_rays=uncompensated_rays,
-                                                              target_offset=target_offset,
+                                                              target_compensation=target_offset,
                                                               validation_scan=validation_scan)
 
-        self.ray_optimizer.optimize(optimization_target=offset_optimization_target)
+        self.ray_optimizer.optimize(target=offset_target)
 
 
 # if len(sys.argv) > 1:

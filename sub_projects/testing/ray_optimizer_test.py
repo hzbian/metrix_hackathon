@@ -38,7 +38,7 @@ class RayOptimizerTest(unittest.TestCase):
             ("U41_318eV.translationXerror", NumericalParameter(value=0.1))])
         initial_params = param_func()
         param_container_list = [initial_params]
-        evaluation_parameters = RayOptimizer.get_evaluation_parameters(param_container_list, [parameters])
+        evaluation_parameters = RayOptimizer.compensate_parameters_list(param_container_list, [parameters])
         self.assertEqual(evaluation_parameters[0]['U41_318eV.translationXerror'].get_value(),
                          initial_params['U41_318eV.translationXerror'].get_value() - 0.1)
 
