@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import copy
 import time
 import os
@@ -569,7 +570,7 @@ class RayOptimizer:
                 log_dict["params_rmse"] = rmse
 
         begin_loss_time: float = time.time() if self.log_times else None
-        output_loss_dict = self.calculate_loss_from_output(output, target.observed_rays)
+        output_loss_dict = self.calculate_loss_from_output(output_dict, target.observed_rays)
         if self.log_times:
             log_dict["System/loss_time"] = time.time() - begin_loss_time
 
@@ -748,13 +749,9 @@ class RayOptimizer:
             )
         )
 
-    def calculate_loss_from_output(self, output, target_rays):
-        output_loss = {
-            key
-            + self.evaluation_counter: self.calculate_loss_epoch(element, target_rays)
-            for key, element in enumerate(output)
-        }
-        return output_loss
+    def calculate_loss_from_output(self, output_dict: Dict[int, List], target_rays):
+        loss_dict = OrderedDict([(key, self.calculate_loss_epoch(element, target_rays)) for key, element in output_dict.items()])
+        return loss_dict
 
     def calculate_loss_epoch(self, output, target_rays):
         output_tensor = ray_output_to_tensor(output, self.exported_plane)
