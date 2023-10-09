@@ -136,12 +136,12 @@ class WandbLoggingBackend(LoggingBackend):
         return {key: image}
 
 
-class BestSample:
-    def __init__(self):
-        self._params: RayParameterContainer = RayParameterContainer()
-        self._rays: Optional[torch.Tensor] = None
-        self._loss: float = float("inf")
-        self._epoch: int = 0
+class Sample:
+    def __init__(self, params = RayParameterContainer(), rays:Optional[torch.Tensor]=None, loss: float=float("inf"), epoch:int=0):
+        self._params: RayParameterContainer = params
+        self._rays: Optional[torch.Tensor] = rays
+        self._loss: float = loss
+        self._epoch: int = epoch
 
     @property
     def params(self):
@@ -198,8 +198,8 @@ class RayOptimizer:
         self.log_times: bool = log_times
         self.evaluation_counter: int = 0
         self.iterations: int = iterations
-        self.plot_interval_best: BestSample = BestSample()
-        self.overall_best: BestSample = BestSample()
+        self.plot_interval_best: Sample = Sample()
+        self.overall_best: Sample = Sample()
         self.plot_interval: int = plot_interval
 
     @staticmethod
@@ -555,8 +555,10 @@ class RayOptimizer:
         if isinstance(target, OffsetTarget):
             num_beamline_samples = len(output) // len(compensations)
             output_dict = {self.evaluation_counter + i: output[i*num_beamline_samples:(i+1)*num_beamline_samples] for i in range(len(compensations))}
+            self.evaluation_counter += num_beamline_samples
         else:
             output_dict = {self.evaluation_counter + key: [value] for key, value in enumerate(output)}
+            self.evaluation_counter += 1
         if self.log_times:
             log_dict["System/execution_time"] = time.time() - begin_execution_time
 
@@ -570,11 +572,20 @@ class RayOptimizer:
                 log_dict["params_rmse"] = rmse
 
         begin_loss_time: float = time.time() if self.log_times else None
-        output_loss_dict = self.calculate_loss_from_output(output_dict, target.observed_rays)
+        output_sample_list = self.calculate_loss_from_output(output_dict, target.observed_rays)
         if self.log_times:
             log_dict["System/loss_time"] = time.time() - begin_loss_time
 
-        for epoch, (loss, ray_count, loss_mean) in output_loss_dict.items():
+        for sample in output_sample_list:
+            if sample.loss < self.plot_interval_best.loss:
+                self.plot_interval_best = sample
+            if sample.loss < self.overall_best.loss:
+                self.overall_best = sample
+        if self.log_times:
+            log_dict["System/total_time"]: time.time() - begin_total_time
+        return [sample.loss for sample in output_sample_list]
+
+        for epoch, (loss, ray_count, loss_mean) in output_sample_list.items():
             log_dict = {
                 **log_dict,
                 **{
@@ -603,14 +614,13 @@ class RayOptimizer:
             )
             if True in [i % self.plot_interval == 0 for i in current_range]:
                 self.plot(target=target)
-                self.plot_interval_best = BestSample()
+                self.plot_interval_best = Sample()
             if self.evaluation_counter == 0:
                 target = self.plot_initial_plots(target)
-        if self.log_times:
-            log_dict["System/total_time"]: time.time() - begin_total_time
+
         mp.Process(target=self.logger_process, kwargs={"log_dict": log_dict}).start()
         self.evaluation_counter += len(compensations) 
-        return {epoch: loss for epoch, (loss, _, _) in output_loss_dict.items()}
+        return {epoch: loss for epoch, (loss, _, _) in output_sample_list.items()}
 
     def logger_process(
         self, processes: List[mp.Process], queue: mp.Queue, log_dict: Dict
@@ -749,9 +759,18 @@ class RayOptimizer:
             )
         )
 
-    def calculate_loss_from_output(self, output_dict: Dict[int, List], target_rays):
-        loss_dict = OrderedDict([(key, self.calculate_loss_epoch(element, target_rays)) for key, element in output_dict.items()])
-        return loss_dict
+    def calculate_loss_from_output(self, output_dict: Dict[int, List], target_rays) -> List[Sample]:
+        list = [self.loss_from_epoch(key, element, target_rays) for key, element in output_dict.items()]
+        return list
+    
+    def loss_from_epoch(self, epoch, output, target_rays):
+        output_tensor = ray_output_to_tensor(output, self.exported_plane)
+        output_list = []
+        for i in range(len(output)):
+            new_loss = self.criterion.loss_fn(target_rays[i], output[i], exported_plane=self.exported_plane) 
+            new_sample = Sample(params=output[i]['param_container_dict'], rays=output_tensor[i], loss=new_loss, epoch=epoch)
+            output_list.append(new_sample)
+        return output_list
 
     def calculate_loss_epoch(self, output, target_rays):
         output_tensor = ray_output_to_tensor(output, self.exported_plane)
