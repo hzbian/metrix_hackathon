@@ -525,6 +525,7 @@ class RayOptimizer:
         assert isinstance(parameters[0], RayParameterContainer)
 
         log_dict: Dict[str, Any] = {}
+        current_epochs = [i for i in range(self.evaluation_counter, self.evaluation_counter + len(parameters))]
         begin_total_time: Optional[float] = time.time() if self.log_times else None
 
         if isinstance(target, OffsetTarget):
@@ -562,6 +563,33 @@ class RayOptimizer:
         if self.log_times:
             log_dict["System/execution_time"] = time.time() - begin_execution_time
 
+        
+        begin_loss_time: float = time.time() if self.log_times else None
+        trial_list = self.calculate_loss_from_output(output_dict, target.observed_rays)
+        if self.log_times:
+            log_dict["System/loss_time"] = time.time() - begin_loss_time
+
+        for trial in trial_list:
+            for sample in trial:
+                if sample.loss < self.plot_interval_best.loss:
+                    self.plot_interval_best = sample
+                if sample.loss < self.overall_best.loss:
+                    self.overall_best = sample
+        if self.log_times:
+            log_dict["System/total_time"]: time.time() - begin_total_time
+        if True in [i % self.plot_interval == 0 for i in current_epochs]:
+            mp.Process(target=self.new_logger, kwargs={"log_dict":log_dict, "trial_list": trial_list}).start()
+        return [[sample.loss for sample in sample_list] for sample_list in trial_list]
+
+    @staticmethod 
+    def new_logger(log_dict: Dict[str, Any], trial_list):
+        for sample_list in trial_list:
+            log_dict["epoch"]: sample_list[0].epoch
+            log_dict["ray_count"] = 0
+        return
+
+    def unreachable():
+        return None
         if isinstance(target, OffsetTarget):
             if target.target_params is not None:
                 rmse = RayOptimizer.parameters_list_rmse(
@@ -571,21 +599,7 @@ class RayOptimizer:
                 )
                 log_dict["params_rmse"] = rmse
 
-        begin_loss_time: float = time.time() if self.log_times else None
-        output_sample_list = self.calculate_loss_from_output(output_dict, target.observed_rays)
-        if self.log_times:
-            log_dict["System/loss_time"] = time.time() - begin_loss_time
-
-        for sample in output_sample_list:
-            if sample.loss < self.plot_interval_best.loss:
-                self.plot_interval_best = sample
-            if sample.loss < self.overall_best.loss:
-                self.overall_best = sample
-        if self.log_times:
-            log_dict["System/total_time"]: time.time() - begin_total_time
-        return [sample.loss for sample in output_sample_list]
-
-        for epoch, (loss, ray_count, loss_mean) in output_sample_list.items():
+        for epoch, (loss, ray_count, loss_mean) in trial_list.items():
             log_dict = {
                 **log_dict,
                 **{
@@ -620,7 +634,7 @@ class RayOptimizer:
 
         mp.Process(target=self.logger_process, kwargs={"log_dict": log_dict}).start()
         self.evaluation_counter += len(compensations) 
-        return {epoch: loss for epoch, (loss, _, _) in output_sample_list.items()}
+        return {epoch: loss for epoch, (loss, _, _) in trial_list.items()}
 
     def logger_process(
         self, processes: List[mp.Process], queue: mp.Queue, log_dict: Dict
