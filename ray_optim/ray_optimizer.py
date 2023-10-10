@@ -352,11 +352,11 @@ class RayOptimizer:
         normalized_parameters_b: RayParameterContainer = (
             RayOptimizer.normalize_parameters(parameters_b, search_space)
         )
-        for key_a, normalized_parameter_a in normalized_parameters_a.items():
-            if key_a in normalized_parameters_b.keys():
+        for key in search_space.keys():
+            if key in normalized_parameters_b.keys() and key in normalized_parameters_a:
                 mse += (
-                    normalized_parameter_a.get_value()
-                    - normalized_parameters_b[key_a].get_value()
+                    normalized_parameters_a[key].get_value()
+                    - normalized_parameters_b[key].get_value()
                 ) ** 2
                 counter += 1
         if counter != 0:
@@ -578,15 +578,24 @@ class RayOptimizer:
         if self.log_times:
             log_dict["System/total_time"]: time.time() - begin_total_time
         if True in [i % self.plot_interval == 0 for i in current_epochs]:
-            mp.Process(target=self.new_logger, kwargs={"log_dict":log_dict, "trial_list": trial_list}).start()
+            p = mp.Process(target=self.new_logger, kwargs={"log_dict":log_dict, "trial_list": trial_list, "target": target, "exported_plane":self.exported_plane, "plot_interval_best": self.plot_interval_best})
+            p.start()
+            p.join()
         return [[sample.loss for sample in sample_list] for sample_list in trial_list]
 
     @staticmethod 
-    def new_logger(log_dict: Dict[str, Any], trial_list):
-        for sample_list in trial_list:
-            log_dict["epoch"]: sample_list[0].epoch
-            log_dict["ray_count"] = 0
-        return
+    def new_logger(log_dict: Dict[str, Any], trial_list, target: Target, exported_plane: str, plot_interval_best: Sample, logging_backend: LoggingBackend):
+        for trial in trial_list:
+            log_dict["epoch"]: trial[0].epoch
+            log_dict["ray_count"] = torch.tensor([sample.rays.shape[1] for sample in trial], dtype=torch.float).mean().item()
+            log_dict["loss"] = torch.tensor([sample.loss for sample in trial]).mean().item()
+            if target.target_params is not None:
+                log_dict["params_rmse"] = RayOptimizer.parameters_list_rmse(target.target_params, [sample.params for sample in trial], target.search_space)
+            plot_dict = RayOptimizer.plot(target, exported_plane, plot_interval_best)
+            logging_backend.add_to_log({**log_dict, **plot_dict})
+            logging_backend.log()
+
+
 
     def unreachable():
         return None
@@ -651,8 +660,8 @@ class RayOptimizer:
         target: Target,
         validation_parameters,
         transforms: List[RayTransform],
-        queue: mp.Queue,
     ):
+        output_dict = {}
         best_rays_list = self.tensor_list_to_cpu(self.overall_best.rays)
         target_perturbed_parameters_rays_list = ray_output_to_tensor(
             target.observed_rays, self.exported_plane, to_cpu=True
@@ -669,11 +678,7 @@ class RayOptimizer:
             ylim=[-2, 2],
         )
         fixed_position_plot = self.fig_to_image(fixed_position_plot)
-        queue.put(
-            self.logging_backend.image(
-                "overall_fixed_position_plot", fixed_position_plot
-            )
-        )
+        output_dict["overall_fixed_position_plot"] = fixed_position_plot
 
         if target.validation_scan is not None:
             validation_scan = target.validation_scan
@@ -687,7 +692,7 @@ class RayOptimizer:
             compensated_rays_list = ray_output_to_tensor(
                 compensated_rays_list, exported_plane=self.exported_plane
             )
-            validation_fixed_position_plot = self.fixed_position_plot(
+            validation_fixed_position_plot = RayOptimizer.fixed_position_plot(
                 compensated_rays_list,
                 validation_rays_list,
                 validation_parameters_rays_list,
@@ -696,82 +701,78 @@ class RayOptimizer:
                 ylim=[-2, 2],
             )
 
-            validation_fixed_position_plot = self.fig_to_image(
+            validation_fixed_position_plot = RayOptimizer.fig_to_image(
                 validation_fixed_position_plot
             )
-            queue.put(
-                self.logging_backend.image(
-                    "validation_fixed_position", validation_fixed_position_plot
-                )
-            )
+            output_dict["validation_fixed_position"] = validation_fixed_position_plot
+        return output_dict
 
-    def plot_initial_plots(self, target: Target, queue: mp.Queue):
+    def plot_initial_plots(self, target: Target):
+        output_dict = {}
         target_tensor = ray_output_to_tensor(target.observed_rays, self.exported_plane)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
             target_image = self.plot_data(target_tensor)
-            queue.put(self.logging_backend.image("target_footprint", target_image))
+            output_dict["target_footprint"] = target_image
+        return output_dict
 
-    def plot(self, target: Target, queue: mp.Queue):
-        interval_best_rays = self.tensor_list_to_cpu(self.plot_interval_best.rays)
-        image = self.plot_data(interval_best_rays, epoch=self.plot_interval_best.epoch)
-        queue.put(self.logging_backend.image("footprint", image))
+    @staticmethod
+    def plot(target: Target, exported_plane: str, plot_interval_best: Sample):
+        output_dict = {}
+        interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
+        image = RayOptimizer.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
+        output_dict["footprint"] = image
         if isinstance(target, OffsetTarget):
-            compensation_image = self.compensation_plot(
+            compensation_image = RayOptimizer.compensation_plot(
                 interval_best_rays,
                 ray_output_to_tensor(
-                    target.observed_rays, self.exported_plane, to_cpu=True
+                    target.observed_rays, exported_plane, to_cpu=True
                 ),
                 ray_output_to_tensor(
                     target.uncompensated_rays,
-                    self.exported_plane,
+                    exported_plane,
                     to_cpu=True,
                 ),
-                epoch=self.plot_interval_best.epoch,
+                epoch=plot_interval_best.epoch,
             )
-            queue.put(self.logging_backend.image("compensation", compensation_image))
+            output_dict["compensation"] = compensation_image
         max_ray_index = torch.argmax(
             torch.Tensor(
                 [
-                    ray_output_to_tensor(element, self.exported_plane).shape[1]
+                    ray_output_to_tensor(element, exported_plane).shape[1]
                     for element in target.observed_rays
                 ]
             )
         ).item()
-        fixed_position_plot = self.fixed_position_plot(
+        fixed_position_plot = RayOptimizer.fixed_position_plot(
             [interval_best_rays[max_ray_index]],
             [
                 ray_output_to_tensor(
                     target.observed_rays[max_ray_index],
-                    self.exported_plane,
+                    exported_plane,
                     to_cpu=True,
                 )
             ],
             [
                 ray_output_to_tensor(
                     target.uncompensated_rays[max_ray_index],
-                    self.exported_plane,
+                    exported_plane,
                     to_cpu=True,
                 )
             ],
-            epoch=self.plot_interval_best.epoch,
+            epoch=plot_interval_best.epoch,
             xlim=[-2, 2],
             ylim=[-2, 2],
         )
-        fixed_position_plot = self.fig_to_image(fixed_position_plot)
-        queue.put(
-            self.logging_backend.image("fixed_position_plot", fixed_position_plot)
-        )
-        parameter_comparison_image = self.plot_param_comparison(
-            predicted_params=self.plot_interval_best.params,
+        fixed_position_plot = RayOptimizer.fig_to_image(fixed_position_plot)
+        output_dict["fixed_position_plot"] = fixed_position_plot
+        parameter_comparison_image = RayOptimizer.plot_param_comparison(
+            predicted_params=plot_interval_best.params,
             search_space=target.search_space,
             real_params=target.target_params,
         )
-        queue.put(
-            self.logging_backend.image(
-                "parameter_comparison", parameter_comparison_image
-            )
-        )
+        output_dict["parameter_comparison"] = parameter_comparison_image
+        return output_dict
 
     def calculate_loss_from_output(self, output_dict: Dict[int, List], target_rays) -> List[Sample]:
         list = [self.loss_from_epoch(key, element, target_rays) for key, element in output_dict.items()]
