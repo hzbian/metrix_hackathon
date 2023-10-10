@@ -33,5 +33,5 @@ max_target_deviation: 0.3
 max_offset_search_deviation: 0.3
 transforms:
   _target_: "ray_tools.base.transform.MultiLayer"
-  dist_layers: [0., 1.]
+  dist_layers: [0., 1., 2.]
 logging_project: "gauss"
