@@ -91,11 +91,13 @@ class OptimizerBackend(metaclass=ABCMeta):
     ):
         pass
 
+
 class Logger:
     def __init__(self, queue):
         self.logged_until_index = 0
         self.log_list = []
         self.queue = queue
+
     def log(self):
         while not self.queue.empty():
             self.log_list.append(self.queue.get())
@@ -110,7 +112,8 @@ class Logger:
             else:
                 break
 
-class LoggingBackend(mp.Queue):
+
+class LoggingBackend(metaclass=ABCMeta):
     def __init__(self):
         super().__init__()
         self.log_dict: Dict[str, Any] = {}
@@ -124,7 +127,8 @@ class LoggingBackend(mp.Queue):
 
     def log(self, log: Dict[str, Any]):
         self._add_to_log(log)
-
+        self._log()
+        self.empty_log()
 
     @abstractmethod
     def _log(self):
@@ -157,7 +161,13 @@ class WandbLoggingBackend(LoggingBackend):
 
 
 class Sample:
-    def __init__(self, params = RayParameterContainer(), rays:Optional[torch.Tensor]=None, loss: float=float("inf"), epoch:int=0):
+    def __init__(
+        self,
+        params=RayParameterContainer(),
+        rays: Optional[torch.Tensor] = None,
+        loss: float = float("inf"),
+        epoch: int = 0,
+    ):
         self._params: RayParameterContainer = params
         self._rays: Optional[torch.Tensor] = rays
         self._loss: float = loss
@@ -532,6 +542,7 @@ class RayOptimizer:
             )
             for compensation in compensation_list
         ]
+
     @staticmethod
     def flatten_list_list(list_list: List[List[Any]]):
         flattened_list = []
@@ -539,44 +550,83 @@ class RayOptimizer:
             for element in list:
                 flattened_list.append(element)
         return flattened_list
-    def evaluation_function(
-        self, parameters: List[RayParameterContainer], target: Target
-    ) -> List[Any]:
-        assert isinstance(parameters, list)
-        assert isinstance(parameters[0], RayParameterContainer)
 
-        log_dict: Dict[str, Any] = {}
-        current_epochs = [i for i in range(self.evaluation_counter, self.evaluation_counter + len(parameters))]
-        begin_total_time: Optional[float] = time.time() if self.log_times else None
+    @staticmethod
+    def current_epochs(evaluation_counter: int, length: int) -> List[int]:
+        """This function returns all current epochs. This can be multiple values for multi-arm optimization methods.
 
+        Args:
+            evaluation_counter (int): The number of already performed evaluations, this is the first value of current epochs.
+            length (int): This is the amount of new current epochs.
+
+        Returns:
+            List[int]: A list with integers of current evaluation epochs.
+        """
+        return [i for i in range(evaluation_counter, evaluation_counter + length)]
+
+    @staticmethod
+    def evaluation_parameters(
+        target: Target, compensations: List[RayParameterContainer]
+    ) -> List[RayParameterContainer]:
         if isinstance(target, OffsetTarget):
-            compensations: List[RayParameterContainer] = parameters
             evaluation_parameters = RayOptimizer.compensate_list_parameters_list(
                 target.uncompensated_parameters, compensations
             )
-            evaluation_parameters = RayOptimizer.flatten_list_list(evaluation_parameters)
+            evaluation_parameters = RayOptimizer.flatten_list_list(
+                evaluation_parameters
+            )
         else:
-            evaluation_parameters = parameters
-
-
+            evaluation_parameters = compensations
+        return evaluation_parameters
+    
+    @staticmethod 
+    def run_engine(engine: Engine, evaluation_parameters, exported_plane: str, transforms: RayTransform, log_times: bool):
         transforms = RayOptimizer.translate_exported_plain_transforms(
-            self.exported_plane, evaluation_parameters, self.transforms
+            exported_plane, evaluation_parameters, transforms
         )
 
-        begin_execution_time: float = time.time() if self.log_times else None
-        output = self.engine.run(evaluation_parameters, transforms=transforms)
-        
+        begin_execution_time: float = time.time() if log_times else None
+        output = engine.run(evaluation_parameters, transforms=transforms)
+        execution_time = time.time() - begin_execution_time if log_times else None
+        return output, execution_time
+
+    def evaluation_function(
+        self, compensations: List[RayParameterContainer], target: Target
+    ) -> List[Any]:
+        assert isinstance(compensations, list)
+        assert isinstance(compensations[0], RayParameterContainer)
+
+        begin_total_time: Optional[float] = time.time() if self.log_times else None
+
+        log_dict: Dict[str, Any] = {}
+        current_epochs = RayOptimizer.current_epochs(
+            self.evaluation_counter, len(compensations)
+        )
+
+        evaluation_parameters = RayOptimizer.evaluation_parameters(
+            target, compensations
+        )
+
+        output, execution_time = RayOptimizer.run_engine(self.engine, evaluation_parameters, self.exported_plane, self.transforms, self.log_times)
+
+        if self.log_times:
+            log_dict["System/execution_time"] = execution_time
+
         if isinstance(target, OffsetTarget):
             num_beamline_samples = len(output) // len(compensations)
-            output_dict = {self.evaluation_counter + i: output[i*num_beamline_samples:(i+1)*num_beamline_samples] for i in range(len(compensations))}
+            output_dict = {
+                self.evaluation_counter
+                + i: output[i * num_beamline_samples : (i + 1) * num_beamline_samples]
+                for i in range(len(compensations))
+            }
             self.evaluation_counter += num_beamline_samples
         else:
-            output_dict = {self.evaluation_counter + key: [value] for key, value in enumerate(output)}
+            output_dict = {
+                self.evaluation_counter + key: [value]
+                for key, value in enumerate(output)
+            }
             self.evaluation_counter += 1
-        if self.log_times:
-            log_dict["System/execution_time"] = time.time() - begin_execution_time
 
-        
         begin_loss_time: float = time.time() if self.log_times else None
         trial_list = self.calculate_loss_from_output(output_dict, target.observed_rays)
         if self.log_times:
@@ -591,23 +641,56 @@ class RayOptimizer:
         if self.log_times:
             log_dict["System/total_time"]: time.time() - begin_total_time
         if True in [i % self.plot_interval == 0 for i in current_epochs]:
-            p = mp.Process(target=self.new_logger, kwargs={"log_dict":log_dict, "trial_list": trial_list, "target": target, "exported_plane":self.exported_plane, "plot_interval_best": self.plot_interval_best, "engine": self.engine})
-            p.start()
-            p.join()
+            if self.logger_process is not None:
+                self.logger_process.join()
+            self.logger_process = mp.Process(
+                target=self.new_logger,
+                kwargs={
+                    "log_dict": log_dict,
+                    "trial_list": trial_list,
+                    "target": target,
+                    "exported_plane": self.exported_plane,
+                    "plot_interval_best": self.plot_interval_best,
+                    "engine": self.engine,
+                    "logging_backend": self.logging_backend,
+                },
+            )
+            self.logger_process.start()
+            self.logger_process.join()
         return [[sample.loss for sample in sample_list] for sample_list in trial_list]
 
-    @staticmethod 
-    def new_logger(log_dict: Dict[str, Any], trial_list, target: Target, exported_plane: str, plot_interval_best: Sample, logging_backend: LoggingBackend, engine: Engine):
+    @staticmethod
+    def new_logger(
+        log_dict: Dict[str, Any],
+        trial_list,
+        target: Target,
+        exported_plane: str,
+        plot_interval_best: Sample,
+        logging_backend: LoggingBackend,
+        engine: Engine,
+    ):
         for trial in trial_list:
             log_dict["epoch"]: trial[0].epoch
-            log_dict["ray_count"] = torch.tensor([sample.rays.shape[1] for sample in trial], dtype=torch.float).mean().item()
-            log_dict["loss"] = torch.tensor([sample.loss for sample in trial]).mean().item()
+            log_dict["ray_count"] = (
+                torch.tensor(
+                    [sample.rays.shape[1] for sample in trial], dtype=torch.float
+                )
+                .mean()
+                .item()
+            )
+            log_dict["loss"] = (
+                torch.tensor([sample.loss for sample in trial]).mean().item()
+            )
             if target.target_params is not None:
-                log_dict["params_rmse"] = RayOptimizer.parameters_list_rmse(target.target_params, [sample.params for sample in trial], target.search_space)
+                log_dict["params_rmse"] = RayOptimizer.parameters_list_rmse(
+                    target.target_params,
+                    [sample.params for sample in trial],
+                    target.search_space,
+                )
             plots = RayOptimizer.plot(target, exported_plane, plot_interval_best)
             if log_dict["epoch"] == 0:
                 initial_plots = RayOptimizer.plot_initial_plots(target, exported_plane)
-        logging_backend.log({**log_dict, **plots, **initial_plots})
+            logging_backend.log({**log_dict, **plots, **initial_plots})
 
     @staticmethod
     def on_better_solution_found(
@@ -621,10 +704,9 @@ class RayOptimizer:
         output_dict = {}
         if target.validation_scan is not None:
             validation_parameters = RayOptimizer.compensate_parameters(
-                target.validation_scan.uncompensated_parameters,
-                offset_only
+                target.validation_scan.uncompensated_parameters, offset_only
             )
-                 
+
         best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
         target_perturbed_parameters_rays_list = ray_output_to_tensor(
             target.observed_rays, exported_plane, to_cpu=True
@@ -684,14 +766,14 @@ class RayOptimizer:
     def plot(target: Target, exported_plane: str, plot_interval_best: Sample):
         output_dict = {}
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
-        image = RayOptimizer.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
+        image = RayOptimizer.plot_data(
+            interval_best_rays, epoch=plot_interval_best.epoch
+        )
         output_dict["footprint"] = image
         if isinstance(target, OffsetTarget):
             compensation_image = RayOptimizer.compensation_plot(
                 interval_best_rays,
-                ray_output_to_tensor(
-                    target.observed_rays, exported_plane, to_cpu=True
-                ),
+                ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True),
                 ray_output_to_tensor(
                     target.uncompensated_rays,
                     exported_plane,
@@ -738,16 +820,28 @@ class RayOptimizer:
         output_dict["parameter_comparison"] = parameter_comparison_image
         return output_dict
 
-    def calculate_loss_from_output(self, output_dict: Dict[int, List], target_rays) -> List[Sample]:
-        list = [self.loss_from_epoch(key, element, target_rays) for key, element in output_dict.items()]
+    def calculate_loss_from_output(
+        self, output_dict: Dict[int, List], target_rays
+    ) -> List[Sample]:
+        list = [
+            self.loss_from_epoch(key, element, target_rays)
+            for key, element in output_dict.items()
+        ]
         return list
-    
+
     def loss_from_epoch(self, epoch, output, target_rays):
         output_tensor = ray_output_to_tensor(output, self.exported_plane)
         output_list = []
         for i in range(len(output)):
-            new_loss = self.criterion.loss_fn(target_rays[i], output[i], exported_plane=self.exported_plane) 
-            new_sample = Sample(params=output[i]['param_container_dict'], rays=output_tensor[i], loss=new_loss, epoch=epoch)
+            new_loss = self.criterion.loss_fn(
+                target_rays[i], output[i], exported_plane=self.exported_plane
+            )
+            new_sample = Sample(
+                params=output[i]["param_container_dict"],
+                rays=output_tensor[i],
+                loss=new_loss,
+                epoch=epoch,
+            )
             output_list.append(new_sample)
         return output_list
 
