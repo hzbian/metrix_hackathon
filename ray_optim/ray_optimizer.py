@@ -459,10 +459,11 @@ class RayOptimizer:
         ]
         return transforms
 
+    @staticmethod
     def plot_param_comparison(
-        self,
         predicted_params: RayParameterContainer,
         search_space: RayParameterContainer,
+        epoch: int,
         real_params: Optional[RayParameterContainer] = None,
         omit_labels: Optional[List[str]] = None,
     ):
@@ -474,7 +475,7 @@ class RayOptimizer:
             ax.stem(
                 [
                     param.get_value() - 0.5
-                    for param in self.normalize_parameters(
+                    for param in RayOptimizer.normalize_parameters(
                         real_params, search_space
                     ).values()
                 ],
@@ -483,7 +484,7 @@ class RayOptimizer:
         ax.stem(
             [
                 param.get_value() - 0.5
-                for param in self.normalize_parameters(
+                for param in RayOptimizer.normalize_parameters(
                     predicted_params, search_space
                 ).values()
             ],
@@ -499,7 +500,7 @@ class RayOptimizer:
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
-        fig.suptitle("Epoch " + str(self.plot_interval_best.epoch))
+        fig.suptitle("Epoch " + str(epoch))
         return RayOptimizer.fig_to_image(fig)
 
     @staticmethod
@@ -642,18 +643,17 @@ class RayOptimizer:
 
         self.evaluation_counter += len(output)
         begin_loss_time: float = time.time() if self.log_times else None
-        trial_list = self.calculate_loss_from_output(
-            output, target.observed_rays, current_epochs
+        trials = self.calculate_loss_from_output(
+            output, target.observed_rays, current_epochs, self.criterion, self.exported_plane, compensations
         )
         if self.log_times:
             log_dict["System/loss_time"] = time.time() - begin_loss_time
 
-        for trial in trial_list:
-            for sample in trial:
-                if sample.loss < self.plot_interval_best.loss:
-                    self.plot_interval_best = sample
-                if sample.loss < self.overall_best.loss:
-                    self.overall_best = sample
+        for sample in trials:
+            if sample.loss < self.plot_interval_best.loss:
+                self.plot_interval_best = sample
+            if sample.loss < self.overall_best.loss:
+                self.overall_best = sample
         if self.log_times:
             log_dict["System/total_time"]: time.time() - begin_total_time
         if True in [i % self.plot_interval == 0 for i in current_epochs]:
@@ -663,7 +663,7 @@ class RayOptimizer:
                 target=self.new_logger,
                 kwargs={
                     "log_dict": log_dict,
-                    "trial_list": trial_list,
+                    "trials": trials,
                     "target": target,
                     "exported_plane": self.exported_plane,
                     "plot_interval_best": self.plot_interval_best,
@@ -672,40 +672,40 @@ class RayOptimizer:
                 },
             )
             self.logger_process.start()
-            self.logger_process.join()
-        return [[sample.loss for sample in sample_list] for sample_list in trial_list]
+            #self.logger_process.join()
+        return [sample.loss for sample in trials]
 
     @staticmethod
     def new_logger(
         log_dict: Dict[str, Any],
-        trial_list,
+        trials,
         target: Target,
         exported_plane: str,
         plot_interval_best: Sample,
         logging_backend: LoggingBackend,
         engine: Engine,
     ):
-        for trial in trial_list:
-            log_dict["epoch"]: trial[0].epoch
+        for sample in trials:
+            log_dict["epoch"]: sample.epoch
             log_dict["ray_count"] = (
                 torch.tensor(
-                    [sample.rays.shape[1] for sample in trial], dtype=torch.float
+                    [layer.shape[1] for layer in sample.rays], dtype=torch.float
                 )
                 .mean()
                 .item()
             )
-            log_dict["loss"] = (
-                torch.tensor([sample.loss for sample in trial]).mean().item()
-            )
+            log_dict["loss"] = sample.loss
             if target.target_params is not None:
-                log_dict["params_rmse"] = RayOptimizer.parameters_list_rmse(
+                log_dict["params_rmse"] = RayOptimizer.parameters_rmse(
                     target.target_params,
-                    [sample.params for sample in trial],
+                    sample.params,
                     target.search_space,
                 )
             plots = RayOptimizer.plot(target, exported_plane, plot_interval_best)
-            if log_dict["epoch"] == 0:
+            if sample.epoch == 0:
                 initial_plots = RayOptimizer.plot_initial_plots(target, exported_plane)
+            else:
+                initial_plots = {}
             logging_backend.log({**log_dict, **plots, **initial_plots})
 
     @staticmethod
@@ -720,7 +720,7 @@ class RayOptimizer:
         output_dict = {}
         if target.validation_scan is not None:
             validation_parameters = RayOptimizer.compensate_parameters(
-                target.validation_scan.uncompensated_parameters, offset_only
+                target.validation_scan.uncompensated_parameters, compensations
             )
 
         best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
@@ -830,6 +830,7 @@ class RayOptimizer:
         output_dict["fixed_position_plot"] = fixed_position_plot
         parameter_comparison_image = RayOptimizer.plot_param_comparison(
             predicted_params=plot_interval_best.params,
+            epoch=plot_interval_best.epoch,
             search_space=target.search_space,
             real_params=target.target_params,
         )
@@ -838,30 +839,29 @@ class RayOptimizer:
 
     @staticmethod
     def calculate_loss_from_output(
-        output: List[List[dict]], target_rays, current_epochs: List[int], criterion: RayLoss, exported_plane
+        output: List[List[dict]], target_rays, current_epochs: List[int], criterion: RayLoss, exported_plane: str, compensations: List[RayParameterContainer]
     ) -> List[Sample]:
         list = [
-            RayOptimizer.loss_from_epoch(current_epochs[i], element, target_rays, criterion.loss_fn, exported_plane)
+            RayOptimizer.loss_from_epoch(current_epochs[i], element, target_rays, criterion.loss_fn, exported_plane, compensations[i])
             for i, element in enumerate(output)
         ]
         return list
     @staticmethod
-    def loss_from_epoch(epoch, output, target_rays, loss_fn, exported_plane: str):
+    def loss_from_epoch(epoch, output, target_rays, loss_fn, exported_plane: str, compensation: RayParameterContainer):
         output_tensor = ray_output_to_tensor(output, exported_plane)
-        output_list = []
+        new_loss = 0
         for i in range(len(output)):
-            new_loss = loss_fn(
+            new_loss += loss_fn(
                 target_rays[i], output[i], exported_plane=exported_plane
             )
-            # TODO I think we need to mean around this
-            new_sample = Sample(
-                params=output[i]["param_container_dict"],
-                rays=output_tensor[i],
-                loss=new_loss,
-                epoch=epoch,
-            )
-            output_list.append(new_sample)
-        return output_list
+        mean_loss = new_loss / len(output)
+        new_sample = Sample(
+            params=compensation,
+            rays=output_tensor,
+            loss=mean_loss,
+            epoch=epoch,
+        )
+        return new_sample
 
     def calculate_loss_epoch(self, output, target_rays):
         output_tensor = ray_output_to_tensor(output, self.exported_plane)
