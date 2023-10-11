@@ -552,6 +552,18 @@ class RayOptimizer:
         return flattened_list
 
     @staticmethod
+    def reshape_list(list: List[Any], list_list_length: int) -> List[List[Any]]:
+        if len(list) % list_list_length != 0:
+            raise ValueError(
+                "Lenght of list is not dividable by the length of the list lists."
+            )
+        new_list_length = len(list) // list_list_length
+        return [
+            list[i * list_list_length : (i + 1) * list_list_length]
+            for i in range(new_list_length)
+        ]
+
+    @staticmethod
     def current_epochs(evaluation_counter: int, length: int) -> List[int]:
         """This function returns all current epochs. This can be multiple values for multi-arm optimization methods.
 
@@ -567,28 +579,38 @@ class RayOptimizer:
     @staticmethod
     def evaluation_parameters(
         target: Target, compensations: List[RayParameterContainer]
-    ) -> List[RayParameterContainer]:
+    ) -> List[List[RayParameterContainer]]:
         if isinstance(target, OffsetTarget):
             evaluation_parameters = RayOptimizer.compensate_list_parameters_list(
                 target.uncompensated_parameters, compensations
             )
-            evaluation_parameters = RayOptimizer.flatten_list_list(
-                evaluation_parameters
-            )
         else:
-            evaluation_parameters = compensations
+            evaluation_parameters = [compensations]
         return evaluation_parameters
-    
-    @staticmethod 
-    def run_engine(engine: Engine, evaluation_parameters, exported_plane: str, transforms: RayTransform, log_times: bool):
+
+    @staticmethod
+    def run_engine(
+        engine: Engine,
+        evaluation_parameters: List[List[RayParameterContainer]],
+        exported_plane: str,
+        transforms: RayTransform,
+        log_times: bool,
+    ):
+        flattened_evaluation_parameters: List[
+            RayParameterContainer
+        ] = RayOptimizer.flatten_list_list(evaluation_parameters)
+
         transforms = RayOptimizer.translate_exported_plain_transforms(
-            exported_plane, evaluation_parameters, transforms
+            exported_plane, flattened_evaluation_parameters, transforms
         )
 
         begin_execution_time: float = time.time() if log_times else None
-        output = engine.run(evaluation_parameters, transforms=transforms)
+        output = engine.run(flattened_evaluation_parameters, transforms=transforms)
         execution_time = time.time() - begin_execution_time if log_times else None
-        return output, execution_time
+        reshaped_output = RayOptimizer.reshape_list(
+            output, len(evaluation_parameters[0])
+        )
+        return reshaped_output, execution_time
 
     def evaluation_function(
         self, compensations: List[RayParameterContainer], target: Target
@@ -607,28 +629,22 @@ class RayOptimizer:
             target, compensations
         )
 
-        output, execution_time = RayOptimizer.run_engine(self.engine, evaluation_parameters, self.exported_plane, self.transforms, self.log_times)
+        output, execution_time = RayOptimizer.run_engine(
+            self.engine,
+            evaluation_parameters,
+            self.exported_plane,
+            self.transforms,
+            self.log_times,
+        )
 
         if self.log_times:
             log_dict["System/execution_time"] = execution_time
 
-        if isinstance(target, OffsetTarget):
-            num_beamline_samples = len(output) // len(compensations)
-            output_dict = {
-                self.evaluation_counter
-                + i: output[i * num_beamline_samples : (i + 1) * num_beamline_samples]
-                for i in range(len(compensations))
-            }
-            self.evaluation_counter += num_beamline_samples
-        else:
-            output_dict = {
-                self.evaluation_counter + key: [value]
-                for key, value in enumerate(output)
-            }
-            self.evaluation_counter += 1
-
+        self.evaluation_counter += len(output)
         begin_loss_time: float = time.time() if self.log_times else None
-        trial_list = self.calculate_loss_from_output(output_dict, target.observed_rays)
+        trial_list = self.calculate_loss_from_output(
+            output, target.observed_rays, current_epochs
+        )
         if self.log_times:
             log_dict["System/loss_time"] = time.time() - begin_loss_time
 
@@ -820,22 +836,24 @@ class RayOptimizer:
         output_dict["parameter_comparison"] = parameter_comparison_image
         return output_dict
 
+    @staticmethod
     def calculate_loss_from_output(
-        self, output_dict: Dict[int, List], target_rays
+        output: List[List[dict]], target_rays, current_epochs: List[int], criterion: RayLoss, exported_plane
     ) -> List[Sample]:
         list = [
-            self.loss_from_epoch(key, element, target_rays)
-            for key, element in output_dict.items()
+            RayOptimizer.loss_from_epoch(current_epochs[i], element, target_rays, criterion.loss_fn, exported_plane)
+            for i, element in enumerate(output)
         ]
         return list
-
-    def loss_from_epoch(self, epoch, output, target_rays):
-        output_tensor = ray_output_to_tensor(output, self.exported_plane)
+    @staticmethod
+    def loss_from_epoch(epoch, output, target_rays, loss_fn, exported_plane: str):
+        output_tensor = ray_output_to_tensor(output, exported_plane)
         output_list = []
         for i in range(len(output)):
-            new_loss = self.criterion.loss_fn(
-                target_rays[i], output[i], exported_plane=self.exported_plane
+            new_loss = loss_fn(
+                target_rays[i], output[i], exported_plane=exported_plane
             )
+            # TODO I think we need to mean around this
             new_sample = Sample(
                 params=output[i]["param_container_dict"],
                 rays=output_tensor[i],
