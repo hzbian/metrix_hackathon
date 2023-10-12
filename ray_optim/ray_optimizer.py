@@ -1,11 +1,12 @@
 from collections import OrderedDict
 import copy
+from operator import attrgetter, itemgetter
 import time
 import os
 from abc import ABCMeta, abstractmethod
 from math import sqrt
 from typing import Any, Dict, List, Iterable, Union, Optional, Callable
-import multiprocessing as mp
+from multiprocessing import JoinableQueue, Process
 
 import numpy as np
 import torch
@@ -231,7 +232,9 @@ class RayOptimizer:
         self.plot_interval_best: Sample = Sample()
         self.overall_best: Sample = Sample()
         self.plot_interval: int = plot_interval
-        self.logger_process: Optional[mp.Process] = None
+        self.logger_producers: List[Process] = []
+        self.logger_queue: JoinableQueue = JoinableQueue()
+        self.logger_consumer_process: Optional[Process] = None
 
     @staticmethod
     def fig_to_image(fig: plt.Figure) -> np.array:
@@ -613,6 +616,29 @@ class RayOptimizer:
         )
         return reshaped_output, execution_time
 
+
+    @staticmethod
+    def log_consumer(q: JoinableQueue, logging_backend: LoggingBackend):
+        internal_list = []
+        push_counter = 0
+        while True:
+            if q.empty():
+                print("empty bitches")
+                time.sleep(2)
+            if not q.empty():
+                print("not empty")
+                res = q.get(block=False)
+                internal_list.append(res)
+                internal_list = sorted(internal_list, key=itemgetter('epoch'))
+                print(internal_list)
+                for i in internal_list:
+                    if i['epoch'] == push_counter:
+                        print(f'pushed', i['epoch'])
+                        logging_backend.log(i)
+                        push_counter += 1
+                q.task_done()
+
+
     def evaluation_function(
         self, compensations: List[RayParameterContainer], target: Target
     ) -> List[Any]:
@@ -656,33 +682,41 @@ class RayOptimizer:
                 self.overall_best = sample
         if self.log_times:
             log_dict["System/total_time"]: time.time() - begin_total_time
-        if True in [i % self.plot_interval == 0 for i in current_epochs]:
-            if self.logger_process is not None:
-                self.logger_process.join()
-            self.logger_process = mp.Process(
-                target=self.new_logger,
-                kwargs={
-                    "log_dict": log_dict,
-                    "trials": trials,
-                    "target": target,
-                    "exported_plane": self.exported_plane,
-                    "plot_interval_best": self.plot_interval_best,
-                    "engine": self.engine,
-                    "logging_backend": self.logging_backend,
-                },
-            )
-            self.logger_process.start()
-            #self.logger_process.join()
+
+        if self.logger_consumer_process is None:
+            self.logger_consumer_process = Process(target=RayOptimizer.log_consumer, args=(self.logger_queue, self.logging_backend), daemon=True)
+            self.logger_consumer_process.start()
+        logger_process = Process(
+            target=self.new_logger,
+            kwargs={
+                "queue": self.logger_queue,
+                "log_dict": log_dict,
+                "trials": trials,
+                "target": target,
+                "exported_plane": self.exported_plane,
+                "plot_interval_best": self.plot_interval_best,
+                "plot_interval": self.plot_interval,
+                "engine": self.engine,
+            },
+        )
+        
+        logger_process.start()
+        self.logger_producers.append(logger_process)
+        if len(self.logger_producers) > 100:
+            for p in self.logger_producers:
+                p.join()
+            self.logger_producers = []            
         return [sample.loss for sample in trials]
 
     @staticmethod
     def new_logger(
+        queue: JoinableQueue,
         log_dict: Dict[str, Any],
         trials,
         target: Target,
         exported_plane: str,
         plot_interval_best: Sample,
-        logging_backend: LoggingBackend,
+        plot_interval: int,
         engine: Engine,
     ):
         for sample in trials:
@@ -701,12 +735,17 @@ class RayOptimizer:
                     sample.params,
                     target.search_space,
                 )
-            plots = RayOptimizer.plot(target, exported_plane, plot_interval_best)
+            if False: #sample.epoch % plot_interval == 0:
+                plots = RayOptimizer.plot(target, exported_plane, plot_interval_best)
+            else:
+                plots = {}
             if sample.epoch == 0:
                 initial_plots = RayOptimizer.plot_initial_plots(target, exported_plane)
             else:
                 initial_plots = {}
-            logging_backend.log({**log_dict, **plots, **initial_plots})
+            queue.put({**log_dict, **plots, **initial_plots})
+            queue.join()
+            #print(sample.epoch)
 
     @staticmethod
     def on_better_solution_found(
