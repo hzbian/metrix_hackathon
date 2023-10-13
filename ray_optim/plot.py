@@ -40,7 +40,7 @@ class Plot:
                 axs[i, j].xaxis.set_major_locator(plt.NullLocator())
         if epoch is not None:
             fig.suptitle("Epoch " + str(epoch))
-        return Plot.fig_to_image(fig)
+        return fig, Plot.fig_to_image(fig)
 
     @staticmethod
     def compensation_plot(
