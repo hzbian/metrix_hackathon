@@ -153,6 +153,8 @@ class Plot:
                 axs[idx_list_list, beamline_idx].grid(linestyle = "dashed", alpha = 0.5)
 
             axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list])
+        if len(tensor_list_list[0]) > 1:
+            fig.supxlabel('Varying Parameters')
         if suptitle is not None:
             fig.suptitle(suptitle) 
         fig.set_dpi(200)
@@ -178,7 +180,7 @@ class Plot:
                         real_params, search_space
                     ).values()
                 ],
-                label="real parameters",
+                label="Real Parameters",
             )
         ax.stem(
             [
@@ -189,15 +191,18 @@ class Plot:
             ],
             linefmt="g",
             markerfmt="o",
-            label="predicted parameters",
+            label="Predicted Parameters",
         )
         param_labels = [
             param_key
-            for param_key, param_value in predicted_params.items()
+            for param_key, _ in predicted_params.items()
             if param_key not in omit_labels
         ]
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
+        ax.legend()
         plt.subplots_adjust(bottom=0.3)
+        ax.set_xlabel('Parameter')
+        ax.set_ylabel('Normalized Compensation')
         fig.suptitle("Epoch " + str(epoch))
         return fig
