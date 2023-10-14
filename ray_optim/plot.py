@@ -1,10 +1,16 @@
 from typing import List, Optional
+import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
 import torch
 
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 
+mpl.rcParams['text.color'] = 'dimgray'
+mpl.rcParams['axes.labelcolor'] = 'dimgray'
+mpl.rcParams['xtick.color'] = 'dimgray'
+mpl.rcParams['ytick.color'] = 'dimgray'
+mpl.rcParams['axes.edgecolor'] = 'dimgray'
 plt.switch_backend("Agg")
 
 
@@ -35,12 +41,15 @@ class Plot:
         fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False)
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
-                axs[i, j].scatter(line[:, 0], line[:, 1], s=2.0)
-                axs[i, j].yaxis.set_major_locator(plt.NullLocator())
-                axs[i, j].xaxis.set_major_locator(plt.NullLocator())
+                axs[i, j].scatter(line[:, 0], line[:, 1], s=0.5, alpha=0.5)
         if epoch is not None:
             fig.suptitle("Epoch " + str(epoch))
-        return fig, Plot.fig_to_image(fig)
+        if len(column) > 1:
+            fig.supxlabel('Shifting in Ray Direction')
+        if len(pc_supp) > 1:
+            fig.supylabel('Varying Parameters')
+        fig.tight_layout()
+        return fig
 
     @staticmethod
     def compensation_plot(
@@ -71,12 +80,12 @@ class Plot:
             axs[2, i].set_ylim(ylim)
             axs[2, i].xaxis.set_major_locator(plt.NullLocator())
             axs[2, i].yaxis.set_major_locator(plt.NullLocator())
-        axs[0, 0].set_ylabel("w/o compensation")
-        axs[1, 0].set_ylabel("target")
-        axs[2, 0].set_ylabel("compensated")
+        axs[0, 0].set_ylabel("Uncompensated")
+        axs[1, 0].set_ylabel("Target")
+        axs[2, 0].set_ylabel("Compensated")
         if epoch is not None:
             fig.suptitle("Epoch " + str(epoch))
-        return Plot.fig_to_image(fig)
+        return fig
 
     @staticmethod
     def fixed_position_plot(
@@ -87,8 +96,8 @@ class Plot:
         ylim,
         epoch: Optional[int] = None,
     ) -> np.array:
-        y_label = ["w/o comp.", "observed", "compensated"]
-        suptitle = "Epoch" + str(epoch) if epoch is not None else None
+        y_label = ["Uncompensated", "Observed", "Compensated"]
+        suptitle = "Epoch " + str(epoch) if epoch is not None else None
         return Plot.fixed_position_plot_base(
             [without_compensation, target, compensated], xlim, ylim, y_label, suptitle
         )
@@ -114,34 +123,38 @@ class Plot:
         ylabel,
         suptitle: Optional[str] = None,
     ):
+        
         fig, axs = plt.subplots(
             len(tensor_list_list),
             len(tensor_list_list[0]),
             squeeze=False,
             gridspec_kw={"wspace": 0, "hspace": 0},
+            figsize=(len(tensor_list_list[0])*2, len(tensor_list_list)*2),
+            sharex=True, sharey=True,
         )
         for idx_list_list in range(len(tensor_list_list)):
             for beamline_idx in range(len(tensor_list_list[0])):
                 element = tensor_list_list[idx_list_list][beamline_idx]
                 axs[idx_list_list, beamline_idx].scatter(
-                    element[0, :, 0], element[0, :, 1], s=2.0
+                    element[0, :, 0], element[0, :, 1], s=1.0, alpha=0.5, linewidths=0.4
                 )
-                axs[idx_list_list, beamline_idx].set_xlim(xlim)
-                axs[idx_list_list, beamline_idx].set_ylim(ylim)
+                axs[idx_list_list, beamline_idx].set_xlim(xlim[0]*1.2, xlim[1]*1.2)
+                axs[idx_list_list, beamline_idx].set_ylim(ylim[0]*1.2, ylim[1]*1.2)
                 axs[idx_list_list, beamline_idx].xaxis.set_major_locator(
-                    plt.NullLocator()
+                        plt.NullLocator()
                 )
                 axs[idx_list_list, beamline_idx].yaxis.set_major_locator(
-                    plt.NullLocator()
+                        plt.NullLocator()
                 )
+                axs[idx_list_list, beamline_idx].set_xticks(xlim)
+                axs[idx_list_list, beamline_idx].set_yticks(ylim)
                 axs[idx_list_list, beamline_idx].set_aspect("equal")
-                axs[idx_list_list, beamline_idx].set_xticklabels([])
-                axs[idx_list_list, beamline_idx].set_yticklabels([])
+                axs[idx_list_list, beamline_idx].tick_params(axis='both', length=0.)
+                axs[idx_list_list, beamline_idx].grid(linestyle = "dashed", alpha = 0.5)
 
             axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list])
-            if suptitle is not None:
-                fig.suptitle(suptitle)
-        fig.set_size_inches(len(tensor_list_list[0]) + 2, 3)
+        if suptitle is not None:
+            fig.suptitle(suptitle) 
         fig.set_dpi(200)
         return fig
 
@@ -187,4 +200,4 @@ class Plot:
         ax.set_xticklabels(param_labels, rotation=90)
         plt.subplots_adjust(bottom=0.3)
         fig.suptitle("Epoch " + str(epoch))
-        return Plot.fig_to_image(fig)
+        return fig

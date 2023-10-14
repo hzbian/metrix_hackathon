@@ -588,7 +588,7 @@ class RayOptimizer:
     ):
         output_dict = {}
         if target.validation_scan is not None:
-            validation_parameters = Plot.compensate_parameters(
+            validation_parameters = RayOptimizer.compensate_parameters_list(
                 target.validation_scan.uncompensated_parameters, compensations
             )
 
@@ -646,18 +646,18 @@ class RayOptimizer:
         target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
-            target_image = Plot.plot_data(target_tensor)
-            output_dict["target_footprint"] = target_image
+            target_plot = Plot.plot_data(target_tensor)
+            output_dict["target_footprint"] = Plot.fig_to_image(target_plot)
         return output_dict
 
     @staticmethod
     def plot(target: Target, exported_plane: str, plot_interval_best: Sample):
         output_dict = {}
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
-        image = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
-        output_dict["footprint"] = image
+        plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
+        output_dict["footprint"] = Plot.fig_to_image(plot)
         if isinstance(target, OffsetTarget):
-            compensation_image = Plot.compensation_plot(
+            compensation_plot = Plot.compensation_plot(
                 interval_best_rays,
                 ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True),
                 ray_output_to_tensor(
@@ -667,7 +667,7 @@ class RayOptimizer:
                 ),
                 epoch=plot_interval_best.epoch,
             )
-            output_dict["compensation"] = compensation_image
+            output_dict["compensation"] = Plot.fig_to_image(compensation_plot)
         max_ray_index = torch.argmax(
             torch.Tensor(
                 [
@@ -698,13 +698,13 @@ class RayOptimizer:
         )
         fixed_position_plot = Plot.fig_to_image(fixed_position_plot)
         output_dict["fixed_position_plot"] = fixed_position_plot
-        parameter_comparison_image = Plot.plot_param_comparison(
+        parameter_comparison_plot = Plot.plot_param_comparison(
             predicted_params=plot_interval_best.params,
             epoch=plot_interval_best.epoch,
             search_space=target.search_space,
             real_params=target.target_params,
         )
-        output_dict["parameter_comparison"] = parameter_comparison_image
+        output_dict["parameter_comparison"] = Plot.fig_to_image(parameter_comparison_plot)
         return output_dict
 
     @staticmethod
