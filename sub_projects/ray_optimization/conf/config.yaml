@@ -8,7 +8,7 @@ rg:
     seed: 42
 
 logging_backend:
-  _target_: "ray_optim.ray_optimizer.WandbLoggingBackend"
+  _target_: "ray_optim.logging.WandbLoggingBackend"
   logging_entity: "hzb-aos"
   project_name: ${target_configuration.logging_project}
   study_name:

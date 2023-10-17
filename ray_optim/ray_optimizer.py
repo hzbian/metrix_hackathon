@@ -1,15 +1,13 @@
-from collections import OrderedDict
 import copy
 from operator import itemgetter
 import time
-import os
 from abc import ABCMeta, abstractmethod
 from math import sqrt
 from typing import Any, Dict, List, Iterable, Union, Optional, Callable
 from multiprocessing import JoinableQueue, Process
 
 import torch
-import wandb
+from ray_optim.logging import LoggingBackend
 from ray_optim.plot import Plot
 
 from ray_tools.base import RayTransform
@@ -88,73 +86,6 @@ class OptimizerBackend(metaclass=ABCMeta):
     ):
         pass
 
-
-class Logger:
-    def __init__(self, queue):
-        self.logged_until_index = 0
-        self.log_list = []
-        self.queue = queue
-
-    def log(self):
-        while not self.queue.empty():
-            self.log_list.append(self.queue.get())
-        log_dict = OrderedDict(self.log_list)
-        log_dict.sorted_keys = lambda: sorted(log_dict.keys())
-        for element in log_dict.sorted_keys():
-            if element == self.logged_until_index:
-                self.logged_until_index += 1
-                print(log_dict[element])
-                del log_dict[element]
-                self.log_list = list(log_dict.items())
-            else:
-                break
-
-
-class LoggingBackend(metaclass=ABCMeta):
-    def __init__(self):
-        super().__init__()
-        self.log_dict: Dict[str, Any] = {}
-        self.logged_until_index = 0
-
-    def _add_to_log(self, add_to_log: Dict[str, Any]):
-        self.log_dict = {**self.log_dict, **add_to_log}
-
-    def empty_log(self):
-        self.log_dict = {}
-
-    def log(self, log: Dict[str, Any]):
-        self._add_to_log(log)
-        self._log()
-        self.empty_log()
-
-    @abstractmethod
-    def _log(self):
-        pass
-
-    @abstractmethod
-    def image(self, key: Union[str, int], image: torch.Tensor):
-        pass
-
-
-class WandbLoggingBackend(LoggingBackend):
-    def __init__(
-        self, logging_entity: str, project_name: str, study_name: str, logging: bool
-    ):
-        super().__init__()
-        os.environ["WANDB__SERVICE_WAIT"] = "300"
-        self.handle = wandb.init(
-            entity=logging_entity,
-            project=project_name,
-            name=study_name,
-            mode="online" if logging else "disabled",
-        )
-
-    def _log(self):
-        self.handle.log(self.log_dict)
-
-    def image(self, key: Union[str, int], image: torch.Tensor):
-        image = wandb.Image(image)
-        return {key: image}
 
 
 class Sample:
@@ -512,11 +443,13 @@ class RayOptimizer:
                 "plot_interval": self.plot_interval,
                 "engine": self.engine,
                 "transforms": self.transforms,
+                "logging_backend": self.logging_backend,
                 "compensations": compensations,
             },
         )
 
         logger_process.start()
+        logger_process.join()
 
         for sample in trials:
             if sample.loss < self.plot_interval_best.loss:
@@ -537,6 +470,7 @@ class RayOptimizer:
         plot_interval: int,
         engine: Engine,
         transforms: RayTransform,
+        logging_backend: LoggingBackend,
         compensations,
     ):
         for sample in trials:
@@ -574,7 +508,9 @@ class RayOptimizer:
                 )
             else:
                 better_plots = {}
-            queue.put({**log_dict, **plots, **initial_plots, **better_plots})
+            log_plots = {**plots, **initial_plots, **better_plots}
+            log_plots = {key: logging_backend.image(value) for key, value in log_plots.items()}
+            queue.put({**log_dict, **log_plots})
             queue.join()
 
     @staticmethod
@@ -646,8 +582,8 @@ class RayOptimizer:
         target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
-            target_plot = Plot.plot_data(target_tensor)
-            output_dict["target_footprint"] = Plot.fig_to_image(target_plot)
+        target_plot = Plot.plot_data(target_tensor)
+        output_dict["target_footprint"] = Plot.fig_to_image(target_plot)
         return output_dict
 
     @staticmethod
