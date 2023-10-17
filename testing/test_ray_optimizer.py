@@ -53,6 +53,10 @@ class TestRayOptimizer(unittest.TestCase):
         loss = RayOptimizer.calculate_loss_from_output(output, target_rays, [0, 1, 2, 3], criterion, "ImagePlane", [self.param_func() for _ in range(4)])
         self.assertTrue(isinstance(loss[0], Sample))
 
+    def test_is_new_interval(self):
+        self.assertTrue(RayOptimizer.is_new_interval(9, 10, 10))
+        self.assertFalse(RayOptimizer.is_new_interval(0, 9, 10))
+
 
 if __name__ == "__main__":
     unittest.main()

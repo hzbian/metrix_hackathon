@@ -1,7 +1,7 @@
 from typing import List, Optional
 import matplotlib as mpl
 from matplotlib import pyplot as plt
-import numpy as np
+from matplotlib.figure import Figure
 import torch
 
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
@@ -16,24 +16,11 @@ plt.switch_backend("Agg")
 
 class Plot:
     @staticmethod
-    def fig_to_image(fig: plt.Figure) -> np.array:
-        fig.canvas.draw()
-
-        image_from_plot: np.array = np.frombuffer(
-            fig.canvas.tostring_rgb(), dtype=np.uint8
-        )
-        image_from_plot = image_from_plot.reshape(
-            fig.canvas.get_width_height()[::-1] + (3,)
-        )
-        plt.close(fig)
-        return image_from_plot
-
-    @staticmethod
     def plot_data(
         pc_supp: List[torch.Tensor],
         pc_weights: Optional[List[torch.Tensor]] = None,
         epoch: Optional[int] = None,
-    ) -> np.array:
+    ) -> Figure:
         pc_supp = [v.detach().cpu() for v in pc_supp]
         pc_weights = (
             None if pc_weights is None else [v.detach().cpu() for v in pc_weights]
@@ -57,7 +44,7 @@ class Plot:
         target: list[torch.Tensor],
         without_compensation: list[torch.Tensor],
         epoch: Optional[int] = None,
-    ) -> np.array:
+    ) -> Figure:
         compensated = [v.detach().cpu() for v in compensated]
         target = [v.detach().cpu() for v in target]
         fig, axs = plt.subplots(3, len(compensated), squeeze=False)
@@ -95,7 +82,7 @@ class Plot:
         xlim,
         ylim,
         epoch: Optional[int] = None,
-    ) -> np.array:
+    ) -> Figure:
         y_label = ["Uncompensated", "Observed", "Compensated"]
         suptitle = "Epoch " + str(epoch) if epoch is not None else None
         return Plot.fixed_position_plot_base(
@@ -122,7 +109,7 @@ class Plot:
         ylim,
         ylabel,
         suptitle: Optional[str] = None,
-    ):
+    ) -> Figure:
         
         fig, axs = plt.subplots(
             len(tensor_list_list),
@@ -167,7 +154,7 @@ class Plot:
         epoch: int,
         real_params: Optional[RayParameterContainer] = None,
         omit_labels: Optional[List[str]] = None,
-    ):
+    ) -> Figure:
         if omit_labels is None:
             omit_labels = []
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))

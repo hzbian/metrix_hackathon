@@ -449,15 +449,22 @@ class RayOptimizer:
         )
 
         logger_process.start()
-        logger_process.join()
 
         for sample in trials:
+            if RayOptimizer.is_new_interval(self.plot_interval_best.epoch, sample.epoch, self.plot_interval):
+                self.plot_interval_best = Sample()
             if sample.loss < self.plot_interval_best.loss:
                 self.plot_interval_best = sample
             if sample.loss < self.overall_best.loss:
                 self.overall_best = sample
         return [sample.loss for sample in trials]
 
+    @staticmethod
+    def is_new_interval(epoch_old: int, epoch_new: int, plot_interval: int):
+        old_plot_interval = epoch_old // plot_interval
+        new_plot_interval = epoch_new // plot_interval
+        return old_plot_interval != new_plot_interval
+    
     @staticmethod
     def new_logger(
         queue: JoinableQueue,
@@ -543,7 +550,6 @@ class RayOptimizer:
             xlim=[-2, 2],
             ylim=[-2, 2],
         )
-        fixed_position_plot = Plot.fig_to_image(fixed_position_plot)
         output_dict["overall_fixed_position_plot"] = fixed_position_plot
 
         if target.validation_scan is not None:
@@ -570,9 +576,6 @@ class RayOptimizer:
                 ylim=[-2, 2],
             )
 
-            validation_fixed_position_plot = Plot.fig_to_image(
-                validation_fixed_position_plot
-            )
             output_dict["validation_fixed_position"] = validation_fixed_position_plot
         return output_dict
 
@@ -583,7 +586,7 @@ class RayOptimizer:
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
         target_plot = Plot.plot_data(target_tensor)
-        output_dict["target_footprint"] = Plot.fig_to_image(target_plot)
+        output_dict["target_footprint"] = target_plot
         return output_dict
 
     @staticmethod
@@ -591,7 +594,7 @@ class RayOptimizer:
         output_dict = {}
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
         plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
-        output_dict["footprint"] = Plot.fig_to_image(plot)
+        output_dict["footprint"] = plot
         if isinstance(target, OffsetTarget):
             compensation_plot = Plot.compensation_plot(
                 interval_best_rays,
@@ -603,7 +606,7 @@ class RayOptimizer:
                 ),
                 epoch=plot_interval_best.epoch,
             )
-            output_dict["compensation"] = Plot.fig_to_image(compensation_plot)
+            output_dict["compensation"] = compensation_plot
         max_ray_index = torch.argmax(
             torch.Tensor(
                 [
@@ -632,7 +635,6 @@ class RayOptimizer:
             xlim=[-2, 2],
             ylim=[-2, 2],
         )
-        fixed_position_plot = Plot.fig_to_image(fixed_position_plot)
         output_dict["fixed_position_plot"] = fixed_position_plot
         parameter_comparison_plot = Plot.plot_param_comparison(
             predicted_params=plot_interval_best.params,
@@ -640,7 +642,7 @@ class RayOptimizer:
             search_space=target.search_space,
             real_params=target.target_params,
         )
-        output_dict["parameter_comparison"] = Plot.fig_to_image(parameter_comparison_plot)
+        output_dict["parameter_comparison"] = parameter_comparison_plot
         return output_dict
 
     @staticmethod
