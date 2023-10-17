@@ -87,17 +87,6 @@ class RayOptimization:
         self.ray_optimizer.optimize(target=offset_target)
 
 
-# if len(sys.argv) > 1:
-#    big_parameter = int(sys.argv[1])
-#    key, value = list(all_params.items())[big_parameter]
-#    value_lim_center = (value.value_lims[1] + value.value_lims[0]) / 2
-#    old_interval_half = (value.value_lims[1] - value.value_lims[0]) / 2
-#    old_interval_half *= 3
-#    all_params[key] = type(value)(
-#        value_lims=(value_lim_center - old_interval_half, value_lim_center + old_interval_half), rg=CFG.RG)
-#    CFG.STUDY_NAME += '_' + key
-
-
 # Bayesian Optimization
 # ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
 
