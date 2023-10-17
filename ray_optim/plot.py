@@ -1,7 +1,8 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
+from matplotlib.ticker import FormatStrFormatter
 import torch
 
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
@@ -40,39 +41,19 @@ class Plot:
 
     @staticmethod
     def compensation_plot(
-        compensated: list[torch.Tensor],
-        target: list[torch.Tensor],
-        without_compensation: list[torch.Tensor],
+        compensated: List[torch.Tensor],
+        target: List[torch.Tensor],
+        without_compensation: List[torch.Tensor],
         epoch: Optional[int] = None,
     ) -> Figure:
-        compensated = [v.detach().cpu() for v in compensated]
-        target = [v.detach().cpu() for v in target]
-        fig, axs = plt.subplots(3, len(compensated), squeeze=False)
-        for i, data in enumerate(compensated):
-            axs[1, i].scatter(target[i][0, :, 0], target[i][0, :, 1], s=2.0)
-            axs[1, i].xaxis.set_major_locator(plt.NullLocator())
-            axs[1, i].yaxis.set_major_locator(plt.NullLocator())
-            xlim, ylim = axs[1, i].get_xlim(), axs[1, i].get_ylim()
-            axs[0, i].scatter(
-                without_compensation[i][0, :, 0],
-                without_compensation[i][0, :, 1],
-                s=2.0,
-            )
-            axs[0, i].xaxis.set_major_locator(plt.NullLocator())
-            axs[0, i].yaxis.set_major_locator(plt.NullLocator())
-            axs[0, i].set_xlim(xlim)
-            axs[0, i].set_ylim(ylim)
-            axs[2, i].scatter(data[0, :, 0], data[0, :, 1], s=2.0)
-            axs[2, i].set_xlim(xlim)
-            axs[2, i].set_ylim(ylim)
-            axs[2, i].xaxis.set_major_locator(plt.NullLocator())
-            axs[2, i].yaxis.set_major_locator(plt.NullLocator())
-        axs[0, 0].set_ylabel("Uncompensated")
-        axs[1, 0].set_ylabel("Target")
-        axs[2, 0].set_ylabel("Compensated")
-        if epoch is not None:
-            fig.suptitle("Epoch " + str(epoch))
-        return fig
+       xlim_min = min([entry[0, :, 0].min().item() for entry in target])
+       xlim_max = max([entry[0, :, 0].max().item() for entry in target])
+       ylim_min = min([entry[0, :, 1].min().item() for entry in target])
+       ylim_max = max([entry[0, :, 1].max().item() for entry in target])
+       xlim = (xlim_min, xlim_max)
+       ylim = (ylim_min, ylim_max)
+       fig = Plot.fixed_position_plot(compensated=compensated, target=target, without_compensation=without_compensation, xlim=xlim, ylim=ylim, epoch=epoch)
+       return fig
 
     @staticmethod
     def fixed_position_plot(
@@ -104,9 +85,9 @@ class Plot:
     
     @staticmethod
     def fixed_position_plot_base(
-        tensor_list_list: list[list[torch.Tensor]],
-        xlim,
-        ylim,
+        tensor_list_list: List[List[torch.Tensor]],
+        xlim: Tuple[float],
+        ylim: Tuple[float],
         ylabel,
         suptitle: Optional[str] = None,
     ) -> Figure:
@@ -122,11 +103,12 @@ class Plot:
         for idx_list_list in range(len(tensor_list_list)):
             for beamline_idx in range(len(tensor_list_list[0])):
                 element = tensor_list_list[idx_list_list][beamline_idx]
-                axs[idx_list_list, beamline_idx].scatter(
-                    element[0, :, 0], element[0, :, 1], s=1.0, alpha=0.5, linewidths=0.4
-                )
-                axs[idx_list_list, beamline_idx].set_xlim(xlim[0]*1.2, xlim[1]*1.2)
-                axs[idx_list_list, beamline_idx].set_ylim(ylim[0]*1.2, ylim[1]*1.2)
+                xlim_half = (xlim[1]-xlim[0]) / 2
+                xlim_middle = xlim[0]+xlim_half
+                axs[idx_list_list, beamline_idx].set_xlim(xlim_middle-xlim_half*1.2, xlim_middle+xlim_half*1.2)
+                ylim_half = (ylim[1]-ylim[0]) / 2
+                ylim_middle = ylim[0]+ylim_half
+                axs[idx_list_list, beamline_idx].set_ylim(ylim_middle-ylim_half*1.2, ylim_middle+ylim_half*1.2)
                 axs[idx_list_list, beamline_idx].xaxis.set_major_locator(
                         plt.NullLocator()
                 )
@@ -135,9 +117,14 @@ class Plot:
                 )
                 axs[idx_list_list, beamline_idx].set_xticks(xlim)
                 axs[idx_list_list, beamline_idx].set_yticks(ylim)
+                axs[idx_list_list, beamline_idx].xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+                axs[idx_list_list, beamline_idx].yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
                 axs[idx_list_list, beamline_idx].set_aspect("equal")
                 axs[idx_list_list, beamline_idx].tick_params(axis='both', length=0.)
                 axs[idx_list_list, beamline_idx].grid(linestyle = "dashed", alpha = 0.5)
+                axs[idx_list_list, beamline_idx].scatter(
+                    element[0, :, 0], element[0, :, 1], s=1.0, alpha=0.5, linewidths=0.4
+                )
 
             axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list])
         if len(tensor_list_list[0]) > 1:
