@@ -187,6 +187,28 @@ class RayOptimizer:
             return sqrt(mse / counter)
         else:
             return 0
+        
+    @staticmethod
+    def single_parameters_rmse(
+        parameters_a: RayParameterContainer,
+        parameters_b: RayParameterContainer,
+        search_space: RayParameterContainer,
+    ):
+        output_dict = {}
+        normalized_parameters_a: RayParameterContainer = (
+            Plot.normalize_parameters(parameters_a, search_space)
+        )
+        normalized_parameters_b: RayParameterContainer = (
+            Plot.normalize_parameters(parameters_b, search_space)
+        )
+        for key in search_space.keys():
+            if key in normalized_parameters_b.keys() and key in normalized_parameters_a:
+                mse = (
+                    normalized_parameters_a[key].get_value()
+                    - normalized_parameters_b[key].get_value()
+                ) ** 2
+            output_dict["params_rmse/"+key] = sqrt(mse)
+        return output_dict
 
     @staticmethod
     def parameters_list_rmse(
@@ -496,6 +518,12 @@ class RayOptimizer:
                     sample.params,
                     target.search_space,
                 )
+                single_params_rmse = RayOptimizer.single_parameters_rmse(
+                    target.target_params,
+                    sample.params,
+                    target.search_space
+                )
+                log_dict = {**log_dict, **single_params_rmse}
             if sample.epoch % plot_interval == 0 and sample.epoch != 0:
                 plots = RayOptimizer.plot(target, exported_plane, plot_interval_best)
             else:
