@@ -146,27 +146,44 @@ class Plot:
             omit_labels = []
         fig, ax = plt.subplots(1, 1, figsize=(16, 9))
         ax.set_ylim([-0.5, 0.5])
+        normalized_predicted_params = [
+            param.get_value() - 0.5
+            for param in Plot.normalize_parameters(
+                predicted_params, search_space
+            ).values()
+        ]
         if real_params is not None:
-            ax.stem(
+            normalized_real_params = [
+                param.get_value() - 0.5
+                for param in Plot.normalize_parameters(
+                    real_params, search_space
+                ).values()
+            ]
+            len_params = len(normalized_real_params)
+            ax2 = ax.twinx()
+            ax2.set_ylim([0, 1])
+            ax2.bar(
+                [i for i in range(len_params)],
                 [
-                    param.get_value() - 0.5
-                        for param in Plot.normalize_parameters(
-                        real_params, search_space
-                    ).values()
+                    abs(normalized_real_params[i] - normalized_predicted_params[i])
+                    for i in range(len_params)
                 ],
+                color="tab:red",
+                alpha=0.2,
+                label="Difference"
+            )
+            ax2.set_ylabel('Difference', color='#d6272880')
+            ax2.tick_params(axis='y', labelcolor='#d6272880', color='#d6272880')
+            ax.stem(
+                normalized_real_params,
                 label="Real Parameters",
             )
-        ax.stem(
-            [
-                param.get_value() - 0.5
-                    for param in Plot.normalize_parameters(
-                    predicted_params, search_space
-                ).values()
-            ],
-            linefmt="g",
+            ax.stem(
+            normalized_predicted_params,
+            linefmt="orange",
             markerfmt="o",
             label="Predicted Parameters",
-        )
+            )
         param_labels = [
             param_key
             for param_key, _ in predicted_params.items()
@@ -174,9 +191,9 @@ class Plot:
         ]
         ax.set_xticks(range(len(param_labels)))
         ax.set_xticklabels(param_labels, rotation=90)
-        ax.legend()
+        fig.legend()
         plt.subplots_adjust(bottom=0.3)
-        ax.set_xlabel('Parameter')
-        ax.set_ylabel('Normalized Compensation')
+        ax.set_xlabel("Parameter")
+        ax.set_ylabel("Normalized Compensation")
         fig.suptitle("Epoch " + str(epoch))
         return fig
