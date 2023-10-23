@@ -23,6 +23,10 @@ class LoggingBackend(metaclass=ABCMeta):
         self._log()
         self.empty_log()
 
+    @abstractmethod 
+    def log_config(self, config: Dict):
+        pass
+
     @abstractmethod
     def _log(self):
         pass
@@ -50,4 +54,6 @@ class WandbLoggingBackend(LoggingBackend):
     @staticmethod
     def image(image: Figure):
         return wandb.Image(image)
+    def log_config(self, config: Dict):
+        self.handle.config.update(config)
 
