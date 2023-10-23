@@ -346,8 +346,8 @@ class Plot:
     def switch_lims_if_out_of_lim(torch_list, lims_x, lims_y):
         if Plot.is_out_of_lim(torch_list, lims_x, 0):
             mean_x = Plot.mean(torch_list, 0)
-            lims_x = (lims_x[0]+mean_x, lims_x[1]+mean_x)
+            lims_x = (mean_x-(lims_x[1]-lims_x[0])/2, mean_x+(lims_x[1]-lims_x[0])/2)
         if Plot.is_out_of_lim(torch_list, lims_y, 1):
             mean_y = Plot.mean(torch_list, 1)
-            lims_y = (lims_y[0]+mean_y, lims_y[1]+mean_y)
+            lims_y = (mean_y-(lims_y[1]-lims_y[0])/2, mean_y+(lims_y[1]-lims_y[0])/2)
         return lims_x, lims_y
