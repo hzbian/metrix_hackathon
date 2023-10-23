@@ -564,19 +564,20 @@ class RayOptimizer:
             )
 
         best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
-        target_perturbed_parameters_rays_list = ray_output_to_tensor(
+        target_observed_rays_list = ray_output_to_tensor(
             target.observed_rays, exported_plane, to_cpu=True
         )
-        target_initial_parameters_rays_list = ray_output_to_tensor(
+        target_uncompensated_rays_list = ray_output_to_tensor(
             target.uncompensated_rays, exported_plane, to_cpu=True
         )
+        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2, 2), lims_y=(-2, 2))
         fixed_position_plot = Plot.fixed_position_plot(
             best_rays_list,
-            target_perturbed_parameters_rays_list,
-            target_initial_parameters_rays_list,
+            target_observed_rays_list,
+            target_uncompensated_rays_list,
             epoch=overall_best.epoch,
-            xlim=[-2, 2],
-            ylim=[-2, 2],
+            xlim=xlim,
+            ylim=ylim,
         )
         output_dict["overall_fixed_position_plot"] = fixed_position_plot
 
