@@ -596,13 +596,14 @@ class RayOptimizer:
             compensated_rays_list = ray_output_to_tensor(
                 compensated_rays_list, exported_plane=exported_plane
             )
+            xlim, ylim = Plot.switch_lims_if_out_of_lim(validation_rays_list, lims_x=(-2, 2), lims_y=(-2, 2))
             validation_fixed_position_plot = Plot.fixed_position_plot(
                 compensated_rays_list,
                 validation_rays_list,
                 validation_parameters_rays_list,
                 epoch=overall_best.epoch,
-                xlim=[-2, 2],
-                ylim=[-2, 2],
+                xlim=xlim,
+                ylim=ylim,
             )
 
             output_dict["validation_fixed_position"] = validation_fixed_position_plot
@@ -644,15 +645,15 @@ class RayOptimizer:
                 ]
             )
         ).item()
-        fixed_position_plot = Plot.fixed_position_plot(
-            [interval_best_rays[max_ray_index]],
-            [
-                ray_output_to_tensor(
+        target_observed_rays_list = [ray_output_to_tensor(
                     target.observed_rays[max_ray_index],
                     exported_plane,
                     to_cpu=True,
-                )
-            ],
+                )]
+        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2, 2), lims_y=(-2, 2))
+        fixed_position_plot = Plot.fixed_position_plot(
+            [interval_best_rays[max_ray_index]],
+            target_observed_rays_list,
             [
                 ray_output_to_tensor(
                     target.uncompensated_rays[max_ray_index],
@@ -661,8 +662,8 @@ class RayOptimizer:
                 )
             ],
             epoch=plot_interval_best.epoch,
-            xlim=[-2, 2],
-            ylim=[-2, 2],
+            xlim=xlim,
+            ylim=ylim,
         )
         output_dict["fixed_position_plot"] = fixed_position_plot
         parameter_comparison_plot = Plot.plot_param_comparison(

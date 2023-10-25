@@ -123,7 +123,12 @@ class Plot:
             figsize=(len(tensor_list_list[0]) * 2, len(tensor_list_list) * 2),
             sharex=True,
             sharey=True,
+            layout="compressed"
         )
+        fig.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0,
+                            wspace=0)
+        engine = fig.get_layout_engine()
+        engine.set(rect=(0.1,0.0,0.8,1.0))
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for idx_list_list in range(len(tensor_list_list)):
             color = colors[idx_list_list % len(colors)]
@@ -175,7 +180,7 @@ class Plot:
                         element[0, :, 0], element[0, :, 1], ax, color=color
                     )
 
-            axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list])
+            axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list], fontsize=12)
             if covariance_ellipse:
                 axs[idx_list_list, 0].yaxis.label.set_color(color)
         if len(tensor_list_list[0]) > 1:
