@@ -17,11 +17,6 @@ param_func:
     enforce_lims_keys:
       - "x_var"
       - "y_var"
-    fixed_parameters:
-      - "correlation_factor"
-      - "y_mean"
-      - "x_var"
-      - "y_var"
 engine:
   _target_: "ray_tools.base.engine.GaussEngine"
   device:
