@@ -56,7 +56,7 @@ engine:
     docker_image: 'ray-ui-service'
     dockerfile_path: 'ray_docker/rayui'
     ray_workdir:
-      _target_: 'sub_projects.ray_optimization.ray_optimization.build_ray_workdir_path'
+      _target_: 'sub_projects.ray_optimization.configuration.build_ray_workdir_path'
       parent_path: '/dev/shm'
     verbose: False
   num_workers: -1
