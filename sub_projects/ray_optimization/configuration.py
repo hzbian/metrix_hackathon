@@ -41,39 +41,37 @@ class TargetConfiguration:
 
 def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = (),
                    output_parameters: List[str] = (), fixed_parameters: List[str] = ()):
-    elements = []
-    for k, v in parameters.items():
-        if hasattr(v, '__getitem__'):
-            if k in output_parameters:
-                typ = RandomOutputParameter
-            else:
-                typ = RandomParameter
-
-            elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
-        else:
-            if k in output_parameters:
-                typ = NumericalOutputParameter
-            else:
-                typ = NumericalParameter
-           
-            elements.append((k, typ(value=v)))
-        
-    elements = OrderedDict(elements)
-    # do not optimize the fixed parameters, set them to the center of interval
-    for key in fixed_parameters:
-        old_param = elements[key]
-        if isinstance(old_param, MutableParameter) and key in fixed_parameters:
-            if key in output_parameters:
-                typ = NumericalOutputParameter
-            else:
-                typ = NumericalParameter
-  
-            elements[key] = typ((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
-
     def output_func():
-        return RayParameterContainer(elements)
+        elements = []
+        for k, v in parameters.items():
+            if hasattr(v, '__getitem__'):
+                if k in output_parameters:
+                    typ = RandomOutputParameter
+                else:
+                    typ = RandomParameter
 
+                elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
+            else:
+                if k in output_parameters:
+                    typ = NumericalOutputParameter
+                else:
+                    typ = NumericalParameter
+               
+                elements.append((k, typ(value=v)))
+            
+        elements = OrderedDict(elements)
+        # do not optimize the fixed parameters, set them to the center of interval
+        for key in fixed_parameters:
+            old_param = elements[key]
+            if isinstance(old_param, MutableParameter) and key in fixed_parameters:
+                if key in output_parameters:
+                    typ = NumericalOutputParameter
+                else:
+                    typ = NumericalParameter
+      
+                elements[key] = typ((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
+
+        return RayParameterContainer(elements)
     return output_func
 
 
