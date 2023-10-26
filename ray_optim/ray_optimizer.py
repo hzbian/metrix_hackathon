@@ -544,7 +544,7 @@ class RayOptimizer:
             else:
                 better_plots = {}
             log_plots = {**plots, **initial_plots, **better_plots}
-            log_plots = {key: logging_backend.image(value) for key, value in log_plots.items()}
+            log_plots = {key: logging_backend.image(key, value) for key, value in log_plots.items()}
             queue.put({**log_dict, **log_plots})
             queue.join()
 
