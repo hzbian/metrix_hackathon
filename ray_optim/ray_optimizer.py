@@ -544,7 +544,7 @@ class RayOptimizer:
             else:
                 better_plots = {}
             log_plots = {**plots, **initial_plots, **better_plots}
-            log_plots = {key: logging_backend.image(key, value) for key, value in log_plots.items()}
+            log_plots = {key: logging_backend.plot_to_image(key, value) for key, value in log_plots.items()}
             queue.put({**log_dict, **log_plots})
             queue.join()
 
@@ -570,7 +570,7 @@ class RayOptimizer:
         target_uncompensated_rays_list = ray_output_to_tensor(
             target.uncompensated_rays, exported_plane, to_cpu=True
         )
-        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2, 2), lims_y=(-2, 2))
+        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
         fixed_position_plot = Plot.fixed_position_plot(
             best_rays_list,
             target_observed_rays_list,
@@ -596,7 +596,7 @@ class RayOptimizer:
             compensated_rays_list = ray_output_to_tensor(
                 compensated_rays_list, exported_plane=exported_plane
             )
-            xlim, ylim = Plot.switch_lims_if_out_of_lim(validation_rays_list, lims_x=(-2, 2), lims_y=(-2, 2))
+            xlim, ylim = Plot.switch_lims_if_out_of_lim(validation_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
             validation_fixed_position_plot = Plot.fixed_position_plot(
                 compensated_rays_list,
                 validation_rays_list,
@@ -617,6 +617,8 @@ class RayOptimizer:
             target_tensor = [target_tensor]
         target_plot = Plot.plot_data(target_tensor)
         output_dict["target_footprint"] = target_plot
+        fancy_plot = Plot.fancy_ray([target_tensor])
+        output_dict["fancy_footprint"] = fancy_plot
         return output_dict
 
     @staticmethod
@@ -626,17 +628,21 @@ class RayOptimizer:
         plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
         output_dict["footprint"] = plot
         if isinstance(target, OffsetTarget):
-            compensation_plot = Plot.compensation_plot(
-                interval_best_rays,
-                ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True),
-                ray_output_to_tensor(
+            observed_rays = ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True)
+            uncompensated_rays = ray_output_to_tensor(
                     target.uncompensated_rays,
                     exported_plane,
                     to_cpu=True,
-                ),
+                )
+            compensation_plot = Plot.compensation_plot(
+                interval_best_rays,
+                observed_rays,
+                uncompensated_rays,
                 epoch=plot_interval_best.epoch,
             )
             output_dict["compensation"] = compensation_plot
+            fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays])
+            output_dict["fancy_ray"] = fancy_ray_plot
         max_ray_index = torch.argmax(
             torch.Tensor(
                 [
@@ -650,7 +656,7 @@ class RayOptimizer:
                     exported_plane,
                     to_cpu=True,
                 )]
-        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2, 2), lims_y=(-2, 2))
+        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
         fixed_position_plot = Plot.fixed_position_plot(
             [interval_best_rays[max_ray_index]],
             target_observed_rays_list,

@@ -33,7 +33,9 @@ class Plot:
         pc_weights = (
             None if pc_weights is None else [v.detach().cpu() for v in pc_weights]
         )
-        fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False, layout="constrained")
+        fig, axs = plt.subplots(
+            len(pc_supp), pc_supp[0].shape[0], squeeze=False, layout="constrained"
+        )
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
                 axs[i, j].scatter(line[:, 0], line[:, 1], s=0.5, alpha=0.5)
@@ -44,7 +46,20 @@ class Plot:
         if len(pc_supp) > 1:
             fig.supylabel("Varying Parameters")
         return fig
+    
+    @staticmethod
+    def fancy_ray(data: List[torch.Tensor]):
+        fig, ax = plt.subplots(len(data), len(data[0]), squeeze=False, figsize=(8,8), subplot_kw=dict(projection='3d'), layout="constrained")
+        for i, row in enumerate(data):
+            for j, column in enumerate(row):
+                zdata = column.flatten(0, 1)[:, 0]
+                ydata = column.flatten(0, 1)[:, 1]
+                xdata = torch.cat([torch.ones_like(column[0, :, 0]) * i for i in range(column.shape[0])])
 
+                ax[0][j].scatter(xdata, ydata, zdata, alpha=0.5, linewidths=0., s=8.0)
+                #ax[i][j].view_init(9, -60) 
+        return fig
+    
     @staticmethod
     def compensation_plot(
         compensated: List[torch.Tensor],
@@ -53,10 +68,10 @@ class Plot:
         epoch: Optional[int] = None,
         covariance_ellipse: bool = True,
     ) -> Figure:
-        xlim_min = min([entry[0, :, 0].min().item() for entry in target])
-        xlim_max = max([entry[0, :, 0].max().item() for entry in target])
-        ylim_min = min([entry[0, :, 1].min().item() for entry in target])
-        ylim_max = max([entry[0, :, 1].max().item() for entry in target])
+        xlim_min = [entry[0, :, 0].min().item() for entry in target]
+        xlim_max = [entry[0, :, 0].max().item() for entry in target]
+        ylim_min = [entry[0, :, 1].min().item() for entry in target]
+        ylim_max = [entry[0, :, 1].max().item() for entry in target]
         xlim = (xlim_min, xlim_max)
         ylim = (ylim_min, ylim_max)
         fig = Plot.fixed_position_plot(
@@ -105,10 +120,39 @@ class Plot:
         return normalized_parameters
 
     @staticmethod
+    def get_lims_per_row(
+        xlim: Tuple[float] | Tuple[List[float]],
+        ylim: Tuple[float] | Tuple[List[float]],
+        row_length: int,
+    ):
+        if isinstance(xlim[0], float):
+            xlim_min = [xlim[0] for _ in range(row_length)]
+            xlim_max = [xlim[1] for _ in range(row_length)]
+        else:
+            xlim_min = xlim[0]
+            xlim_max = xlim[1]
+        if isinstance(ylim[0], float):
+            ylim_min = [ylim[0] for _ in range(row_length)]
+            ylim_max = [ylim[1] for _ in range(row_length)]
+        else:
+            ylim_min = ylim[0]
+            ylim_max = ylim[1]
+        return xlim_min, xlim_max, ylim_min, ylim_max
+
+    @staticmethod
+    def scale_interval(minimum: float, maximum: float, scale: float):
+        interval_half = (maximum - minimum) / 2
+        interval_middle = minimum + interval_half
+        return (
+            interval_middle - interval_half * scale,
+            interval_middle + interval_half * scale,
+        )
+
+    @staticmethod
     def fixed_position_plot_base(
         tensor_list_list: List[List[torch.Tensor]],
-        xlim: Tuple[float],
-        ylim: Tuple[float],
+        xlim: Tuple[float] | Tuple[List[float]],
+        ylim: Tuple[float] | Tuple[List[float]],
         ylabel,
         suptitle: Optional[str] = None,
         covariance_ellipse: bool = True,
@@ -120,34 +164,35 @@ class Plot:
             squeeze=False,
             gridspec_kw={"wspace": 0, "hspace": 0},
             figsize=(len(tensor_list_list[0]) * 2, len(tensor_list_list) * 2),
-            sharex=True,
-            sharey=True,
-            layout="compressed"
+            sharex=False,
+            sharey=False,
+            layout="compressed",
         )
-        fig.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0,
-                            wspace=0)
+        xlim_min, xlim_max, ylim_min, ylim_max = Plot.get_lims_per_row(xlim, ylim, len(tensor_list_list[0]))
+        fig.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
         engine = fig.get_layout_engine()
-        engine.set(rect=(0.1,0.0,0.8,1.0))
+        engine.set(rect=(0.1, 0.0, 0.8, 1.0))
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for idx_list_list in range(len(tensor_list_list)):
             color = colors[idx_list_list % len(colors)]
             for beamline_idx in range(len(tensor_list_list[0])):
                 ax = axs[idx_list_list, beamline_idx]
                 element = tensor_list_list[idx_list_list][beamline_idx]
-                xlim_half = (xlim[1] - xlim[0]) / 2
-                xlim_middle = xlim[0] + xlim_half
                 ax.set_xlim(
-                    xlim_middle - xlim_half * 1.2, xlim_middle + xlim_half * 1.2
+                    Plot.scale_interval(
+                        xlim_min[beamline_idx], xlim_max[beamline_idx], 1.2
+                    )
                 )
-                ylim_half = (ylim[1] - ylim[0]) / 2
-                ylim_middle = ylim[0] + ylim_half
                 ax.set_ylim(
-                    ylim_middle - ylim_half * 1.2, ylim_middle + ylim_half * 1.2
+                    Plot.scale_interval(
+                        ylim_min[beamline_idx], ylim_max[beamline_idx], 1.2
+                    )
                 )
                 ax.xaxis.set_major_locator(plt.NullLocator())
                 ax.yaxis.set_major_locator(plt.NullLocator())
-                ax.set_xticks(xlim)
-                ax.set_yticks(ylim)
+                if isinstance(xlim[0], float):
+                    ax.set_xticks(xlim)
+                    ax.set_yticks(ylim)
                 ax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 ax.set_aspect("equal")
@@ -338,20 +383,39 @@ class Plot:
         ax.set_ylabel("Normalized Compensation")
         fig.suptitle("Epoch " + str(epoch))
         return fig
+
     @staticmethod
-    def is_out_of_lim(torch_list: List[torch.Tensor], lims: Tuple[float], coordinate_idx=0):
-        is_out_of_min = True in [element[:, :, coordinate_idx].mean() < lims[0] for element in torch_list]
-        is_out_of_max = True in [element[:, :, coordinate_idx].mean() > lims[1] for element in torch_list]
+    def is_out_of_lim(
+        torch_list: List[torch.Tensor], lims: Tuple[float], coordinate_idx=0
+    ):
+        is_out_of_min = True in [
+            element[:, :, coordinate_idx].mean() < lims[0] for element in torch_list
+        ]
+        is_out_of_max = True in [
+            element[:, :, coordinate_idx].mean() > lims[1] for element in torch_list
+        ]
         return is_out_of_min | is_out_of_max
+
     @staticmethod
-    def mean(torch_list: List[torch.Tensor], coordinate_idx: int =0):
-        return torch.cat([element[:, :, coordinate_idx] for element in torch_list], dim=1).mean()
+    def mean(torch_list: List[torch.Tensor], coordinate_idx: int = 0):
+        return (
+            torch.cat([element[:, :, coordinate_idx] for element in torch_list], dim=1)
+            .mean()
+            .item()
+        )
+
     @staticmethod
     def switch_lims_if_out_of_lim(torch_list, lims_x, lims_y):
         if Plot.is_out_of_lim(torch_list, lims_x, 0):
             mean_x = Plot.mean(torch_list, 0)
-            lims_x = (mean_x-(lims_x[1]-lims_x[0])/2, mean_x+(lims_x[1]-lims_x[0])/2)
+            lims_x = (
+                mean_x - (lims_x[1] - lims_x[0]) / 2,
+                mean_x + (lims_x[1] - lims_x[0]) / 2,
+            )
         if Plot.is_out_of_lim(torch_list, lims_y, 1):
             mean_y = Plot.mean(torch_list, 1)
-            lims_y = (mean_y-(lims_y[1]-lims_y[0])/2, mean_y+(lims_y[1]-lims_y[0])/2)
+            lims_y = (
+                mean_y - (lims_y[1] - lims_y[0]) / 2,
+                mean_y + (lims_y[1] - lims_y[0]) / 2,
+            )
         return lims_x, lims_y
