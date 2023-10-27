@@ -51,16 +51,17 @@ class WandbLoggingBackend(LoggingBackend):
 
     def _log(self):
         self.handle.log(self.log_dict)
-    @staticmethod
     def image(_, image: Figure):
         return wandb.Image(image)
     def log_config(self, config: Dict):
         self.handle.config.update(config)
 
 class DebugPlotBackend(LoggingBackend):
-    @staticmethod
-    def image(key, figure: Figure):
-        figure.savefig(str(key)+".png")
+    def __init__(self, path: str = 'outputs/'):
+        super().__init__()
+        self.path = path
+    def image(self, key, figure: Figure):
+        figure.savefig(self.path+str(key)+".png")
     def log_config(self, _: Dict):
         pass
     def _log(self):
