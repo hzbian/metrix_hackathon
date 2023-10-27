@@ -7,32 +7,16 @@ import wandb
 
 
 class LoggingBackend(metaclass=ABCMeta):
-    def __init__(self):
-        super().__init__()
-        self.log_dict: Dict[str, Any] = {}
-        self.logged_until_index = 0
-
-    def _add_to_log(self, add_to_log: Dict[str, Any]):
-        self.log_dict = {**self.log_dict, **add_to_log}
-
-    def empty_log(self):
-        self.log_dict = {}
-
+    @abstractmethod
     def log(self, log: Dict[str, Any]):
-        self._add_to_log(log)
-        self._log()
-        self.empty_log()
+        pass
 
     @abstractmethod 
     def log_config(self, config: Dict):
         pass
 
     @abstractmethod
-    def _log(self):
-        pass
-
-    @abstractmethod
-    def image(key: Union[str, int], figure: Figure):
+    def figure_to_image(self, figure: Figure):
         pass
 
 
@@ -49,10 +33,10 @@ class WandbLoggingBackend(LoggingBackend):
             mode="online" if logging else "disabled",
         )
 
-    def _log(self):
-        self.handle.log(self.log_dict)
-    def image(_, image: Figure):
-        return wandb.Image(image)
+    def log(self, log: Dict):
+        self.handle.log(log)
+    def figure_to_image(self, figure: Figure):
+        return wandb.Image(figure)
     def log_config(self, config: Dict):
         self.handle.config.update(config)
 
@@ -60,9 +44,12 @@ class DebugPlotBackend(LoggingBackend):
     def __init__(self, path: str = 'outputs/'):
         super().__init__()
         self.path = path
-    def image(self, key, figure: Figure):
-        figure.savefig(self.path+str(key)+".png")
-    def log_config(self, _: Dict):
+    def figure_to_image(self, figure: Figure):
+        return figure
+    def log(self, log: Dict):
+        for key, value in log.items():
+            if isinstance(value, Figure):
+                value.savefig(self.path+str(key)+".png")
         pass
-    def _log(self):
+    def log_config(self, _: Dict):
         pass
