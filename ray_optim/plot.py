@@ -33,7 +33,7 @@ class Plot:
         pc_weights = (
             None if pc_weights is None else [v.detach().cpu() for v in pc_weights]
         )
-        fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False)
+        fig, axs = plt.subplots(len(pc_supp), pc_supp[0].shape[0], squeeze=False, layout="constrained")
         for i, column in enumerate(pc_supp):
             for j, line in enumerate(column):
                 axs[i, j].scatter(line[:, 0], line[:, 1], s=0.5, alpha=0.5)
@@ -43,7 +43,6 @@ class Plot:
             fig.supxlabel("Shifting in Ray Direction")
         if len(pc_supp) > 1:
             fig.supylabel("Varying Parameters")
-        fig.tight_layout()
         return fig
 
     @staticmethod
