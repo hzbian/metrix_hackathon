@@ -158,14 +158,15 @@ class Plot:
         covariance_ellipse: bool = True,
         draw_all_ellipses_rows: Tuple[int] = (1,),
     ) -> Figure:
+        share_xy = isinstance(xlim[0], float)
         fig, axs = plt.subplots(
             len(tensor_list_list),
             len(tensor_list_list[0]),
             squeeze=False,
             gridspec_kw={"wspace": 0, "hspace": 0},
             figsize=(len(tensor_list_list[0]) * 2, len(tensor_list_list) * 2),
-            sharex=False,
-            sharey=False,
+            sharex=share_xy,
+            sharey=share_xy,
             layout="compressed",
         )
         xlim_min, xlim_max, ylim_min, ylim_max = Plot.get_lims_per_row(xlim, ylim, len(tensor_list_list[0]))
@@ -190,11 +191,17 @@ class Plot:
                 )
                 ax.xaxis.set_major_locator(plt.NullLocator())
                 ax.yaxis.set_major_locator(plt.NullLocator())
-                if isinstance(xlim[0], float):
-                    ax.set_xticks(xlim)
-                    ax.set_yticks(ylim)
                 ax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+                if share_xy:
+                    ax.set_xticks(xlim)
+                    ax.set_yticks(ylim)
+                else:
+                    ax.set_xticks((xlim_min[beamline_idx], xlim_max[beamline_idx]))
+                    ax.set_yticks((ylim_min[beamline_idx], ylim_max[beamline_idx]))
+                    ax.tick_params(axis="y",direction="in", pad=-22, labelcolor="#69696980")
+                    if idx_list_list != len(tensor_list_list)-1:
+                        ax.set_xticklabels([])
                 ax.set_aspect("equal")
                 ax.tick_params(axis="both", length=0.0)
                 ax.grid(linestyle="dashed", alpha=0.5)
