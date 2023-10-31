@@ -1,5 +1,5 @@
 import os
-from typing import Optional, List
+from typing import Dict, Optional, List
 
 import hydra
 from hydra.utils import instantiate
@@ -19,6 +19,7 @@ from ray_tools.base.parameter import (
     RayParameter,
     RandomParameter,
 )
+from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 
 class RayOptimization:
@@ -39,92 +40,150 @@ class RayOptimization:
         self.logging_backend: LoggingBackend = logging_backend
         self.logging: bool = logging
         self.z_layers: List[float] = target_configuration.z_layers
-        self.all_params = self.target_configuration.param_func()
-        if self.real_data_configuration is None:
-            target_offset = offset_search_space(
-                self.all_params,
-                self.target_configuration.max_target_deviation,
-                self.rg,
-                None,
-            )
-            uncompensated_parameters = [
-                self.target_configuration.param_func()
-                for _ in range(self.target_configuration.num_beamline_samples)
-            ]
-            compensated_parameters: list[RayParameterContainer[str, RayParameter]] = [
-                v.clone() for v in uncompensated_parameters
-            ]
-            for configuration in compensated_parameters:
-                configuration.perturb(target_offset)
-            compensated_transforms = RayOptimizer.translate_exported_plain_transforms(
-                self.target_configuration.exported_plane,
-                compensated_parameters,
-                self.target_configuration.transforms,
-            )
-            observed_rays = self.target_configuration.engine.run(
-                compensated_parameters, transforms=compensated_transforms
-            )
-            uncompensated_validation_parameters = None
-            observed_validation_rays = None
-        else:
-            observed_rays = import_data(
-                self.real_data_configuration.path,
-                self.real_data_configuration.train_set,
-                self.z_layers,
-                self.target_configuration.param_func(),
-                check_value_lims=True,
-            )
-            uncompensated_parameters = [
-                element["param_container_dict"] for element in observed_rays
-            ]
-            target_offset = None
-            observed_validation_rays = import_data(
-                self.real_data_configuration.path,
-                self.real_data_configuration.validation_set,
-                self.z_layers,
-                self.target_configuration.param_func(),
-                check_value_lims=False,
-            )
-            uncompensated_validation_parameters = [
-                element["param_container_dict"] for element in observed_validation_rays
-            ]
+        self.ray_parameter_container: RayParameterContainer = (
+            self.target_configuration.param_func()
+        )
 
+    def create_target_compensation(self):
+        target_offset = offset_search_space(
+            self.ray_parameter_container,
+            self.target_configuration.max_target_deviation,
+            self.rg,
+            None,
+        )
+        return target_offset
+
+    def create_uncompensated_parameters(self):
+        uncompensated_parameters = [
+            self.target_configuration.param_func()
+            for _ in range(self.target_configuration.num_beamline_samples)
+        ]
+        return uncompensated_parameters
+
+    def create_compensated_parameters(self, uncompensated_parameters, target_offset):
+        compensated_parameters = [v.clone() for v in uncompensated_parameters]
+        for configuration in compensated_parameters:
+            configuration.perturb(target_offset)
+        return compensated_parameters
+
+    def create_compensated_transforms(self, compensated_parameters):
+        compensated_transforms = RayOptimizer.translate_exported_plain_transforms(
+            self.target_configuration.exported_plane,
+            compensated_parameters,
+            self.target_configuration.transforms,
+        )
+        return compensated_transforms
+
+    def create_observed_rays(self, uncompensated_parameters, target_compensation):
+        compensated_parameters: List[
+            RayParameterContainer[str, RayParameter]
+        ] = self.create_compensated_parameters(
+            uncompensated_parameters, target_compensation
+        )
+        compensated_transforms = self.create_compensated_transforms()
+        observed_rays = self.target_configuration.engine.run(
+            compensated_parameters, transforms=compensated_transforms
+        )
+        return observed_rays
+
+    def create_offset_search_space(self):
+        return offset_search_space(
+            self.ray_parameter_container,
+            self.target_configuration.max_offset_search_deviation,
+            self.rg,
+        )
+
+    def create_initial_transforms(self, uncompensated_parameters):
         initial_transforms = RayOptimizer.translate_exported_plain_transforms(
             self.target_configuration.exported_plane,
             uncompensated_parameters,
             self.target_configuration.transforms,
         )
+        return initial_transforms
+
+    def create_uncompensated_rays(self, uncompensated_parameters):
         uncompensated_rays = self.target_configuration.engine.run(
-            uncompensated_parameters, transforms=initial_transforms
+            uncompensated_parameters,
+            transforms=self.create_initial_transforms(uncompensated_parameters),
+        )
+        return uncompensated_rays
+
+    def create_simulated_target(self):
+        target_compensation = self.create_target_compensation()
+        uncompensated_parameters = self.create_uncompensated_parameters()
+        observed_rays = self.create_observed_rays(
+            uncompensated_parameters, target_compensation
+        )
+        return OffsetTarget(
+            observed_rays=observed_rays,
+            offset_search_space=self.create_offset_search_space(),
+            uncompensated_parameters=uncompensated_parameters,
+            uncompensated_rays=self.create_uncompensated_rays(),
+            target_compensation=target_compensation,
         )
 
-        if self.real_data_configuration is not None:
-            validation_parameters_rays = self.target_configuration.engine.run(
-                uncompensated_validation_parameters, transforms=initial_transforms
-            )
-            validation_scan = RayScan(
-                uncompensated_parameters=uncompensated_validation_parameters,
-                uncompensated_rays=validation_parameters_rays,
-                observed_rays=observed_validation_rays,
-            )
-        else:
-            validation_scan = None
+    def import_set(self, validation_set: bool = False):
+        import_set = (
+            self.real_data_configuration.train_set
+            if not validation_set
+            else self.real_data_configuration.validation.set
+        )
+        return import_data(
+            self.real_data_configuration.path,
+            import_set,
+            self.z_layers,
+            self.target_configuration.param_func(),
+            check_value_lims=validation_set,
+        )
 
-        self.target = OffsetTarget(
+    def prune_param_container(container_list):
+        return [element["param_container_dict"] for element in container_list]
+
+    def create_real_target(self):
+        observed_rays = self.import_set(validation_set=False)
+        uncompensated_parameters = RayOptimization.prune_param_container(observed_rays)
+        observed_validation_rays = self.import_set(validation_set=True)
+        uncompensated_validation_parameters = RayOptimization.prune_param_container(
+            observed_validation_rays
+        )
+
+        validation_parameters_rays = self.target_configuration.engine.run(
+            uncompensated_validation_parameters,
+            transforms=self.create_initial_transforms(uncompensated_parameters),
+        )
+        validation_scan = RayScan(
+            uncompensated_parameters=uncompensated_validation_parameters,
+            uncompensated_rays=validation_parameters_rays,
+            observed_rays=observed_validation_rays,
+        )
+
+        return OffsetTarget(
             observed_rays=observed_rays,
-            offset_search_space=offset_search_space(
-                self.all_params,
-                self.target_configuration.max_offset_search_deviation,
-                self.rg,
-            ),
+            offset_search_space=self.create_offset_search_space(),
             uncompensated_parameters=uncompensated_parameters,
-            uncompensated_rays=uncompensated_rays,
-            target_compensation=target_offset,
+            uncompensated_rays=self.create_uncompensated_rays(),
             validation_scan=validation_scan,
         )
 
+    def setup_target(self):
+        if self.real_data_configuration is None:
+            self.target = self.create_simulated_target()
+        else:
+            self.target = self.create_real_target()
+
     def optimize(self):
-        self.ray_optimizer.optimize(target=self.target)
+        try:
+            if self.is_output_ray_list_empty(self.target.observed_rays):
+                raise Exception("Refusing to optimize an empty target.")
+            self.ray_optimizer.optimize(target=self.target)
+        except NameError:
+            raise Exception("You need to run setup_target() first.")
+
+    def is_output_ray_list_empty(self, input: List[Dict]) -> bool:
+        input = ray_output_to_tensor(
+            input, exported_plane=self.target_configuration.exported_plane
+        )
+        return not True in [len(entry.reshape(-1)) != 0 for entry in input]
 
 
 # Bayesian Optimization
@@ -167,6 +226,7 @@ def optimization(cfg):
     ray_optimization.logging_backend.log_config(
         OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     )
+    ray_optimization.setup_target()
     ray_optimization.optimize()
 
 
