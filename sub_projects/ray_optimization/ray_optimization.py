@@ -80,7 +80,7 @@ class RayOptimization:
         ] = self.create_compensated_parameters(
             uncompensated_parameters, target_compensation
         )
-        compensated_transforms = self.create_compensated_transforms()
+        compensated_transforms = self.create_compensated_transforms(compensated_parameters)
         observed_rays = self.target_configuration.engine.run(
             compensated_parameters, transforms=compensated_transforms
         )
@@ -118,7 +118,7 @@ class RayOptimization:
             observed_rays=observed_rays,
             offset_search_space=self.create_offset_search_space(),
             uncompensated_parameters=uncompensated_parameters,
-            uncompensated_rays=self.create_uncompensated_rays(),
+            uncompensated_rays=self.create_uncompensated_rays(uncompensated_parameters),
             target_compensation=target_compensation,
         )
 
