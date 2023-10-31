@@ -55,20 +55,18 @@ class Target:
 class OffsetTarget(Target):
     def __init__(
         self,
-        observed_rays: Union[dict, Iterable[dict], List[dict]],
+        training_scan: RayScan,
         offset_search_space: RayParameterContainer,
-        uncompensated_parameters: List[RayParameterContainer],
-        uncompensated_rays: Union[dict, Iterable[dict], List[dict]],
         target_compensation: Optional[RayParameterContainer] = None,
         validation_scan: Optional[RayScan] = None,
     ):
-        super().__init__(observed_rays, offset_search_space, target_compensation)
+        super().__init__(training_scan.observed_rays, offset_search_space, target_compensation)
         self.uncompensated_parameters: List[
             RayParameterContainer
-        ] = uncompensated_parameters
+        ] = training_scan.uncompensated_parameters
         self.uncompensated_rays: Union[
             dict, Iterable[dict], List[dict]
-        ] = uncompensated_rays
+        ] = training_scan.uncompensated_rays
         self.validation_scan: Optional[RayScan] = validation_scan
 
 

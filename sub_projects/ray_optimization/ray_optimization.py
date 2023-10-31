@@ -80,7 +80,9 @@ class RayOptimization:
         ] = self.create_compensated_parameters(
             uncompensated_parameters, target_compensation
         )
-        compensated_transforms = self.create_compensated_transforms(compensated_parameters)
+        compensated_transforms = self.create_compensated_transforms(
+            compensated_parameters
+        )
         observed_rays = self.target_configuration.engine.run(
             compensated_parameters, transforms=compensated_transforms
         )
@@ -111,14 +113,16 @@ class RayOptimization:
     def create_simulated_target(self):
         target_compensation = self.create_target_compensation()
         uncompensated_parameters = self.create_uncompensated_parameters()
-        observed_rays = self.create_observed_rays(
-            uncompensated_parameters, target_compensation
+        training_scan = RayScan(
+            uncompensated_rays=self.create_uncompensated_rays(uncompensated_parameters),
+            uncompensated_parameters=uncompensated_parameters,
+            observed_rays=self.create_observed_rays(
+                uncompensated_parameters, target_compensation
+            ),
         )
         return OffsetTarget(
-            observed_rays=observed_rays,
+            training_scan=training_scan,
             offset_search_space=self.create_offset_search_space(),
-            uncompensated_parameters=uncompensated_parameters,
-            uncompensated_rays=self.create_uncompensated_rays(uncompensated_parameters),
             target_compensation=target_compensation,
         )
 
@@ -142,6 +146,13 @@ class RayOptimization:
     def create_real_target(self):
         observed_rays = self.import_set(validation_set=False)
         uncompensated_parameters = RayOptimization.prune_param_container(observed_rays)
+
+        training_scan = RayScan(
+            uncompensated_parameters=uncompensated_parameters,
+            uncompensated_rays=self.create_uncompensated_rays(),
+            observed_rays=observed_rays,
+        )
+
         observed_validation_rays = self.import_set(validation_set=True)
         uncompensated_validation_parameters = RayOptimization.prune_param_container(
             observed_validation_rays
@@ -158,10 +169,8 @@ class RayOptimization:
         )
 
         return OffsetTarget(
-            observed_rays=observed_rays,
+            training_scan=training_scan,
             offset_search_space=self.create_offset_search_space(),
-            uncompensated_parameters=uncompensated_parameters,
-            uncompensated_rays=self.create_uncompensated_rays(),
             validation_scan=validation_scan,
         )
 
