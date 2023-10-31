@@ -59,7 +59,17 @@ class Plot:
                 ax[0][j].scatter(xdata, ydata, zdata, alpha=0.5, linewidths=0., s=8.0)
                 #ax[i][j].view_init(9, -60) 
         return fig
-    
+    @staticmethod
+    def get_lims_per_entry(tensor_list: List[torch.Tensor], lims_if_empty: Tuple[float], index: int = 0, minimum=True):
+        lim_list = []
+        for entry in tensor_list:
+            selected_entry = entry[0, :, index]
+            if len(selected_entry) != 0:
+                append_lim = selected_entry.min().item() if minimum else selected_entry.max().item()
+            else:
+                append_lim = lims_if_empty[0] if minimum else selected_entry.max().item()
+            lim_list.append(append_lim)
+        return lim_list
     @staticmethod
     def compensation_plot(
         compensated: List[torch.Tensor],
@@ -67,11 +77,12 @@ class Plot:
         without_compensation: List[torch.Tensor],
         epoch: Optional[int] = None,
         covariance_ellipse: bool = True,
+        lims_if_empty: Tuple[float] = (-2, 2)
     ) -> Figure:
-        xlim_min = [entry[0, :, 0].min().item() for entry in target]
-        xlim_max = [entry[0, :, 0].max().item() for entry in target]
-        ylim_min = [entry[0, :, 1].min().item() for entry in target]
-        ylim_max = [entry[0, :, 1].max().item() for entry in target]
+        xlim_min = Plot.get_lims_per_entry(target, lims_if_empty, 0, True) 
+        xlim_max = Plot.get_lims_per_entry(target, lims_if_empty, 0, False) 
+        ylim_min = Plot.get_lims_per_entry(target, lims_if_empty, 1, True) 
+        ylim_max = Plot.get_lims_per_entry(target, lims_if_empty, 1, False) 
         xlim = (xlim_min, xlim_max)
         ylim = (ylim_min, ylim_max)
         fig = Plot.fixed_position_plot(
