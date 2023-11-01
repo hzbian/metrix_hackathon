@@ -44,14 +44,38 @@ class RayOptimization:
             self.target_configuration.param_func()
         )
 
+    @staticmethod
+    def compensation_search_space(
+        input_parameter_container: RayParameterContainer,
+        max_deviation: float,
+        rg: RandomGenerator,
+        overwrite_offset: Optional[RayParameterContainer] = None,
+    ):
+        ray_parameters = []
+        for k, v in input_parameter_container.items():
+            if not isinstance(v, RandomParameter):
+                continue  # Numerical parameters do not need offset search
+            if overwrite_offset is not None and k in overwrite_offset:
+                ray_parameter = (k, overwrite_offset[k].clone())
+            else:
+                new_min = -max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
+                if v.enforce_lims and new_min < v.value_lims[0]:
+                    new_min = v.value_lims[0]
+                new_max = max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
+                if v.enforce_lims and new_max > v.value_lims[1]:
+                    new_max = v.value_lims[1]
+                ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=rg))
+            ray_parameters.append(ray_parameter)
+        return RayParameterContainer(ray_parameters)
+
     def create_target_compensation(self):
-        target_offset = offset_search_space(
+        target_compensation = self.compensation_search_space(
             self.ray_parameter_container,
             self.target_configuration.max_target_deviation,
             self.rg,
             None,
         )
-        return target_offset
+        return target_compensation
 
     def create_uncompensated_parameters(self):
         uncompensated_parameters = [
@@ -60,10 +84,10 @@ class RayOptimization:
         ]
         return uncompensated_parameters
 
-    def create_compensated_parameters(self, uncompensated_parameters, target_offset):
+    def create_compensated_parameters(self, uncompensated_parameters, target_compensation):
         compensated_parameters = [v.clone() for v in uncompensated_parameters]
         for configuration in compensated_parameters:
-            configuration.perturb(target_offset)
+            configuration.perturb(target_compensation)
         return compensated_parameters
 
     def create_compensated_transforms(self, compensated_parameters):
@@ -89,7 +113,7 @@ class RayOptimization:
         return observed_rays
 
     def create_offset_search_space(self):
-        return offset_search_space(
+        return self.compensation_search_space(
             self.ray_parameter_container,
             self.target_configuration.max_offset_search_deviation,
             self.rg,
@@ -201,28 +225,6 @@ class RayOptimization:
 # optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
 
 
-def offset_search_space(
-    input_parameter_container: RayParameterContainer,
-    max_deviation: float,
-    rg: RandomGenerator,
-    overwrite_offset: Optional[RayParameterContainer] = None,
-):
-    ray_parameters = []
-    for k, v in input_parameter_container.items():
-        if not isinstance(v, RandomParameter):
-            continue  # Numerical parameters do not need offset search
-        if overwrite_offset is not None and k in overwrite_offset:
-            ray_parameter = (k, overwrite_offset[k].clone())
-        else:
-            new_min = -max_deviation * (v.value_lims[1] - v.value_lims[0])
-            if v.enforce_lims and new_min < v.value_lims[0]:
-                new_min = v.value_lims[0]
-            new_max = max_deviation * (v.value_lims[1] - v.value_lims[0])
-            if v.enforce_lims and new_max > v.value_lims[1]:
-                new_max = v.value_lims[1]
-            ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=rg))
-        ray_parameters.append(ray_parameter)
-    return RayParameterContainer(ray_parameters)
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"

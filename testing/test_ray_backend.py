@@ -23,11 +23,12 @@ class RayBackendTest(unittest.TestCase):
             'hist': Histogram(n_bins=1024),
 
         })
-        self.engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+        self.engine = RayEngine(rml_basefile='rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
                                 exported_planes=self.exported_planes,
                                 ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                                   docker_container_name='ray-ui-service-test',
-                                                                  ray_workdir='../../ray_workdir',
+                                                                  dockerfile_path='ray_docker/rayui',
+                                                                  ray_workdir='/dev/shm/ray-workdir',
                                                                   verbose=True),
                                 num_workers=-1,
                                 as_generator=False)

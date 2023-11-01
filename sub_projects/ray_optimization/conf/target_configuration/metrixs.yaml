@@ -57,7 +57,7 @@ engine:
     dockerfile_path: 'ray_docker/rayui'
     ray_workdir:
       _target_: 'sub_projects.ray_optimization.configuration.build_ray_workdir_path'
-      parent_path: '/dev/shm'
+      parent_path: '/dev/shm/ray_workdir'
     verbose: False
   num_workers: -1
 num_beamline_samples: 22

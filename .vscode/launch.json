@@ -13,7 +13,7 @@
             "args": [
                 "logging_backend=",
                 "+logging_backend._target_=ray_optim.logging.DebugPlotBackend",
-                "target_configuration=gauss"
+                "target_configuration=metrixs_six"
             ],
         }
     ]
