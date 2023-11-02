@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import os
 from typing import Any, Dict, Union
 from matplotlib.figure import Figure
-
+import plotly.graph_objects as go
 import wandb
 
 
@@ -50,6 +50,8 @@ class DebugPlotBackend(LoggingBackend):
         for key, value in log.items():
             if isinstance(value, Figure):
                 value.savefig(self.path+str(key)+".png")
+            if isinstance(value, go.Figure):
+                value.write_html(self.path+str(key)+".html")
         pass
     def log_config(self, _: Dict):
         pass
