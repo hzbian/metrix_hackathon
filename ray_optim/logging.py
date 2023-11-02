@@ -35,8 +35,11 @@ class WandbLoggingBackend(LoggingBackend):
 
     def log(self, log: Dict):
         self.handle.log(log)
-    def figure_to_image(self, figure: Figure):
-        return wandb.Image(figure)
+    def figure_to_image(self, figure: Figure | go.Figure):
+        if isinstance(figure, Figure):
+            return wandb.Image(figure)
+        else:
+            return figure
     def log_config(self, config: Dict):
         self.handle.config.update(config)
 
