@@ -9,8 +9,7 @@ from ray_tools.base.utils import RandomGenerator
 
 class RayBackendTest(unittest.TestCase):
 
-    def __init__(self, *args, **kwargs):
-        super(RayBackendTest, self).__init__(*args, **kwargs)
+    def setUp(self):
         self.exported_planes = ["ImagePlane"]
         self.n_rays = 100
 
