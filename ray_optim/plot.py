@@ -5,6 +5,7 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+import plotly.graph_objects as go
 import numpy as np
 import torch
 
@@ -48,17 +49,58 @@ class Plot:
         return fig
     
     @staticmethod
-    def fancy_ray(data: List[torch.Tensor]):
-        fig, ax = plt.subplots(len(data), len(data[0]), squeeze=False, figsize=(8,8), subplot_kw=dict(projection='3d'), layout="constrained")
-        for i, row in enumerate(data):
-            for j, column in enumerate(row):
-                zdata = column.flatten(0, 1)[:, 0]
-                ydata = column.flatten(0, 1)[:, 1]
-                xdata = torch.cat([torch.ones_like(column[0, :, 0]) * i for i in range(column.shape[0])])
+    def get_scatter_xyz(ray_tensor: torch.Tensor):
+        y = ray_tensor.flatten(0, 1)[:, 0]
+        z = ray_tensor.flatten(0, 1)[:, 1]
+        x = torch.cat(
+            [torch.ones_like(ray_tensor[0, :, 0]) * i for i in range(ray_tensor.shape[0])]
+        )
+        return x, y, z
 
-                ax[0][j].scatter(xdata, ydata, zdata, alpha=0.5, linewidths=0., s=8.0)
-                #ax[i][j].view_init(9, -60) 
+    @staticmethod
+    def fancy_ray(data: List[torch.Tensor], labels: Optional[List[str]] = None):
+        colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        fig = go.Figure()
+
+        for sample_idx, _ in enumerate(data[0]):
+            for i, list_entry in enumerate(data):
+                x, y, z = Plot.get_scatter_xyz(list_entry[sample_idx])
+                name = labels[i] if labels is not None else None
+                trace = dict(
+                    type="scatter3d",
+                    x=x,
+                    y=y,
+                    z=z,
+                    name=name,
+                    mode="markers",
+                    legendgroup="group" + str(i),
+                    showlegend=sample_idx == 0,
+                    line=dict(color=colors[i % len(colors)]),
+                    opacity=0.3,
+                    visible=sample_idx == 0,
+                )
+                fig.add_trace(trace)
+
+        steps = []
+        for i in range(0, len(fig.data), len(data)):
+            step = dict(
+                method="update",
+                args=[
+                    {"visible": [False] * len(fig.data)},
+                    {"title": "Sample: " + str(i // len(data))},
+                ],
+            )
+            for j in range(i, i + len(data)):
+                step["args"][0]["visible"][j] = True
+            steps.append(step)
+
+        sliders = [dict(active=0, steps=steps)]
+
+        fig.update_layout(sliders=sliders)
+        fig.update_traces(marker_size=2)
         return fig
+
+
     @staticmethod
     def get_lims_per_entry(tensor_list: List[torch.Tensor], lims_if_empty: Tuple[float], index: int = 0, minimum=True):
         lim_list = []

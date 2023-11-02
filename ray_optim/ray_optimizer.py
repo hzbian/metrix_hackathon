@@ -613,8 +613,8 @@ class RayOptimizer:
         target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
-        target_plot = Plot.plot_data(target_tensor)
-        output_dict["target_footprint"] = target_plot
+        #target_plot = Plot.plot_data(target_tensor)
+        #output_dict["target_footprint"] = target_plot
         fancy_plot = Plot.fancy_ray([target_tensor])
         output_dict["fancy_footprint"] = fancy_plot
         return output_dict
@@ -623,8 +623,8 @@ class RayOptimizer:
     def plot(target: Target, exported_plane: str, plot_interval_best: Sample):
         output_dict = {}
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
-        plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
-        output_dict["footprint"] = plot
+        #plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
+        #output_dict["footprint"] = plot
         if isinstance(target, OffsetTarget):
             observed_rays = ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True)
             uncompensated_rays = ray_output_to_tensor(
@@ -639,7 +639,7 @@ class RayOptimizer:
                 epoch=plot_interval_best.epoch,
             )
             output_dict["compensation"] = compensation_plot
-            fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays])
+            fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"])
             output_dict["fancy_ray"] = fancy_ray_plot
         max_ray_index = torch.argmax(
             torch.Tensor(
