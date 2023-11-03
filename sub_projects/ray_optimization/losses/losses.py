@@ -1,11 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Union, Dict, List, Iterable, Callable
+from typing import Union, Dict, List, Iterable
 
-import ignite
 import torch
-import torchvision
 
-from ray_tools.base.transform import Histogram
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 
