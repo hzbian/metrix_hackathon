@@ -393,10 +393,14 @@ class RayOptimizer:
                 res = q.get(block=False)
                 internal_list.append(res)
                 internal_list = sorted(internal_list, key=itemgetter("epoch"))
+                new_internal_list = []
                 for i in internal_list:
                     if i["epoch"] == push_counter:
                         logging_backend.log(i)
                         push_counter += 1
+                    else:
+                        new_internal_list.append(i)
+                internal_list = new_internal_list
                 q.task_done()
 
     def evaluation_function(
