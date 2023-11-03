@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
@@ -174,8 +174,8 @@ class Plot:
 
     @staticmethod
     def get_lims_per_row(
-        xlim: Tuple[float] | Tuple[List[float]],
-        ylim: Tuple[float] | Tuple[List[float]],
+        xlim: Union[Tuple[float], Tuple[List[float]]],
+        ylim: Union[Tuple[float], Tuple[List[float]]],
         row_length: int,
     ):
         if isinstance(xlim[0], float):
@@ -204,8 +204,8 @@ class Plot:
     @staticmethod
     def fixed_position_plot_base(
         tensor_list_list: List[List[torch.Tensor]],
-        xlim: Tuple[float] | Tuple[List[float]],
-        ylim: Tuple[float] | Tuple[List[float]],
+        xlim: Union[Tuple[float], Tuple[List[float]]],
+        ylim: Union[Tuple[float], Tuple[List[float]]],
         ylabel,
         suptitle: Optional[str] = None,
         covariance_ellipse: bool = True,
