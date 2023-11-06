@@ -118,6 +118,7 @@ class Plot:
         target: List[torch.Tensor],
         without_compensation: List[torch.Tensor],
         epoch: Optional[int] = None,
+        samples_count: int = None,
         covariance_ellipse: bool = True,
         lims_if_empty: Tuple[float] = (-2, 2)
     ) -> Figure:
@@ -134,6 +135,7 @@ class Plot:
             xlim=xlim,
             ylim=ylim,
             epoch=epoch,
+            samples_count=samples_count,
             covariance_ellipse=covariance_ellipse,
         )
         return fig
@@ -145,11 +147,18 @@ class Plot:
         without_compensation: list[torch.Tensor],
         xlim,
         ylim,
+        samples_count = None,
         epoch: Optional[int] = None,
         covariance_ellipse: bool = True,
     ) -> Figure:
         y_label = ["Uncompensated", "Observed", "Compensated"]
         suptitle = "Epoch " + str(epoch) if epoch is not None else None
+        if samples_count is not None:
+            if suptitle is not None:
+                suptitle += ", "
+            else:
+                suptitle = ""
+            suptitle += str(samples_count) + " Samples"               
         return Plot.fixed_position_plot_base(
             [without_compensation, target, compensated],
             xlim,
@@ -385,6 +394,7 @@ class Plot:
         predicted_params: RayParameterContainer,
         search_space: RayParameterContainer,
         epoch: int,
+        samples_count: Optional[int] = None,
         real_params: Optional[RayParameterContainer] = None,
         omit_labels: Optional[List[str]] = None,
     ) -> Figure:
@@ -441,7 +451,10 @@ class Plot:
         plt.subplots_adjust(bottom=0.3)
         ax.set_xlabel("Parameter")
         ax.set_ylabel("Normalized Compensation")
-        fig.suptitle("Epoch " + str(epoch))
+        suptitle = "Epoch " + str(epoch)
+        if samples_count is not None:
+            suptitle += ", " + str(samples_count) + " Samples"
+        fig.suptitle(suptitle)
         return fig
 
     @staticmethod
