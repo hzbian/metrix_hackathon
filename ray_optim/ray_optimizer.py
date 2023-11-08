@@ -578,6 +578,7 @@ class RayOptimizer:
             target_observed_rays_list,
             target_uncompensated_rays_list,
             epoch=overall_best.epoch,
+            training_samples_count=len(target.observed_rays),
             xlim=xlim,
             ylim=ylim,
         )
@@ -604,6 +605,7 @@ class RayOptimizer:
                 validation_rays_list,
                 validation_parameters_rays_list,
                 epoch=overall_best.epoch,
+                training_samples_count=len(target.observed_rays),
                 xlim=xlim,
                 ylim=ylim,
             )
@@ -641,6 +643,7 @@ class RayOptimizer:
                 observed_rays,
                 uncompensated_rays,
                 epoch=plot_interval_best.epoch,
+                training_samples_count=len(target.observed_rays)
             )
             output_dict["compensation"] = compensation_plot
             fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"])
@@ -670,6 +673,7 @@ class RayOptimizer:
                 )
             ],
             epoch=plot_interval_best.epoch,
+            training_samples_count=len(target.observed_rays),
             xlim=xlim,
             ylim=ylim,
         )
@@ -677,6 +681,7 @@ class RayOptimizer:
         parameter_comparison_plot = Plot.plot_param_comparison(
             predicted_params=plot_interval_best.params,
             epoch=plot_interval_best.epoch,
+            training_samples_count=len(target.observed_rays),
             search_space=target.search_space,
             real_params=target.target_params,
         )

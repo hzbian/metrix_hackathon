@@ -118,7 +118,7 @@ class Plot:
         target: List[torch.Tensor],
         without_compensation: List[torch.Tensor],
         epoch: Optional[int] = None,
-        samples_count: int = None,
+        training_samples_count: int = None,
         covariance_ellipse: bool = True,
         lims_if_empty: Tuple[float] = (-2, 2)
     ) -> Figure:
@@ -135,7 +135,7 @@ class Plot:
             xlim=xlim,
             ylim=ylim,
             epoch=epoch,
-            samples_count=samples_count,
+            training_samples_count=training_samples_count,
             covariance_ellipse=covariance_ellipse,
         )
         return fig
@@ -147,18 +147,18 @@ class Plot:
         without_compensation: list[torch.Tensor],
         xlim,
         ylim,
-        samples_count = None,
+        training_samples_count = None,
         epoch: Optional[int] = None,
         covariance_ellipse: bool = True,
     ) -> Figure:
         y_label = ["Uncompensated", "Observed", "Compensated"]
         suptitle = "Epoch " + str(epoch) if epoch is not None else None
-        if samples_count is not None:
+        if training_samples_count is not None:
             if suptitle is not None:
                 suptitle += ", "
             else:
                 suptitle = ""
-            suptitle += str(samples_count) + " Samples"               
+            suptitle += str(training_samples_count) + " Training Samples"               
         return Plot.fixed_position_plot_base(
             [without_compensation, target, compensated],
             xlim,
@@ -394,7 +394,7 @@ class Plot:
         predicted_params: RayParameterContainer,
         search_space: RayParameterContainer,
         epoch: int,
-        samples_count: Optional[int] = None,
+        training_samples_count: Optional[int] = None,
         real_params: Optional[RayParameterContainer] = None,
         omit_labels: Optional[List[str]] = None,
     ) -> Figure:
@@ -452,8 +452,8 @@ class Plot:
         ax.set_xlabel("Parameter")
         ax.set_ylabel("Normalized Compensation")
         suptitle = "Epoch " + str(epoch)
-        if samples_count is not None:
-            suptitle += ", " + str(samples_count) + " Samples"
+        if training_samples_count is not None:
+            suptitle += ", " + str(training_samples_count) + " Training Samples"
         fig.suptitle(suptitle)
         return fig
 
