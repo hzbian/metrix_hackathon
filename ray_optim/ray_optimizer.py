@@ -144,6 +144,7 @@ class RayOptimizer:
         log_times: bool = False,
         plot_interval: int = 10,
         iterations: int = 1000,
+        max_logging_processes: int = 10,
     ):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: Engine = engine
@@ -159,6 +160,9 @@ class RayOptimizer:
         self.plot_interval: int = plot_interval
         self.logger_queue: JoinableQueue = JoinableQueue()
         self.logger_consumer_process: Optional[Process] = None
+        self.max_logging_processes: int = max_logging_processes
+        self.running_logger_processes: List[Process] = []
+        self.waiting_logger_processes: List[Process] = []
 
     @staticmethod
     def parameters_rmse(
@@ -403,6 +407,12 @@ class RayOptimizer:
                 internal_list = new_internal_list
                 q.task_done()
 
+    def check_for_done(l):
+        for i, p in enumerate(l):
+            if not p.is_alive():
+                return True, i
+        return False, -1
+
     def evaluation_function(
         self, compensations: List[RayParameterContainer], target: Target
     ) -> List[Any]:
@@ -471,8 +481,20 @@ class RayOptimizer:
                 "compensations": compensations,
             },
         )
-
+        
         logger_process.start()
+        self.running_logger_processes.append(logger_process)
+        print(len(self.running_logger_processes))
+        if len(self.running_logger_processes) >= self.max_logging_processes:
+            wait = True
+            while wait:
+                done, num = RayOptimizer.check_for_done(self.running_logger_processes)
+
+                if done:
+                    self.running_logger_processes.pop(num)
+                    wait = False
+                else:
+                    time.sleep(0.5) 
 
         for sample in trials:
             if RayOptimizer.is_new_interval(self.plot_interval_best.epoch, sample.epoch, self.plot_interval):
