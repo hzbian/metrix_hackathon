@@ -484,7 +484,6 @@ class RayOptimizer:
         
         logger_process.start()
         self.running_logger_processes.append(logger_process)
-        print(len(self.running_logger_processes))
         if len(self.running_logger_processes) >= self.max_logging_processes:
             wait = True
             while wait:
