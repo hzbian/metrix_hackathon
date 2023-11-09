@@ -472,7 +472,7 @@ class Plot:
     @staticmethod
     def mean(torch_list: List[torch.Tensor], coordinate_idx: int = 0):
         return (
-            torch.cat([element[:, :, coordinate_idx] for element in torch_list], dim=1)
+            torch.stack([element[:, :, coordinate_idx].mean() for element in torch_list])
             .mean()
             .item()
         )
