@@ -144,7 +144,7 @@ class RayOptimizer:
         log_times: bool = False,
         plot_interval: int = 10,
         iterations: int = 1000,
-        max_logging_processes: int = 10,
+        max_logging_processes: int = 20,
     ):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: Engine = engine
@@ -407,8 +407,8 @@ class RayOptimizer:
                 internal_list = new_internal_list
                 q.task_done()
 
-    def check_for_done(l):
-        for i, p in enumerate(l):
+    def check_for_done(process_list: List[Process]):
+        for i, p in enumerate(process_list):
             if not p.is_alive():
                 return True, i
         return False, -1
@@ -481,9 +481,6 @@ class RayOptimizer:
                 "compensations": compensations,
             },
         )
-        
-        logger_process.start()
-        self.running_logger_processes.append(logger_process)
         if len(self.running_logger_processes) >= self.max_logging_processes:
             wait = True
             while wait:
@@ -494,6 +491,16 @@ class RayOptimizer:
                     wait = False
                 else:
                     time.sleep(0.5) 
+        logger_process.start()
+        self.running_logger_processes.append(logger_process)
+        # check if all jobs are complete and wait if not at the end
+        if self.iterations-1 in current_epochs:
+            while len(self.running_logger_processes) != 0:
+                done, num = RayOptimizer.check_for_done(self.running_logger_processes)
+                if done:
+                    self.running_logger_processes.pop(num)
+                else:
+                    time.sleep(0.5)
 
         for sample in trials:
             if RayOptimizer.is_new_interval(self.plot_interval_best.epoch, sample.epoch, self.plot_interval):
