@@ -49,22 +49,24 @@ class Plot:
         return fig
     
     @staticmethod
-    def get_scatter_xyz(ray_tensor: torch.Tensor):
+    def get_scatter_xyz(ray_tensor: torch.Tensor, z_index: Optional[List[float]] = None):
+        if z_index is None:
+            z_index = [i for i in range(ray_tensor.shape[0])]
         y = ray_tensor.flatten(0, 1)[:, 0]
         z = ray_tensor.flatten(0, 1)[:, 1]
         x = torch.cat(
-            [torch.ones_like(ray_tensor[0, :, 0]) * i for i in range(ray_tensor.shape[0])]
+            [torch.ones_like(ray_tensor[0, :, 0]) * z_index[i] for i in range(ray_tensor.shape[0])]
         )
         return x, y, z
 
     @staticmethod
-    def fancy_ray(data: List[torch.Tensor], labels: Optional[List[str]] = None):
+    def fancy_ray(data: List[torch.Tensor], labels: Optional[List[str]] = None, z_index: Optional[List[float]]= None):
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         fig = go.Figure()
 
         for sample_idx, _ in enumerate(data[0]):
             for i, list_entry in enumerate(data):
-                x, y, z = Plot.get_scatter_xyz(list_entry[sample_idx])
+                x, y, z = Plot.get_scatter_xyz(list_entry[sample_idx], z_index)
                 name = labels[i] if labels is not None else None
                 trace = dict(
                     type="scatter3d",
