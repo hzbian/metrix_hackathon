@@ -642,7 +642,8 @@ class RayOptimizer:
             target_tensor = [target_tensor]
         #target_plot = Plot.plot_data(target_tensor)
         #output_dict["target_footprint"] = target_plot
-        fancy_plot = Plot.fancy_ray([target_tensor])
+        z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output']['ImagePlane'].keys()]
+        fancy_plot = Plot.fancy_ray([target_tensor], z_index=z_index)
         output_dict["fancy_footprint"] = fancy_plot
         return output_dict
 
@@ -667,7 +668,8 @@ class RayOptimizer:
                 training_samples_count=len(target.observed_rays)
             )
             output_dict["compensation"] = compensation_plot
-            fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"])
+            z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output']['ImagePlane'].keys()]
+            fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"], z_index=z_index)
             output_dict["fancy_ray"] = fancy_ray_plot
         max_ray_index = torch.argmax(
             torch.Tensor(
