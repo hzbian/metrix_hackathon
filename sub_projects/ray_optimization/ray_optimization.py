@@ -154,14 +154,14 @@ class RayOptimization:
         import_set = (
             self.real_data_configuration.train_set
             if not validation_set
-            else self.real_data_configuration.validation.set
+            else self.real_data_configuration.validation_set
         )
         return import_data(
             self.real_data_configuration.path,
             import_set,
             self.z_layers,
             self.target_configuration.param_func(),
-            check_value_lims=validation_set,
+            check_value_lims=not validation_set,
         )
 
     def prune_param_container(container_list):
@@ -173,7 +173,7 @@ class RayOptimization:
 
         training_scan = RayScan(
             uncompensated_parameters=uncompensated_parameters,
-            uncompensated_rays=self.create_uncompensated_rays(),
+            uncompensated_rays=self.create_uncompensated_rays(uncompensated_parameters),
             observed_rays=observed_rays,
         )
 
