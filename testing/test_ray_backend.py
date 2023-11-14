@@ -1,5 +1,10 @@
 import unittest
 
+import hydra
+import omegaconf
+from hydra.utils import instantiate
+from hydra import initialize, compose
+
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
@@ -76,7 +81,14 @@ class RayBackendTest(unittest.TestCase):
             self.assertTrue('x_lims' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
             self.assertTrue('y_lims' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
             self.assertTrue('histogram' in result[0]['ray_output']['ImagePlane']['ml'][str(dist)].keys())
-
+    
+    def test_with_initialize(self) -> None:
+        with initialize(version_base=None, config_path="../sub_projects/ray_optimization/conf"):
+            # config is relative to a module
+            cfg = compose(config_name="config")
+            print(omegaconf.OmegaConf.to_yaml(cfg))
+            ray_optimization = instantiate(cfg)
+            ray_optimization.setup_target()
 
 if __name__ == '__main__':
     unittest.main()
