@@ -163,7 +163,8 @@ class GaussEngine(Engine):
             if 'correlation_factor' in param_container:
                 correlation_factor = torch.tensor(param_container['correlation_factor'].get_value(), device=self.device)
             else:
-                correlation_factor = 0.
+                correlation_factor = torch.tensor(0., device=self.device)
+
 
             m = torch.distributions.multivariate_normal.MultivariateNormal(torch.tensor([x_mean, y_mean], device=self.device),
                                                                            torch.diag(torch.tensor([x_var, y_var], device=self.device)))
