@@ -19,9 +19,15 @@ class TorchLoss(RayLoss):
         a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
         b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
 
-        new_size = torch.min(torch.tensor(a.shape), torch.tensor(b.shape))
-        a = a[[slice(0, new_size[i]) for i in range(len(new_size))]]
-        b = b[[slice(0, new_size[i]) for i in range(len(new_size))]]
+        # if both are empty, it is a perfect fit
+        if a.nelement() == 0 and b.nelement() == 0:
+            return torch.tensor(0., device=a.device)
+        
+        # if not one of them is empty, cut the larger one
+        if a.nelement() != 0 and b.nelement() !=0:
+            new_size = torch.min(torch.tensor(a.shape), torch.tensor(b.shape))
+            a = a[[slice(0, new_size[i]) for i in range(len(new_size))]]
+            b = b[[slice(0, new_size[i]) for i in range(len(new_size))]]
 
         losses = torch.stack([self.base_fn(element, b[i]) for i, element in enumerate(a)])
         return losses.mean()
