@@ -29,6 +29,10 @@ class TorchLoss(RayLoss):
             a = a[[slice(0, new_size[i]) for i in range(len(new_size))]]
             b = b[[slice(0, new_size[i]) for i in range(len(new_size))]]
 
+        # if one is empty, the other one is not, let us count the rays and take the difference with base function
+        if a.nelement() == 0 or b.nelement() == 0:
+            return torch.tensor(self.base_fn(torch.tensor(a.nelement(), device=a.device).float(), torch.tensor(b.nelement(), device=a.device).float()), device=a.device)
+
         losses = torch.stack([self.base_fn(element, b[i]) for i, element in enumerate(a)])
         return losses.mean()
 
