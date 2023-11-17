@@ -121,7 +121,7 @@ class Plot:
         lim_list = []
         for entry in tensor_list:
             selected_entry = entry[0, :, index]
-            if len(selected_entry) != 0:
+            if selected_entry.numel() != 0:
                 append_lim = (
                     selected_entry.min().item()
                     if minimum
@@ -129,7 +129,7 @@ class Plot:
                 )
             else:
                 append_lim = (
-                    lims_if_empty[0] if minimum else selected_entry.max().item()
+                    lims_if_empty[0] if minimum else lims_if_empty[1]
                 )
             lim_list.append(append_lim)
         return lim_list
@@ -380,6 +380,9 @@ class Plot:
         ----------------
         kwargs : `~matplotlib.patches.Patch` properties
         """
+        if x.numel() == 0 or y.numel() == 0:
+            return
+        
         if x.shape != y.shape:
             raise ValueError("x and y must be the same size")
 
@@ -426,7 +429,7 @@ class Plot:
         )
 
         ellipse.set_transform(transf + ax.transData)
-        return ax.add_patch(ellipse)
+        ax.add_patch(ellipse)
         # render plot with "plt.show()".
 
     @staticmethod
@@ -520,7 +523,7 @@ class Plot:
         )
 
     @staticmethod
-    def switch_lims_if_out_of_lim(torch_list, lims_x, lims_y):
+    def switch_lims_if_out_of_lim(torch_list, lims_x, lims_y, lims_if_empty: Tuple[float]=(0.,1.)):
         if Plot.is_out_of_lim(torch_list, lims_x, 0):
             mean_x = Plot.mean(torch_list, 0)
             lims_x = (
@@ -533,4 +536,6 @@ class Plot:
                 mean_y - (lims_y[1] - lims_y[0]) / 2,
                 mean_y + (lims_y[1] - lims_y[0]) / 2,
             )
+        lims_x = tuple(lim if not math.isnan(lim) else lims_if_empty[i] for i, lim in enumerate(lims_x))
+        lims_y = tuple(lim if not math.isnan(lim) else lims_if_empty[i] for i, lim in enumerate(lims_y))
         return lims_x, lims_y

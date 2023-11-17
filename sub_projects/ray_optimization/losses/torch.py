@@ -35,12 +35,9 @@ class TorchLoss(RayLoss):
 
         # if one is empty, the other one is not, let us count the rays and take the difference with base function
         if a.nelement() == 0 or b.nelement() == 0:
-            return torch.tensor(
-                self.base_fn(
-                    torch.tensor(a.nelement(), device=a.device).float(),
-                    torch.tensor(b.nelement(), device=a.device).float(),
-                ),
-                device=a.device,
+            return self.base_fn(
+                torch.tensor(a.nelement(), device=a.device).float(),
+                torch.tensor(b.nelement(), device=a.device).float(),
             )
 
         losses = torch.stack(
