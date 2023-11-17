@@ -6,7 +6,7 @@ from matplotlib.ticker import FormatStrFormatter
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 import plotly.graph_objects as go
-import numpy as np
+import math
 import torch
 
 from ray_tools.base.parameter import (
@@ -47,20 +47,29 @@ class Plot:
         if len(pc_supp) > 1:
             fig.supylabel("Varying Parameters")
         return fig
-    
+
     @staticmethod
-    def get_scatter_xyz(ray_tensor: torch.Tensor, z_index: Optional[List[float]] = None):
+    def get_scatter_xyz(
+        ray_tensor: torch.Tensor, z_index: Optional[List[float]] = None
+    ):
         if z_index is None:
             z_index = [i for i in range(ray_tensor.shape[0])]
         y = ray_tensor.flatten(0, 1)[:, 0]
         z = ray_tensor.flatten(0, 1)[:, 1]
         x = torch.cat(
-            [torch.ones_like(ray_tensor[0, :, 0]) * z_index[i] for i in range(ray_tensor.shape[0])]
+            [
+                torch.ones_like(ray_tensor[0, :, 0]) * z_index[i]
+                for i in range(ray_tensor.shape[0])
+            ]
         )
         return x, y, z
 
     @staticmethod
-    def fancy_ray(data: List[torch.Tensor], labels: Optional[List[str]] = None, z_index: Optional[List[float]]= None):
+    def fancy_ray(
+        data: List[torch.Tensor],
+        labels: Optional[List[str]] = None,
+        z_index: Optional[List[float]] = None,
+    ):
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         fig = go.Figure()
 
@@ -102,18 +111,29 @@ class Plot:
         fig.update_traces(marker_size=2)
         return fig
 
-
     @staticmethod
-    def get_lims_per_entry(tensor_list: List[torch.Tensor], lims_if_empty: Tuple[float], index: int = 0, minimum=True):
+    def get_lims_per_entry(
+        tensor_list: List[torch.Tensor],
+        lims_if_empty: Tuple[float],
+        index: int = 0,
+        minimum=True,
+    ):
         lim_list = []
         for entry in tensor_list:
             selected_entry = entry[0, :, index]
             if len(selected_entry) != 0:
-                append_lim = selected_entry.min().item() if minimum else selected_entry.max().item()
+                append_lim = (
+                    selected_entry.min().item()
+                    if minimum
+                    else selected_entry.max().item()
+                )
             else:
-                append_lim = lims_if_empty[0] if minimum else selected_entry.max().item()
+                append_lim = (
+                    lims_if_empty[0] if minimum else selected_entry.max().item()
+                )
             lim_list.append(append_lim)
         return lim_list
+
     @staticmethod
     def compensation_plot(
         compensated: List[torch.Tensor],
@@ -122,12 +142,12 @@ class Plot:
         epoch: Optional[int] = None,
         training_samples_count: int = None,
         covariance_ellipse: bool = True,
-        lims_if_empty: Tuple[float] = (-2, 2)
+        lims_if_empty: Tuple[float] = (-2, 2),
     ) -> Figure:
-        xlim_min = Plot.get_lims_per_entry(target, lims_if_empty, 0, True) 
-        xlim_max = Plot.get_lims_per_entry(target, lims_if_empty, 0, False) 
-        ylim_min = Plot.get_lims_per_entry(target, lims_if_empty, 1, True) 
-        ylim_max = Plot.get_lims_per_entry(target, lims_if_empty, 1, False) 
+        xlim_min = Plot.get_lims_per_entry(target, lims_if_empty, 0, True)
+        xlim_max = Plot.get_lims_per_entry(target, lims_if_empty, 0, False)
+        ylim_min = Plot.get_lims_per_entry(target, lims_if_empty, 1, True)
+        ylim_max = Plot.get_lims_per_entry(target, lims_if_empty, 1, False)
         xlim = (xlim_min, xlim_max)
         ylim = (ylim_min, ylim_max)
         fig = Plot.fixed_position_plot(
@@ -149,7 +169,7 @@ class Plot:
         without_compensation: list[torch.Tensor],
         xlim,
         ylim,
-        training_samples_count = None,
+        training_samples_count=None,
         epoch: Optional[int] = None,
         covariance_ellipse: bool = True,
     ) -> Figure:
@@ -160,7 +180,7 @@ class Plot:
                 suptitle += ", "
             else:
                 suptitle = ""
-            suptitle += str(training_samples_count) + " Training Samples"               
+            suptitle += str(training_samples_count) + " Training Samples"
         return Plot.fixed_position_plot_base(
             [without_compensation, target, compensated],
             xlim,
@@ -190,17 +210,31 @@ class Plot:
         row_length: int,
     ):
         if isinstance(xlim[0], float):
-            xlim_min = [xlim[0] for _ in range(row_length)]
-            xlim_max = [xlim[1] for _ in range(row_length)]
+            xlim_min = [
+                xlim[0] if xlim[0] is not math.isnan(xlim[0]) else 0
+                for _ in range(row_length)
+            ]
+            xlim_max = [
+                xlim[1] if xlim[1] is not math.isnan(xlim[1]) else 1
+                for _ in range(row_length)
+            ]
         else:
-            xlim_min = xlim[0]
-            xlim_max = xlim[1]
+            xlim_min = xlim[0] if xlim[0] is not math.isnan(xlim[0]) else 0
+            xlim_max = xlim[1] if xlim[1] is not math.isnan(xlim[1]) else 1
+
         if isinstance(ylim[0], float):
-            ylim_min = [ylim[0] for _ in range(row_length)]
-            ylim_max = [ylim[1] for _ in range(row_length)]
+            ylim_min = [
+                ylim[0] if ylim[0] is not math.isnan(ylim[0]) else 0
+                for _ in range(row_length)
+            ]
+            ylim_max = [
+                ylim[1] if ylim[1] is not math.isnan(ylim[1]) else 1
+                for _ in range(row_length)
+            ]
         else:
-            ylim_min = ylim[0]
-            ylim_max = ylim[1]
+            ylim_min = ylim[0] if ylim[0] is not math.isnan(ylim[0]) else 0
+            ylim_max = ylim[1] if ylim[1] is not math.isnan(ylim[1]) else 1
+
         return xlim_min, xlim_max, ylim_min, ylim_max
 
     @staticmethod
@@ -233,7 +267,9 @@ class Plot:
             sharey=share_xy,
             layout="compressed",
         )
-        xlim_min, xlim_max, ylim_min, ylim_max = Plot.get_lims_per_row(xlim, ylim, len(tensor_list_list[0]))
+        xlim_min, xlim_max, ylim_min, ylim_max = Plot.get_lims_per_row(
+            xlim, ylim, len(tensor_list_list[0])
+        )
         fig.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
         engine = fig.get_layout_engine()
         engine.set(rect=(0.1, 0.0, 0.8, 1.0))
@@ -263,8 +299,10 @@ class Plot:
                 else:
                     ax.set_xticks((xlim_min[beamline_idx], xlim_max[beamline_idx]))
                     ax.set_yticks((ylim_min[beamline_idx], ylim_max[beamline_idx]))
-                    ax.tick_params(axis="y",direction="in", pad=-22, labelcolor="#69696980")
-                    if idx_list_list != len(tensor_list_list)-1:
+                    ax.tick_params(
+                        axis="y", direction="in", pad=-22, labelcolor="#69696980"
+                    )
+                    if idx_list_list != len(tensor_list_list) - 1:
                         ax.set_xticklabels([])
                 ax.set_aspect("equal")
                 ax.tick_params(axis="both", length=0.0)
@@ -474,7 +512,9 @@ class Plot:
     @staticmethod
     def mean(torch_list: List[torch.Tensor], coordinate_idx: int = 0):
         return (
-            torch.stack([element[:, :, coordinate_idx].mean() for element in torch_list])
+            torch.stack(
+                [element[:, :, coordinate_idx].mean() for element in torch_list]
+            )
             .mean()
             .item()
         )

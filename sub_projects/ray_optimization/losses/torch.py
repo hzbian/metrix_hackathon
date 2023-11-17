@@ -14,40 +14,53 @@ class TorchLoss(RayLoss):
     def __init__(self, base_fn: torch.nn.Module):
         self.base_fn: torch.nn.Module = base_fn
 
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
         a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
         b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
 
         # if both are empty, it is a perfect fit
         if a.nelement() == 0 and b.nelement() == 0:
-            return torch.tensor(0., device=a.device)
-        
+            return torch.tensor(0.0, device=a.device)
+
         # if not one of them is empty, cut the larger one
-        if a.nelement() != 0 and b.nelement() !=0:
+        if a.nelement() != 0 and b.nelement() != 0:
             new_size = torch.min(torch.tensor(a.shape), torch.tensor(b.shape))
             a = a[[slice(0, new_size[i]) for i in range(len(new_size))]]
             b = b[[slice(0, new_size[i]) for i in range(len(new_size))]]
 
         # if one is empty, the other one is not, let us count the rays and take the difference with base function
         if a.nelement() == 0 or b.nelement() == 0:
-            return torch.tensor(self.base_fn(torch.tensor(a.nelement(), device=a.device).float(), torch.tensor(b.nelement(), device=a.device).float()), device=a.device)
+            return torch.tensor(
+                self.base_fn(
+                    torch.tensor(a.nelement(), device=a.device).float(),
+                    torch.tensor(b.nelement(), device=a.device).float(),
+                ),
+                device=a.device,
+            )
 
-        losses = torch.stack([self.base_fn(element, b[i]) for i, element in enumerate(a)])
+        losses = torch.stack(
+            [self.base_fn(element, b[i]) for i, element in enumerate(a)]
+        )
         return losses.mean()
 
+
 class KLDLoss(TorchLoss):
-    def __init__(self, reduction='none'):
+    def __init__(self, reduction="none"):
         super().__init__(torch.nn.KLDivLoss(reduction=reduction, log_target=True))
 
 
 class MSELoss(TorchLoss):
-    def __init__(self, reduction='none'):
+    def __init__(self, reduction="none"):
         super().__init__(torch.nn.MSELoss(reduction=reduction))
 
 
 class JSLoss(TorchLoss):
-    def __init__(self, reduction='none'):
+    def __init__(self, reduction="none"):
         class OwnModule(torch.nn.Module):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -59,19 +72,23 @@ class JSLoss(TorchLoss):
 
         super().__init__(OwnModule())
 
+
 class CovMSE(RayLoss):
     """
     Estimates covariance matrices for both inputs and calculates their mean squared error.
     """
 
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
         a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
         b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
         cov_a = torch.stack([torch.cov(element) for element in a])
         cov_b = torch.stack([torch.cov(element) for element in b])
         return ((cov_a - cov_b) ** 2).mean()
-    
 
 
 class BoxIoULoss(RayLoss):
@@ -82,21 +99,27 @@ class BoxIoULoss(RayLoss):
     ``torchvision.ops.generalized_box_iou_loss``.
     """
 
-    def __init__(self, base_fn: Union[Callable[..., torch.Tensor], str], reduction='none'):
+    def __init__(
+        self, base_fn: Union[Callable[..., torch.Tensor], str], reduction="none"
+    ):
         if isinstance(base_fn, str):
-            if base_fn == 'complete_box_iou_loss':
+            if base_fn == "complete_box_iou_loss":
                 base_fn = torchvision.ops.complete_box_iou_loss
-            if base_fn == 'distance_box_iou_loss':
+            if base_fn == "distance_box_iou_loss":
                 base_fn = torchvision.ops.distance_box_iou_loss
-            if base_fn == 'generalized_box_iou_loss':
+            if base_fn == "generalized_box_iou_loss":
                 base_fn = torchvision.ops.generalized_box_iou_loss
         self.base_fn: Callable[..., torch.Tensor] = base_fn
         self.reduction = reduction
 
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
-        a_dict = a['ray_output'][exported_plane]
-        b_dict = b['ray_output'][exported_plane]
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
+        a_dict = a["ray_output"][exported_plane]
+        b_dict = b["ray_output"][exported_plane]
         box_a_list = []
         box_b_list = []
 
@@ -104,18 +127,30 @@ class BoxIoULoss(RayLoss):
             b = b_dict[key]
             global_x_min = min(a.x_loc.min(), b.x_loc.min())
             global_y_min = min(a.y_loc.min(), b.y_loc.min())
-            shift_x = - global_x_min if global_x_min < -1 else 0
-            shift_y = - global_y_min if global_y_min < -1 else 0
+            shift_x = -global_x_min if global_x_min < -1 else 0
+            shift_y = -global_y_min if global_y_min < -1 else 0
             box_a = torch.tensor(
-                (shift_x + a.x_loc.min(), shift_y + a.y_loc.min(), shift_x + a.x_loc.max(),
-                 shift_y + a.y_loc.max()))
+                (
+                    shift_x + a.x_loc.min(),
+                    shift_y + a.y_loc.min(),
+                    shift_x + a.x_loc.max(),
+                    shift_y + a.y_loc.max(),
+                )
+            )
             box_a_list.append(box_a)
             box_b = torch.tensor(
-                (shift_x + b.x_loc.min(), shift_y + b.y_loc.min(), shift_x + b.x_loc.max(),
-                 shift_y + b.y_loc.max()))
+                (
+                    shift_x + b.x_loc.min(),
+                    shift_y + b.y_loc.min(),
+                    shift_x + b.x_loc.max(),
+                    shift_y + b.y_loc.max(),
+                )
+            )
             box_b_list.append(box_b)
 
-        return self.base_fn(torch.stack(box_a_list), torch.stack(box_b_list), reduction=self.reduction)
+        return self.base_fn(
+            torch.stack(box_a_list), torch.stack(box_b_list), reduction=self.reduction
+        )
 
 
 class HistogramMSE(RayLoss):
@@ -127,10 +162,14 @@ class HistogramMSE(RayLoss):
     def __init__(self, n_bins: int):
         self.n_bins: int = n_bins
 
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
-        a_dict = a['ray_output'][exported_plane]
-        b_dict = b['ray_output'][exported_plane]
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
+        a_dict = a["ray_output"][exported_plane]
+        b_dict = b["ray_output"][exported_plane]
         hist_a_list = []
         hist_b_list = []
 
@@ -140,7 +179,10 @@ class HistogramMSE(RayLoss):
             x_max = max(a.x_loc.max(), b.x_loc.max())
             y_min = min(a.y_loc.min(), b.y_loc.min())
             y_max = max(a.y_loc.max(), b.y_loc.max())
-            hist_a_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)['histogram'])
-            hist_b_list.append(Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)['histogram'])
+            hist_a_list.append(
+                Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)["histogram"]
+            )
+            hist_b_list.append(
+                Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(b)["histogram"]
+            )
         return ((torch.stack(hist_a_list) - torch.stack(hist_b_list)) ** 2).mean()
-
