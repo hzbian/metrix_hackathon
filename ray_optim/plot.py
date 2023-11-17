@@ -219,8 +219,8 @@ class Plot:
                 for _ in range(row_length)
             ]
         else:
-            xlim_min = xlim[0] if xlim[0] is not math.isnan(xlim[0]) else 0
-            xlim_max = xlim[1] if xlim[1] is not math.isnan(xlim[1]) else 1
+            xlim_min = [element if element is not math.isnan(element) else 0. for element in xlim[0]]
+            xlim_max = [element if element is not math.isnan(element) else 1. for element in xlim[1]]
 
         if isinstance(ylim[0], float):
             ylim_min = [
@@ -232,8 +232,8 @@ class Plot:
                 for _ in range(row_length)
             ]
         else:
-            ylim_min = ylim[0] if ylim[0] is not math.isnan(ylim[0]) else 0
-            ylim_max = ylim[1] if ylim[1] is not math.isnan(ylim[1]) else 1
+            ylim_min = [element if element is not math.isnan(element) else 0. for element in ylim[0]]
+            ylim_max = [element if element is not math.isnan(element) else 1. for element in ylim[1]]
 
         return xlim_min, xlim_max, ylim_min, ylim_max
 
