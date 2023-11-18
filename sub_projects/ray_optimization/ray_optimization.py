@@ -45,10 +45,10 @@ class RayOptimization:
         )
 
     @staticmethod
-    def compensation_search_space(
+    def limited_search_space(
         input_parameter_container: RayParameterContainer,
-        max_deviation: float,
         rg: RandomGenerator,
+        max_deviation: float = 1.0,
         overwrite_offset: Optional[RayParameterContainer] = None,
     ):
         ray_parameters = []
@@ -69,17 +69,22 @@ class RayOptimization:
         return RayParameterContainer(ray_parameters)
 
     def create_target_compensation(self):
-        target_compensation = self.compensation_search_space(
+        target_compensation = self.limited_search_space(
             self.ray_parameter_container,
-            self.target_configuration.max_target_deviation,
             self.rg,
+            self.target_configuration.max_target_deviation,
             None,
         )
         return target_compensation
 
     def create_uncompensated_parameters(self):
+        sample_parameter_func = lambda: self.limited_search_space(
+            self.target_configuration.param_func(),
+            self.rg,
+            max_deviation=self.target_configuration.max_sample_generation_deviation
+        )
         uncompensated_parameters = [
-            self.target_configuration.param_func()
+            sample_parameter_func()
             for _ in range(self.target_configuration.num_beamline_samples)
         ]
         return uncompensated_parameters
@@ -113,10 +118,10 @@ class RayOptimization:
         return observed_rays
 
     def create_offset_search_space(self):
-        return self.compensation_search_space(
+        return self.limited_search_space(
             self.ray_parameter_container,
-            self.target_configuration.max_offset_search_deviation,
             self.rg,
+            self.target_configuration.max_offset_search_deviation,
         )
 
     def create_initial_transforms(self, uncompensated_parameters):

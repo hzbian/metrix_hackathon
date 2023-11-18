@@ -23,7 +23,7 @@ class RealDataConfiguration:
 
 class TargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
-                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3,
+                 max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3, max_sample_generation_deviation: float = 1.0,
                  logging_project: Optional[str] = None,
                  z_layers: List[float] = (0.),
                  transforms: Optional[RayTransform] = None,
@@ -32,6 +32,7 @@ class TargetConfiguration:
         self.z_layers = z_layers
         self.transforms: RayTransform = transforms
         self.num_beamline_samples: int = num_beamline_samples
+        self.max_sample_generation_deviation: float = max_sample_generation_deviation
         self.exported_plane: str = exported_plane
         self.engine: Engine = engine
         self.max_target_deviation: float = max_target_deviation
