@@ -50,23 +50,40 @@ class RayOptimization:
         rg: RandomGenerator,
         max_deviation: float = 1.0,
         overwrite_offset: Optional[RayParameterContainer] = None,
+        random_parameters_only: bool = True,
     ):
         ray_parameters = []
         for k, v in input_parameter_container.items():
             if not isinstance(v, RandomParameter):
-                continue  # Numerical parameters do not need offset search
-            if overwrite_offset is not None and k in overwrite_offset:
-                ray_parameter = (k, overwrite_offset[k].clone())
+                if random_parameters_only:
+                    continue  # Numerical parameters do not need offset search
+                else:
+                    ray_parameter = (k, v.clone())
             else:
-                new_min = -max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
-                if v.enforce_lims and new_min < v.value_lims[0]:
-                    new_min = v.value_lims[0]
-                new_max = max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
-                if v.enforce_lims and new_max > v.value_lims[1]:
-                    new_max = v.value_lims[1]
-                ray_parameter = (k, type(v)(value_lims=(new_min, new_max), rg=rg))
+                if overwrite_offset is not None and k in overwrite_offset:
+                    ray_parameter = (k, overwrite_offset[k].clone())
+                else:
+                    new_min = -max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
+                    if v.enforce_lims and new_min < v.value_lims[0]:
+                        new_min = v.value_lims[0]
+                    new_max = max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
+                    if v.enforce_lims and new_max > v.value_lims[1]:
+                        new_max = v.value_lims[1]
+                    ray_parameter = (k, type(v)(value_lims=(new_min, new_max), enforce_lims=v.enforce_lims, rg=rg))
             ray_parameters.append(ray_parameter)
         return RayParameterContainer(ray_parameters)
+    
+    @staticmethod
+    def get_mean_parameter_container(
+        input_parameter_container: RayParameterContainer,
+    ):
+        ray_parameters = {}
+        for k, v in input_parameter_container.items():
+            ray_parameters[k] = v.clone()
+            if isinstance(v, RandomParameter):
+                ray_parameters[k].value = (v.value_lims[1] + v.value_lims[0]) / 2
+        return RayParameterContainer(ray_parameters)
+
 
     def create_target_compensation(self):
         target_compensation = self.limited_search_space(
@@ -81,12 +98,17 @@ class RayOptimization:
         sample_parameter_func = lambda: self.limited_search_space(
             self.target_configuration.param_func(),
             self.rg,
-            max_deviation=self.target_configuration.max_sample_generation_deviation
+            max_deviation=self.target_configuration.max_sample_generation_deviation,
+            random_parameters_only=False,
         )
         uncompensated_parameters = [
             sample_parameter_func()
             for _ in range(self.target_configuration.num_beamline_samples)
         ]
+        mean_parameter_container = RayOptimization.get_mean_parameter_container(self.target_configuration.param_func())
+        for configuration in uncompensated_parameters:
+            configuration.perturb(mean_parameter_container)
+    
         return uncompensated_parameters
 
     def create_compensated_parameters(self, uncompensated_parameters, target_compensation):

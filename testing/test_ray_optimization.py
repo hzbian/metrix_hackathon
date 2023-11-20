@@ -29,14 +29,14 @@ class TestRayOptimization(unittest.TestCase):
             "x_var": [1, 2],
             "y_var": [1, 2],
             "x_mean": [-1, 1],
-            "y_mean": [0, 2],
+            "y_mean": [-3, -2],
             "x_dir": 0.0,
             "y_dir": 0.0,
             "z_dir": 1.0,
             "direction_spread": 0.0,
         }
-        rg = RandomGenerator(42)
-        self.param_func = params_to_func(self.parameters, rg=rg)
+        self.rg = RandomGenerator(42)
+        self.param_func = params_to_func(self.parameters, rg=self.rg)
         self.engine = GaussEngine()
         self.transforms = MultiLayer([0.0, 1.0, 2.0, 3.0])
         self.exported_plane: str = "ImagePlane"
@@ -57,7 +57,7 @@ class TestRayOptimization(unittest.TestCase):
         self.ray_optimization = RayOptimization(
             ray_optimizer=mock,
             target_configuration=target_configuration,
-            rg=rg,
+            rg=self.rg,
             logging_backend=DebugPlotBackend(),
         )
 
@@ -100,6 +100,18 @@ class TestRayOptimization(unittest.TestCase):
         uncompensated_parameters = self.ray_optimization.create_uncompensated_parameters()
         observed_rays = self.ray_optimization.create_observed_rays(uncompensated_parameters, target_compensation)
         # TODO checks required
+    
+    def test_limited_search_space(self):
+        max_deviation = 0.1
+        test_output = RayOptimization.limited_search_space(self.param_func(), rg=self.rg, max_deviation=0.1, random_parameters_only=False)
+        for k, v in self.param_func().items():
+            if isinstance(test_output[k], RandomParameter):
+                if not test_output[k].enforce_lims:
+                    self.assertTrue(test_output[k].value >= - max_deviation * (v.value_lims[1]- v.value_lims[0]) / 2)
+                    self.assertTrue(test_output[k].value <= max_deviation * (v.value_lims[1]- v.value_lims[0]) / 2)
+            else:
+                self.assertTrue(k in test_output.keys())
+
 
     def test_setup(self):
         self.ray_optimization.setup_target()

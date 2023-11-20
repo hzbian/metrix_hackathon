@@ -25,6 +25,7 @@ engine:
     device: "cpu"
 num_beamline_samples: 22
 exported_plane: "ImagePlane"
+max_sample_generation_deviation: 1.0
 max_target_deviation: 0.3
 max_offset_search_deviation: 0.3
 transforms:

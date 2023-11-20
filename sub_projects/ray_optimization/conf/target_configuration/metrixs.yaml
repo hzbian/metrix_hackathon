@@ -62,8 +62,8 @@ engine:
   num_workers: -1
 num_beamline_samples: 22
 exported_plane: "ImagePlane"
-max_sample_generation_deviation: 0.001
-max_target_deviation: 0.3
+max_sample_generation_deviation: 0.000000001
+max_target_deviation: 0.0000003
 max_offset_search_deviation: 0.3
 z_layers: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
 transforms:
