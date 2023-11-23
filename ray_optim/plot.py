@@ -380,7 +380,7 @@ class Plot:
         ----------------
         kwargs : `~matplotlib.patches.Patch` properties
         """
-        if x.numel() == 0 or y.numel() == 0:
+        if x.numel() == 0 or x.numel() == 1:
             return
         
         if x.shape != y.shape:
@@ -477,12 +477,12 @@ class Plot:
                 normalized_real_params,
                 label="Real Parameters",
             )
-            ax.stem(
-                normalized_predicted_params,
-                linefmt="orange",
-                markerfmt="o",
-                label="Predicted Parameters",
-            )
+        ax.stem(
+            normalized_predicted_params,
+            linefmt="orange",
+            markerfmt="o",
+            label="Predicted Parameters",
+        )
         param_labels = [
             param_key
             for param_key, _ in predicted_params.items()
