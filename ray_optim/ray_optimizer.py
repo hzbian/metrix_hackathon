@@ -4,7 +4,7 @@ import time
 from abc import ABCMeta, abstractmethod
 from math import sqrt
 from typing import Any, Dict, List, Iterable, Union, Optional, Callable
-from multiprocessing import JoinableQueue, Process
+from torch.multiprocessing import JoinableQueue, Process
 
 import torch
 from ray_optim.logging import LoggingBackend
@@ -479,6 +479,7 @@ class RayOptimizer:
                 "transforms": self.transforms,
                 "logging_backend": self.logging_backend,
                 "compensations": compensations,
+                "verbose": False,
             },
         )
         if len(self.running_logger_processes) >= self.max_logging_processes:
@@ -531,8 +532,9 @@ class RayOptimizer:
         transforms: RayTransform,
         logging_backend: LoggingBackend,
         compensations,
+        verbose: bool = False
     ):
-        for sample in trials:
+        for sample_idx, sample in enumerate(trials):
             log_dict["epoch"] = sample.epoch
             log_dict["ray_count"] = (
                 torch.tensor(
@@ -555,11 +557,11 @@ class RayOptimizer:
                 )
                 log_dict = {**log_dict, **single_params_rmse}
             if sample.epoch % plot_interval == 0 and sample.epoch != 0:
-                plots = RayOptimizer.plot(target, exported_plane, plot_interval_best)
+                plots = RayOptimizer.plot(target, exported_plane, plot_interval_best, verbose)
             else:
                 plots = {}
             if sample.epoch == 0:
-                initial_plots = RayOptimizer.plot_initial_plots(target, exported_plane)
+                initial_plots = RayOptimizer.plot_initial_plots(target, exported_plane, verbose)
             else:
                 initial_plots = {}
             if sample.loss < overall_best.loss:
@@ -569,7 +571,8 @@ class RayOptimizer:
                     sample,
                     exported_plane,
                     engine,
-                    compensations,
+                    compensations[sample_idx],
+                    verbose,
                 )
             else:
                 better_plots = {}
@@ -585,12 +588,13 @@ class RayOptimizer:
         overall_best: Sample,
         exported_plane: str,
         engine: Engine,
-        compensations,
+        compensation: RayParameterContainer,
+        verbose: bool = False,
     ):
         output_dict = {}
         if target.validation_scan is not None:
             validation_parameters = RayOptimizer.compensate_parameters_list(
-                target.validation_scan.uncompensated_parameters, compensations
+                target.validation_scan.uncompensated_parameters, compensation
             )
 
         best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
@@ -601,6 +605,8 @@ class RayOptimizer:
             target.uncompensated_rays, exported_plane, to_cpu=True
         )
         xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
+        if verbose:
+            print("Plotting overall fixed position plot.")
         fixed_position_plot = Plot.fixed_position_plot(
             best_rays_list,
             target_observed_rays_list,
@@ -628,6 +634,8 @@ class RayOptimizer:
                 compensated_rays_list, exported_plane=exported_plane
             )
             xlim, ylim = Plot.switch_lims_if_out_of_lim(validation_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
+            if verbose:
+                print("Plot validation fixed position plot.")
             validation_fixed_position_plot = Plot.fixed_position_plot(
                 compensated_rays_list,
                 validation_rays_list,
@@ -642,7 +650,7 @@ class RayOptimizer:
         return output_dict
 
     @staticmethod
-    def plot_initial_plots(target: Target, exported_plane: str):
+    def plot_initial_plots(target: Target, exported_plane: str, verbose: bool = False):
         output_dict = {}
         target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane)
         if isinstance(target_tensor, torch.Tensor):
@@ -650,12 +658,14 @@ class RayOptimizer:
         #target_plot = Plot.plot_data(target_tensor)
         #output_dict["target_footprint"] = target_plot
         z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output']['ImagePlane'].keys()]
+        if verbose:
+            print("Plot fancy ray plot.")
         fancy_plot = Plot.fancy_ray([target_tensor], z_index=z_index)
         output_dict["fancy_footprint"] = fancy_plot
         return output_dict
 
     @staticmethod
-    def plot(target: Target, exported_plane: str, plot_interval_best: Sample):
+    def plot(target: Target, exported_plane: str, plot_interval_best: Sample, verbose: bool = False):
         output_dict = {}
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
         #plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
@@ -667,6 +677,8 @@ class RayOptimizer:
                     exported_plane,
                     to_cpu=True,
                 )
+            if verbose:
+                print("Plotting compensation plot.")
             compensation_plot = Plot.compensation_plot(
                 interval_best_rays,
                 observed_rays,
@@ -676,6 +688,8 @@ class RayOptimizer:
             )
             output_dict["compensation"] = compensation_plot
             z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output']['ImagePlane'].keys()]
+            if verbose:
+                print("Plotting fancy ray plot.")
             fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"], z_index=z_index)
             output_dict["fancy_ray"] = fancy_ray_plot
         max_ray_index = torch.argmax(
@@ -708,6 +722,8 @@ class RayOptimizer:
             ylim=ylim,
         )
         output_dict["fixed_position_plot"] = fixed_position_plot
+        if verbose:
+            print("Plot param comparison.")
         parameter_comparison_plot = Plot.plot_param_comparison(
             predicted_params=plot_interval_best.params,
             epoch=plot_interval_best.epoch,
