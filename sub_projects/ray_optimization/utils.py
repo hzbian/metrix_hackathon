@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Iterable
 import torch
-
+torch.set_num_threads(1)
 
 def ray_output_to_tensor(ray_output: Union[Dict, List[Dict], Iterable[Dict]], exported_plane: str, to_cpu=False):
     if not isinstance(ray_output, Dict):
