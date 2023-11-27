@@ -25,5 +25,5 @@ class SinkhornLoss(RayLoss):
             b = torch.ones((b.shape[0], 2, 2), device=b.device, dtype=b.dtype) * -1
         loss = sinkhorn_function(a.contiguous(), b.contiguous(), torch.ones_like(a[..., 1]),
                                  torch.ones_like(b[..., 1]))
-        return loss.mean()
+        return loss.mean().item()
 
