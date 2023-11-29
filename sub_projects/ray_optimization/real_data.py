@@ -1,5 +1,5 @@
 import os
-from typing import Tuple
+from typing import List, OrderedDict, Tuple
 
 import pandas as pd
 import torch
@@ -57,7 +57,7 @@ def pandas_to_param_container(input_pd, param_container: RayParameterContainer, 
     return output_param_container
 
 
-def import_data(real_data_dir, imported_measurements, included_z_layers, param_container, check_value_lims=True):
+def import_data(real_data_dir, imported_measurements, included_z_layers=List[float], param_container=None, check_value_lims=True):
     transform = HistToPointCloud()
     transform_weight = SampleWeightedHist()
     parameters = pd.read_csv(os.path.join(real_data_dir, 'parameters.csv'), index_col=0)
@@ -71,8 +71,11 @@ def import_data(real_data_dir, imported_measurements, included_z_layers, param_c
             continue
         if measurement_name not in parameters.keys():
             continue
-        output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container,
-                                                                         check_value_lims=check_value_lims)}
+        if param_container is not None:
+            output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container,
+                                                                          check_value_lims=check_value_lims)}
+        else:
+            output_dict = {}
         z_direction_dict = {}
         for file in files:
             if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
@@ -97,11 +100,13 @@ def import_data(real_data_dir, imported_measurements, included_z_layers, param_c
                                        z_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
                                        energy=torch.tensor([], dtype=torch.float32, device=scatter.device))
                 z_layer_id = file[:-4]
-                if int(z_layer_id) in included_z_layers:
+                if float(z_layer_id) in included_z_layers:
                     z_direction_dict[z_layer_id] = ray_output
+        # sort dict
+        z_direction_ordered_dict = OrderedDict(sorted(z_direction_dict.items(), key=lambda x: float(x[0])))
         for key in included_z_layers:
-            if str(key) not in z_direction_dict.keys():
+            if str(key) not in z_direction_ordered_dict.keys():
                 raise Exception("Layer %s missing in measurement %s." % (key, measurement_name))
-        output_dict['ray_output'] = {'ImagePlane': z_direction_dict}
+        output_dict['ray_output'] = {'ImagePlane': z_direction_ordered_dict}
         output_list.append(output_dict)
     return output_list
