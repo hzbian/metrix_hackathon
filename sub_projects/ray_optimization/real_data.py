@@ -99,14 +99,16 @@ def import_data(real_data_dir, imported_measurements, included_z_layers=List[flo
                                        x_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
                                        z_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
                                        energy=torch.tensor([], dtype=torch.float32, device=scatter.device))
-                z_layer_id = file[:-4]
-                if float(z_layer_id) in included_z_layers:
-                    z_direction_dict[z_layer_id] = ray_output
-        # sort dict
-        z_direction_ordered_dict = OrderedDict(sorted(z_direction_dict.items(), key=lambda x: float(x[0])))
+                z_layer_id = float(file[:-4])
+                if z_layer_id in included_z_layers:
+                    z_direction_dict[str(z_layer_id)] = ray_output
+        z_direction_ordered = []
         for key in included_z_layers:
-            if str(key) not in z_direction_ordered_dict.keys():
+            if str(key) not in z_direction_dict.keys():
                 raise Exception("Layer %s missing in measurement %s." % (key, measurement_name))
+            else:
+                z_direction_ordered.append((key, z_direction_dict[str(key)]))
+        z_direction_ordered_dict = OrderedDict(z_direction_ordered)    
         output_dict['ray_output'] = {'ImagePlane': z_direction_ordered_dict}
         output_list.append(output_dict)
     return output_list
