@@ -220,6 +220,9 @@ class RayBackendDockerRAYUI(RayBackend):
         rml_workfile = os.path.join(run_workdir, 'workfile.rml')
         raypyng_rml.write(rml_workfile)
 
+        if not os.path.isfile(rml_workfile):
+             raise Exception("RML workfile not found in", rml_workfile)
+        
         # get corresponding RML-file for in docker container
         docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile)).replace("\\",
                                                                                                                 "/")
@@ -272,7 +275,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 z_dir=torch.tensor(raw_output[exported_plane + '_DZ'].values, dtype=torch.float, device=self.device),
                 energy=torch.tensor(raw_output[exported_plane + '_EN'].values, dtype=torch.float, device=self.device))
         # remove sub-workdir
-        shutil.rmtree(run_workdir)
+        # shutil.rmtree(run_workdir) TODO this was uncommented because it can cause issues if called to early, probably because of parallelization it removes the files though another worker is still working on the dir
 
         toc = time.perf_counter()
         if self.verbose:
