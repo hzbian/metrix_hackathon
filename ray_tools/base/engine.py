@@ -81,8 +81,8 @@ class RayEngine(Engine):
             transforms = len(param_containers) * [transforms]
 
         # Iterable of arguments used for RayEngine._run_func
-        _iter = ((str(run_id), run_params, transform) for run_id, (run_params, transform) in
-                 enumerate(zip(param_containers, transforms)))
+        _iter = ((run_params, transform) for (run_params, transform) in
+                 zip(param_containers, transforms))
         if not self.as_generator:
             # multi-threading (if self.num_workers > 1)
             worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
@@ -94,7 +94,6 @@ class RayEngine(Engine):
             return (self._run_func(*item) for item in _iter)
 
     def _run_func(self,
-                  run_id: str,
                   param_container: RayParameterContainer,
                   transform: RayTransformType = None,
                   ) -> Dict:
@@ -116,7 +115,6 @@ class RayEngine(Engine):
 
         # call the backend to perform the run
         result['ray_output'] = self.ray_backend.run(raypyng_rml=raypyng_rml_work,
-                                                    run_id=run_id,
                                                     exported_planes=self.exported_planes)
 
         # apply transform (to each exported plane)

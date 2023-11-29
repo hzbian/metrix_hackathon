@@ -49,7 +49,7 @@ class RayBackend(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def run(self, raypyng_rml: RMLFile, exported_planes: List[str], run_id: str = None) -> Dict[str, RayOutput]:
+    def run(self, raypyng_rml: RMLFile, exported_planes: List[str], run_id: Optional[str] = None) -> Dict[str, RayOutput]:
         """
         Run raytracing given an RMLFile instance.
     :param raypyng_rml: RMLFile instance to be processed.
@@ -275,7 +275,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 z_dir=torch.tensor(raw_output[exported_plane + '_DZ'].values, dtype=torch.float, device=self.device),
                 energy=torch.tensor(raw_output[exported_plane + '_EN'].values, dtype=torch.float, device=self.device))
         # remove sub-workdir
-        # shutil.rmtree(run_workdir) TODO this was uncommented because it can cause issues if called to early, probably because of parallelization it removes the files though another worker is still working on the dir
+        shutil.rmtree(run_workdir)
 
         toc = time.perf_counter()
         if self.verbose:
