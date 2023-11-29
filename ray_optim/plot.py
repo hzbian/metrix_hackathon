@@ -54,9 +54,9 @@ class Plot:
     ):
         if z_index is None:
             z_index = [i for i in range(ray_tensor.shape[0])]
-        y = ray_tensor.flatten(0, 1)[:, 0]
-        z = ray_tensor.flatten(0, 1)[:, 1]
-        x = torch.cat(
+        x = ray_tensor.flatten(0, 1)[:, 0]
+        y = ray_tensor.flatten(0, 1)[:, 1]
+        z = torch.cat(
             [
                 torch.ones_like(ray_tensor[0, :, 0]) * z_index[i]
                 for i in range(ray_tensor.shape[0])
@@ -79,9 +79,9 @@ class Plot:
                 name = labels[i] if labels is not None else None
                 trace = dict(
                     type="scatter3d",
-                    x=x,
-                    y=y,
-                    z=z,
+                    x=z,
+                    y=x,
+                    z=y,
                     name=name,
                     mode="markers",
                     legendgroup="group" + str(i),
@@ -91,7 +91,19 @@ class Plot:
                     visible=sample_idx == 0,
                 )
                 fig.add_trace(trace)
-
+        
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='z',
+                yaxis_title='x',
+                zaxis_title='y',
+            ),
+        )
+        #fig.update_layout(
+        #    scene = dict(
+        #         xaxis = dict(range=[-2,2],),
+        #        zaxis = dict(range=[-0.25,0],),
+        #        yaxis = dict(range=[-1.35,-1.1],),))
         steps = []
         for i in range(0, len(fig.data), len(data)):
             step = dict(
