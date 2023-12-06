@@ -58,14 +58,15 @@ def pandas_to_param_container(input_pd, param_container: RayParameterContainer, 
 
 
 def import_data(real_data_dir, imported_measurements, included_z_layers=List[float], param_container=None, check_value_lims=True):
-    transform = HistToPointCloud()
-    transform_weight = SampleWeightedHist()
     parameters = pd.read_csv(os.path.join(real_data_dir, 'parameters.csv'), index_col=0)
     x_dilation = parameters.T['ImagePlane.translationXerror']  # TODO check if this is added twice now
     y_dilation = parameters.T['ImagePlane.translationYerror']
-    black = Image.open(os.path.join(real_data_dir, 'black.bmp'))
+    black = get_image(os.path.join(real_data_dir, 'black.bmp'))
+    mm_per_pixel: float = 1.6 / 1000.
+    transform = HistToPointCloud()
+    transform_weight = SampleWeightedHist()
     output_list = []
-    for subdir, dirs, files in tqdm(os.walk(real_data_dir)):
+    for subdir, _, files in tqdm(os.walk(real_data_dir)):
         measurement_name = os.path.basename(os.path.normpath(subdir))[:3]
         if measurement_name not in imported_measurements:
             continue
@@ -79,14 +80,14 @@ def import_data(real_data_dir, imported_measurements, included_z_layers=List[flo
         z_direction_dict = {}
         for file in files:
             if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
-                path = os.path.join(subdir, file)
-                sample = Image.open(path)
-                sample = ImageChops.subtract(sample, black)
-                sample = torchvision.transforms.ToTensor()(sample)
+                path: str = os.path.join(subdir, file)
+                sample: Image.Image = get_image(path)
+                sample: Image.Image = subtract_black(sample, black)
+                sample: torch.Tensor = to_tensor(sample)
                 x_lims = torch.tensor(
-                    (x_dilation[measurement_name], x_dilation[measurement_name] + 768 * 1.6 / 1000)).unsqueeze(0)
+                    (x_dilation[measurement_name], x_dilation[measurement_name] + 768 * mm_per_pixel)).unsqueeze(0)
                 y_lims = torch.tensor(
-                    (y_dilation[measurement_name], y_dilation[measurement_name] + 576 * 1.6 / 1000)).unsqueeze(0)
+                    (y_dilation[measurement_name], y_dilation[measurement_name] + 576 * mm_per_pixel)).unsqueeze(0)
                 image, intensity = transform(sample, x_lims, y_lims)
                 cleaned_indices = intensity[0] > 0.02
                 cleaned_intensity = intensity[0][cleaned_indices]
@@ -112,3 +113,15 @@ def import_data(real_data_dir, imported_measurements, included_z_layers=List[flo
         output_dict['ray_output'] = {'ImagePlane': z_direction_ordered_dict}
         output_list.append(output_dict)
     return output_list
+
+def get_image(path: str) -> Image.Image:
+    return Image.open(path)
+
+def subtract_black(image: Image.Image, black: Image.Image) -> Image.Image:
+    return ImageChops.subtract(image, black)
+
+def to_tensor(image) -> torch.Tensor:
+    return torchvision.transforms.ToTensor()(image)
+
+def read_parameter_csv(real_data_dir: str, csv_name: str = 'parameter.csv') -> pd.DataFrame:
+    return pd.read_csv(os.path.join(real_data_dir, csv_name), index_col=0)
