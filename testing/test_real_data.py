@@ -34,7 +34,7 @@ class TestRealData(unittest.TestCase):
     
     def test_transform(self):
         self.transformed_tensor = self.transform(self.tensor, x_lims=torch.Tensor([[0,1]]), y_lims=torch.Tensor([[0,1]]))
-        plt.scatter(self.transformed_tensor[0], y = self.transformed_tensor[1])
+        plt.scatter(self.transformed_tensor[0][0,:,0], y = self.transformed_tensor[0][0,:,1], c=self.transformed_tensor[1][0])
         plt.savefig("transf_tens.png")
 
 if __name__ == "__main__":
