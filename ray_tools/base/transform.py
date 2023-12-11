@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from abc import ABCMeta, abstractmethod
-from typing import Any, Tuple, Dict, List
+from typing import Any, Optional, Tuple, Dict, List
 
 import torch
 
@@ -121,19 +121,25 @@ class Crop(RayTransform):
 class Histogram(RayTransform):
     """
     Transforms :class:`RayOutput` into a 2D-histogram. Ray directions and z-coordinate is discarded.
-    :param n_bins: Number of bins (same for x- and y-coordinate)
+    :param n_bins: Number of bins (same for x- and y-coordinate if n_bins_y not set).
     :param x_lims: Interval for x-coordinate. If None, `x_lims` and `y_lims` are automatically computed.
     :param y_lims: Interval for y-coordinate.
     :param auto_center: If True, the histogram will be computed with respect to the center of mass of the rays.
         ``x_lims`` and ``y_lims`` are shifted by the center of mass.
+    :param n_bins_y: Number of bins in y-coordinate.
     """
 
     def __init__(self,
                  n_bins: int,
                  x_lims: Tuple[float, float] = None,
                  y_lims: Tuple[float, float] = None,
-                 auto_center: bool = False):
-        self.n_bins = n_bins
+                 auto_center: bool = False,
+                 n_bins_y: Optional[int] = None):
+        self.n_bins_x = n_bins
+        if n_bins_y is not None:
+            self.n_bins_y = n_bins_y
+        else:
+            self.n_bins_y = n_bins
         self.x_lims = x_lims
         self.y_lims = y_lims
         self.auto_center = auto_center
@@ -154,13 +160,13 @@ class Histogram(RayTransform):
         if out['n_rays'] == 0:
             out['x_lims'] = (0.0, 0.0)
             out['y_lims'] = (0.0, 0.0)
-            out['histogram'] = torch.zeros((self.n_bins, self.n_bins), dtype=x_loc.dtype, device=x_loc.device)
+            out['histogram'] = torch.zeros((self.n_bins_x, self.n_bins_y), dtype=x_loc.dtype, device=x_loc.device)
             return out
 
         # if x_lims is not given, compute histogram with automatic limits
         if self.x_lims is None:
             out['histogram'], bin_edges = torch.histogramdd(torch.stack([x_loc, y_loc]).T,
-                                                                 bins=(self.n_bins, self.n_bins))
+                                                                 bins=(self.n_bins_x, self.n_bins_y))
             out['x_lims'] = (bin_edges[0][[0]].item(), bin_edges[0][[1]].item())
             out['y_lims'] = (bin_edges[1][[0]].item(), bin_edges[1][[1]].item())
         else:
@@ -178,8 +184,9 @@ class Histogram(RayTransform):
             out['x_lims'] = x_lims
             out['y_lims'] = y_lims
             out['histogram'] = torch.histogramdd(torch.stack([x_loc, y_loc]).T,
-                                                 bins=(self.n_bins, self.n_bins), range=[x_lims[0], x_lims[1], y_lims[0], y_lims[1]])[0]
-
+                                                 bins=(int(self.n_bins_x), self.n_bins_y), range=(x_lims[0], x_lims[1], y_lims[0], y_lims[1]))[0]
+        # flip coordinates in y direction so center of coordinate system is bottom left
+        out['histogram'] = out['histogram'].flip([1])
         return out
 
 
