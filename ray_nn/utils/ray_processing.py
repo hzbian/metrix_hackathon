@@ -37,20 +37,20 @@ class HistToPointCloud(nn.Module):
         coord_x_width = (x_lims[:, 1] - x_lims[:, 0]) / dim_x
         coord_y_width = (y_lims[:, 1] - y_lims[:, 0]) / dim_y
 
-        unit_grid_x = torch.linspace(1.0, 0.0, dim_x, device=hist.device, dtype=hist.dtype).view(1, -1)
-        coord_x = unit_grid_x * coord_x_width.view(-1, 1) * (dim_x - 1)
-        coord_x = coord_x + x_lims[:, 0].view(-1, 1) + coord_x_width.view(-1, 1) / 2.
-        unit_grid_y = torch.linspace(0.0, 1.0, dim_y, device=hist.device, dtype=hist.dtype).view(1, -1)
-        coord_y = unit_grid_y * coord_y_width.view(-1, 1) * (dim_y - 1)
-        coord_y = coord_y + y_lims[:, 0].view(-1, 1) + coord_y_width.view(-1, 1) / 2.
+        unit_grid_x = torch.linspace(0.0, 1.0, dim_x, device=hist.device, dtype=hist.dtype).unsqueeze(0)
+        coord_x = unit_grid_x * coord_x_width.unsqueeze(0) * (dim_x - 1)
+        coord_x = coord_x + x_lims[:, 0].unsqueeze(0) + coord_x_width.unsqueeze(0) / 2.
+        unit_grid_y = torch.linspace(1.0, 0.0, dim_y, device=hist.device, dtype=hist.dtype).unsqueeze(0)
+        coord_y = unit_grid_y * coord_y_width.unsqueeze(0) * (dim_y - 1)
+        coord_y = coord_y + y_lims[:, 0].unsqueeze(0) + coord_y_width.unsqueeze(0) / 2.
 
         mesh_x = coord_x.unsqueeze(2)
         mesh_y = coord_y.unsqueeze(1)
         mesh_x = mesh_x * torch.ones_like(mesh_y)
         mesh_y = mesh_y * torch.ones_like(mesh_x)
 
-        pc_y = mesh_x.flatten(start_dim=1)
-        pc_x = mesh_y.flatten(start_dim=1)
+        pc_x = mesh_x.flatten(start_dim=1)
+        pc_y = mesh_y.flatten(start_dim=1)
         pc_weights = hist.flatten(start_dim=1)
 
         return torch.stack([pc_x, pc_y], dim=-1), pc_weights
