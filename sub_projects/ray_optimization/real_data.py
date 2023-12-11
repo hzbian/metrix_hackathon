@@ -107,12 +107,7 @@ def import_data(real_data_dir, imported_measurements, included_z_layers=List[flo
                 cleaned_intensity, cleaned_indices = clean_intensity(intensity[0], threshold=0.02)
                 scatter = transform_weight(hist=grid[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
                                            num_rays=1000)
-                ray_output = RayOutput(x_loc=scatter[0, :, 0].float(), y_loc=scatter[0, :, 1].float(),
-                                       z_loc=torch.tensor([], dtype=torch.float32, device=scatter.device),
-                                       y_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
-                                       x_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
-                                       z_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
-                                       energy=torch.tensor([], dtype=torch.float32, device=scatter.device))
+                ray_output: RayOutput = tensor_to_ray_output(scatter)
                 z_layer_id = float(file[:-4])
                 if z_layer_id in included_z_layers:
                     z_direction_dict[str(z_layer_id)] = ray_output
@@ -147,3 +142,12 @@ def clean_intensity(intensity: torch.Tensor, threshold: float) -> Tuple[torch.Te
                 cleaned_indices = intensity > threshold
                 cleaned_intensity = intensity[cleaned_indices]
                 return cleaned_intensity, cleaned_indices
+
+def tensor_to_ray_output(scatter: torch.Tensor, index: int = 0) -> RayOutput:
+    ray_output = RayOutput(x_loc=scatter[index, :, 0].float(), y_loc=scatter[index, :, 1].float(),
+                                       z_loc=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       y_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       x_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       z_dir=torch.tensor([], dtype=torch.float32, device=scatter.device),
+                                       energy=torch.tensor([], dtype=torch.float32, device=scatter.device))
+    return ray_output
