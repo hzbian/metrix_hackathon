@@ -12,7 +12,7 @@ from ray_tools.base.backend import RayOutput
 from ray_tools.base.parameter import RayParameterContainer, MutableParameter, OutputParameter
 
 
-class SampleWeightedHist(torch.nn.Module):
+class SampleGridWeightedHist(torch.nn.Module):
     """
     Converts a histogram into a point cloud.
     Output is a tensor of shape [batch size, #pixels in hist, 2];
@@ -40,6 +40,24 @@ class SampleWeightedHist(torch.nn.Module):
         return out
 
 
+class SampleRandomWeightedHist(torch.nn.Module):
+    """
+    Converts a histogram into a point cloud.
+    Output is a tensor of shape [batch size, #pixels in hist, 2];
+    first dimension are x-coordinates and second are y-coordinates.
+    The ray coordinates are computed by a meshgrid according to the size of hist and given limits.
+    Each ray is endowed with a weights, which is the corresponding entry of the histogram.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int) -> torch.Tensor:
+        pdf = pc_weights / pc_weights.sum()
+        random_indices = torch.multinomial(pdf.flatten(), num_rays, replacement=True)
+        random_points = hist[:, random_indices] 
+        return random_points
+
 def pandas_to_param_container(input_pd, param_container: RayParameterContainer, check_value_lims: bool = True):
     output_param_container = param_container.clone()
     for key, entry in output_param_container.items():
@@ -57,14 +75,13 @@ def pandas_to_param_container(input_pd, param_container: RayParameterContainer, 
     return output_param_container
 
 
-def import_data(real_data_dir, imported_measurements, included_z_layers=List[float], param_container=None, check_value_lims=True):
+def import_data(real_data_dir, imported_measurements, included_z_layers=List[float], param_container=None, check_value_lims=True, mm_per_pixel: float = 1.6 / 1000.):
     parameters = pd.read_csv(os.path.join(real_data_dir, 'parameters.csv'), index_col=0)
     x_dilation = parameters.T['ImagePlane.translationXerror']  # TODO check if this is added twice now
     y_dilation = parameters.T['ImagePlane.translationYerror']
     black = get_image(os.path.join(real_data_dir, 'black.bmp'))
-    mm_per_pixel: float = 1.6 / 1000.
     transform = HistToPointCloud()
-    transform_weight = SampleWeightedHist()
+    transform_weight = SampleGridWeightedHist()
     output_list = []
     for subdir, _, files in tqdm(os.walk(real_data_dir)):
         measurement_name = os.path.basename(os.path.normpath(subdir))[:3]
@@ -84,15 +101,11 @@ def import_data(real_data_dir, imported_measurements, included_z_layers=List[flo
                 sample: Image.Image = get_image(path)
                 sample: Image.Image = subtract_black(sample, black)
                 sample: torch.Tensor = to_tensor(sample)
-                x_lims = torch.tensor(
-                    (x_dilation[measurement_name], x_dilation[measurement_name] + 768 * mm_per_pixel)).unsqueeze(0)
-                y_lims = torch.tensor(
-                    (y_dilation[measurement_name], y_dilation[measurement_name] + 576 * mm_per_pixel)).unsqueeze(0)
-                image, intensity = transform(sample, x_lims, y_lims)
-                cleaned_indices = intensity[0] > 0.02
-                cleaned_intensity = intensity[0][cleaned_indices]
-
-                scatter = transform_weight(hist=image[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
+                x_lims: torch.Tensor = get_lims(x_dilation[measurement_name], sample.shape[2], mm_per_pixel)
+                y_lims: torch.Tensor = get_lims(y_dilation[measurement_name], sample.shape[1], mm_per_pixel)
+                grid, intensity = transform(sample, x_lims, y_lims)
+                cleaned_intensity, cleaned_indices = clean_intensity(intensity[0], threshold=0.02)
+                scatter = transform_weight(hist=grid[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
                                            num_rays=1000)
                 ray_output = RayOutput(x_loc=scatter[0, :, 0].float(), y_loc=scatter[0, :, 1].float(),
                                        z_loc=torch.tensor([], dtype=torch.float32, device=scatter.device),
@@ -125,3 +138,12 @@ def to_tensor(image) -> torch.Tensor:
 
 def read_parameter_csv(real_data_dir: str, csv_name: str = 'parameter.csv') -> pd.DataFrame:
     return pd.read_csv(os.path.join(real_data_dir, csv_name), index_col=0)
+
+def get_lims(dimension_dilation_mm: float, dimension_size_pixel: int, mm_per_pixel: float) -> torch.Tensor:
+    return torch.tensor(
+                    (dimension_dilation_mm, dimension_dilation_mm + dimension_size_pixel * mm_per_pixel)).unsqueeze(0)
+
+def clean_intensity(intensity: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
+                cleaned_indices = intensity > threshold
+                cleaned_intensity = intensity[cleaned_indices]
+                return cleaned_intensity, cleaned_indices
