@@ -81,7 +81,7 @@ def import_data(real_data_dir, imported_measurements, included_z_layers=List[flo
     y_dilation = parameters.T['ImagePlane.translationYerror']
     black = get_image(os.path.join(real_data_dir, 'black.bmp'))
     transform = HistToPointCloud()
-    transform_weight = SampleGridWeightedHist()
+    transform_weight = SampleRandomWeightedHist()
     output_list = []
     for subdir, _, files in tqdm(os.walk(real_data_dir)):
         measurement_name = os.path.basename(os.path.normpath(subdir))[:3]
