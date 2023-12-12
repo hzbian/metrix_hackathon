@@ -237,7 +237,7 @@ class RayBackendDockerRAYUI(RayBackend):
                 )
             else:
 
-                podman_command = f"{self.container_executable} exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p ImagePlane"
+                podman_command = f"{self.container_executable} exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
                 if not self.verbose:
                     podman_command += " > /dev/null"
                 if self.verbose:
