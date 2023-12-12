@@ -13,7 +13,9 @@ class TestRealData(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(42)
         self.path = 'testing/datasets/test_dataset'
-        self.image_path = os.path.join(self.path, 'M03/10.bmp')
+        self.path = 'datasets/metrix_real_data/2021_march_complete'
+        #self.image_path = os.path.join(self.path, 'M03/-15.bmp')
+        self.image_path = os.path.join(self.path, 'M03 09.03.21 13-16-19/-15.bmp')
         self.image = get_image(self.image_path)
         self.black = get_image(os.path.join(self.path, 'black.bmp'))
         self.diff = subtract_black(self.image, self.black)
@@ -73,6 +75,11 @@ class TestRealData(unittest.TestCase):
         mse: float = TestRealData.normalized_mse(hist_out, self.tensor)
         self.assertLess(mse, 1.473e-5)
     
+    def test_plot(self):
+        hist_out: torch.Tensor = self.hist(self.ray_output)['histogram']
+        plt.clf()
+        plt.imshow(hist_out.T)
+        plt.savefig("out.png")
     @staticmethod
     def first_center_of_mass(t: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
         return (t[0] * weights[0].unsqueeze(-1)).mean(dim=(0))
