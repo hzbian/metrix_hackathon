@@ -1,0 +1,74 @@
+_target_: "sub_projects.ray_optimization.ray_optimization.TargetConfiguration"
+param_func:
+    _target_: "sub_projects.ray_optimization.configuration.params_to_func"
+    _convert_: "all"
+    rg: ${rg}
+    parameters:
+      Dipole.numberRays: 10000.0
+      Dipole.photonEnergy: [100, 20000]
+      Dipole.energySpread: [0, 1]
+      Mask.totalWidth: [0., 20.]
+      Mask.totalHeight: [0., 5.]
+      M1.translationXerror: [-1.5, 1.5]
+      M1.translationYerror: [-1.5, 1.5]
+      M1.translationZerror: [-5, 5]
+      M1.rotationXerror: [-0.08, 0.08]
+      M1.rotationYerror: [-2., 2.]
+      M1.rotationZerror: [-30., 30.]
+      M1.longRadius: [5000000., 10000000.]
+      filt1.totalWidth: [0., 20.]
+      filt1.totalHeight: [0., 5.]
+      filt2.thicknessSubstrate: [0., 200000.]
+      cr1.translationXerror: [-10., 10.]
+      cr1.translationYerror: [-2., 2.]
+      cr1.translationZerror: [-5, 5]
+      cr1.rotationXerror: [-15., 15.]
+      cr1.rotationYerror: [-0.1, 0.1]
+      cr1.rotationZerror: [-3., 3.]
+      cr2.translationXerror: [-10., 10.]
+      cr2.translationYerror: [-2., 2.]
+      cr2.translationZerror: [-5, 5]
+      cr2.rotationXerror: [-15., 15.]
+      cr2.rotationYerror: [-0.1, 0.1]
+      cr2.rotationZerror: [-3., 3.]
+      Slit2.totalWidth: [0., 20.]
+      Slit2.totalHeight: [0., 5.]
+      ExitWindow.totalWidth: [0., 20.]
+      ExitWindow.totalHeight: [0., 5.]
+      Slit3.totalWidth: [0., 20.]
+      Slit3.totalHeight: [0., 5.]
+      Filter3.thicknessSubstrate: [0., 200000.]
+      Pinhole.totalWidth: [0., 5.]
+      Pinhole.totalHeight: [0., 5.]
+      DetectorAtFocus.translationXerror: [-3.33, 3.33]
+      DetectorAtFocus.translationYerror: [-3.33, 3.33]
+      DetectorAtFocus.translationZerror: [-3.33, 3.33]
+    output_parameters:
+      - "DetectorAtFocus.translationXerror"
+      - "DetectorAtFocus.translationYerror"
+      - "DetectorAtFocus.translationZerror"
+engine:
+  _target_: "ray_tools.base.engine.RayEngine"
+  rml_basefile: "rml_src/mySpot_Si111_noM2_for_surrogate.rml"
+  exported_planes:
+    - ${target_configuration.exported_plane}
+  ray_backend:
+    _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
+    docker_image: 'ray-ui-service'
+    dockerfile_path: 'ray_docker/rayui'
+    ray_workdir:
+      _target_: 'sub_projects.ray_optimization.configuration.build_ray_workdir_path'
+      parent_path: '/dev/shm/ray_workdir'
+    verbose: False
+  num_workers: -1
+num_beamline_samples: 22
+exported_plane: "DetectorAtFocus"
+max_sample_generation_deviation: 0.01
+max_target_deviation: 0.3
+max_offset_search_deviation: 0.3
+z_layers: [-15., -10., -5., 0., 5., 10., 15., 20., 25., 30.]
+transforms:
+  _target_: "ray_tools.base.transform.MultiLayer"
+  dist_layers: ${target_configuration.z_layers}
+  copy_directions: False
+logging_project: "myspot"
