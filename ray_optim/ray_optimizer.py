@@ -657,7 +657,7 @@ class RayOptimizer:
             target_tensor = [target_tensor]
         #target_plot = Plot.plot_data(target_tensor)
         #output_dict["target_footprint"] = target_plot
-        z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output']['ImagePlane'].keys()]
+        z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output'][exported_plane].keys()]
         if verbose:
             print("Plot fancy ray plot.")
         fancy_plot = Plot.fancy_ray([target_tensor], z_index=z_index)
