@@ -700,7 +700,7 @@ class RayOptimizer:
                 training_samples_count=len(target.observed_rays)
             )
             output_dict["compensation"] = compensation_plot
-            z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output']['ImagePlane'].keys()]
+            z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output'][exported_plane].keys()]
             if verbose:
                 print("Plotting fancy ray plot.")
             fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"], z_index=z_index)
