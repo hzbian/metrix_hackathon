@@ -652,15 +652,28 @@ class RayOptimizer:
     @staticmethod
     def plot_initial_plots(target: Target, exported_plane: str, verbose: bool = False):
         output_dict = {}
-        target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane)
+        labels = []
+        plot_data_list = []
+        if isinstance(target, OffsetTarget):
+          uncompensated_rays = ray_output_to_tensor(
+                  target.uncompensated_rays,
+                  exported_plane,
+                  to_cpu=True,
+                )
+          plot_data_list.append(uncompensated_rays)
+          labels.append("Uncompensated")
+          
+        target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True)
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
+        plot_data_list.append(target_tensor)
+        labels.append("Observed")
         #target_plot = Plot.plot_data(target_tensor)
         #output_dict["target_footprint"] = target_plot
         z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output'][exported_plane].keys()]
         if verbose:
             print("Plot fancy ray plot.")
-        fancy_plot = Plot.fancy_ray([target_tensor], z_index=z_index)
+        fancy_plot = Plot.fancy_ray(plot_data_list, labels, z_index=z_index)
         output_dict["fancy_footprint"] = fancy_plot
         return output_dict
 
