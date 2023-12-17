@@ -19,7 +19,7 @@ class SimulationBackendTest(unittest.TestCase):
             with initialize(version_base=None, config_path="../sub_projects/ray_optimization/conf"):
                 # config is relative to a module
                 cfg = compose(config_name="config", overrides=["logging_backend=",
-                "+logging_backend._target_=ray_optim.logging.DebugPlotBackend", "target_configuration=metrixs", "target_configuration.max_target_deviation=0.02"],)
+                "+logging_backend._target_=ray_optim.logging.DebugPlotBackend", "target_configuration=metrixs_fixed_crit", "target_configuration.max_target_deviation=0.02", "target_configuration.max_sample_generation_deviation=0.2"],)
                 print(omegaconf.OmegaConf.to_yaml(cfg))
                 ray_optimization: RayOptimization = instantiate(cfg)
                 ray_optimization.setup_target()
