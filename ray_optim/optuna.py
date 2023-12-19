@@ -1,7 +1,8 @@
+from typing import Callable, Dict, List
 from optuna import Study
 import torch
 from ray_optim.ray_optimizer import Target, OptimizerBackend
-from ray_tools.base.parameter import MutableParameter, NumericalParameter
+from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 
 
 class OptimizerBackendOptuna(OptimizerBackend):
@@ -12,7 +13,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
         pass
 
     @staticmethod
-    def optuna_objective(objective, target: Target):
+    def optuna_objective(objective: Callable[[List[RayParameterContainer], Target], List[float]], target: Target):
         def output_objective(trial):
             optimize_parameters = target.search_space.copy()
             for key, value in optimize_parameters.items():
@@ -25,7 +26,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective, iterations, target: Target):
+    def optimize(self, objective: Callable[[List[RayParameterContainer], Target], List[float]], iterations: int, target: Target):
         self.optuna_study.optimize(
             self.optuna_objective(objective, target),
             n_trials=iterations,
