@@ -2,3 +2,12 @@ defaults:
   - base
 optimizer_backend:
   _target_: "ray_optim.ax.OptimizerBackendAx"
+  ax_client:
+    _target_: "ax.service.ax_client.AxClient"
+    generation_strategy:
+      _target_: "ax.modelbridge.generation_strategy.GenerationStrategy"
+      steps:
+        - _target_: "ax.modelbridge.generation_strategy.GenerationStep"
+          num_trials: 5
+          max_parallelism: 3
+          model: ax.modelbridge.registry.Models.SOBOL
