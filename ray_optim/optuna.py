@@ -9,7 +9,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
     def __init__(self, optuna_study: Study):
         self.optuna_study: Study = optuna_study
 
-    def setup_optimization(self):
+    def setup_optimization(self, target: Target):
         pass
 
     @staticmethod
