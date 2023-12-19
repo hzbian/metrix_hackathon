@@ -72,7 +72,7 @@ class OffsetTarget(Target):
 
 class OptimizerBackend(metaclass=ABCMeta):
     @abstractmethod
-    def setup_optimization(self):
+    def setup_optimization(self, target: Target):
         pass
 
     @abstractmethod
@@ -826,7 +826,7 @@ class RayOptimizer:
         return losses, num_rays, losses_mean
 
     def optimize(self, target: Target):
-        self.optimizer_backend.setup_optimization()
+        self.optimizer_backend.setup_optimization(target=target)
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
             iterations=self.iterations,
