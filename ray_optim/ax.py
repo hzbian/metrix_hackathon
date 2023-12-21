@@ -1,12 +1,14 @@
 # this needs some major work
 import time
 from typing import List, Optional
+import ax
 from ax.service.ax_client import AxClient, ObjectiveProperties
 from ax.service.ax_client import AxClient
 from tqdm import trange
 from ray_optim.ray_optimizer import OptimizerBackend, Target
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
-
+from ax.modelbridge.registry import Cont_X_trans, Models
+from ax.modelbridge.generation_strategy import GenerationStep
 
 class OptimizerBackendAx(OptimizerBackend):
    def __init__(self, ax_client: Optional[AxClient] = None):
@@ -54,3 +56,14 @@ class OptimizerBackendAx(OptimizerBackend):
 
        best_parameters, metrics = self.ax_client.get_best_parameters()
        return best_parameters, metrics
+   
+def get_model(selection: str):
+    if selection == "SOBOL":
+       return Models.SOBOL
+       
+def get_step(model: str, max_parallelism: int, num_trials: int):
+    return GenerationStep(
+        model = get_model(model),
+        max_parallelism=max_parallelism,
+        num_trials=num_trials,
+    )
