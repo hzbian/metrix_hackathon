@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 import numpy as np
 from ray_optim.ray_optimizer import Target, OptimizerBackend
 from ray_tools.base.parameter import MutableParameter, NumericalParameter
@@ -8,7 +8,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
     def __init__(self, basinhopping_function):
         self.basinhopping_function = basinhopping_function
 
-    def setup_optimization(self):
+    def setup_optimization(self, target: Target):
         pass
 
     @staticmethod
@@ -23,7 +23,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective: Callable, iterations: int, target: Target):
+    def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: Optional[dict[str, float]] = None):
         optimize_parameters = target.search_space.copy()
         x0 = []
         bounds = []
@@ -34,5 +34,8 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
         ret = self.basinhopping_function(self.basinhopping_objective(objective, target), x0,
                                          niter=iterations, interval=iterations, stepsize=1, T=0.01,
                                          minimizer_kwargs={"bounds": bounds}, disp=True)
-        return ret.x, ret.fun
+        x_dict = {}
+        for idx, key in enumerate(optimize_parameters.keys()):
+            x_dict[key] = ret.x[idx]
+        return x_dict, ret.fun
 
