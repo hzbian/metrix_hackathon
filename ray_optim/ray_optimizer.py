@@ -81,6 +81,7 @@ class OptimizerBackend(metaclass=ABCMeta):
         objective: Callable,
         iterations: int,
         target: Target,
+        starting_point: Optional[dict[str, float]] = None,
     ):
         pass
 
@@ -145,6 +146,7 @@ class RayOptimizer:
         plot_interval: int = 10,
         iterations: int = 1000,
         max_logging_processes: int = 20,
+        starting_point: Optional[dict[str, float]] = None,
     ):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: Engine = engine
@@ -163,6 +165,7 @@ class RayOptimizer:
         self.max_logging_processes: int = max_logging_processes
         self.running_logger_processes: List[Process] = []
         self.waiting_logger_processes: List[Process] = []
+        self.starting_point: Optional[dict[str, float]] = starting_point
 
     @staticmethod
     def parameters_rmse(
@@ -825,11 +828,12 @@ class RayOptimizer:
             self.overall_best.rays = output_tensor
         return losses, num_rays, losses_mean
 
-    def optimize(self, target: Target):
+    def optimize(self, target: Target, starting_point: Optional[dict[str, float]] = None):
         self.optimizer_backend.setup_optimization(target=target)
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
             iterations=self.iterations,
             target=target,
+            starting_point=starting_point,
         )
         return best_parameters, metrics
