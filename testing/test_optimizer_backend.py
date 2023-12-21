@@ -3,7 +3,9 @@ from typing import List, Optional
 import unittest
 from unittest.mock import Mock
 import optuna
+import scipy
 from ray_optim.ax import OptimizerBackendAx
+from ray_optim.basinhopping import OptimizerBackendBasinhopping
 from ray_optim.optuna import OptimizerBackendOptuna
 from ax.service.ax_client import AxClient
 from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
@@ -102,3 +104,10 @@ class TestOptimizerBackend(unittest.TestCase):
         abo.setup_optimization(target)
         target = Target(Mock(), search_space, target_params=self.param_func())
         abo.optimize(self.mock_objective, 10, target)
+    
+    def test_basinhopping(self):
+        search_space=self.param_func()
+        obb = OptimizerBackendBasinhopping(scipy.optimize.basinhopping)
+        target = Target(Mock(), search_space, target_params=self.param_func())
+        obb.setup_optimization(target)
+        obb.optimize(self.mock_objective, 10, target)
