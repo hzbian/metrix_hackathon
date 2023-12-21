@@ -7,7 +7,7 @@ optimizer_backend:
     generation_strategy:
       _target_: "ax.modelbridge.generation_strategy.GenerationStrategy"
       steps:
-        - _target_: "ax.modelbridge.generation_strategy.GenerationStep"
+        - _target_: "ray_optim.ax.get_step"
+          model: "SOBOL"
           num_trials: 5
           max_parallelism: 3
-          model: ax.modelbridge.registry.Models.SOBOL
