@@ -235,7 +235,7 @@ class RayOptimization:
         try:
             if self.is_output_ray_list_empty(self.target.observed_rays):
                 raise Exception("Refusing to optimize an empty target.")
-            self.ray_optimizer.optimize(target=self.target)
+            self.ray_optimizer.optimize(target=self.target, starting_point=self.ray_optimizer.starting_point)
         except NameError:
             raise Exception("You need to run setup_target() first.")
 
@@ -246,21 +246,13 @@ class RayOptimization:
         return not True in [len(entry.reshape(-1)) != 0 for entry in input]
 
 
-# Bayesian Optimization
-# ax_client = AxClient(early_stopping_strategy=None, verbose_logging=verbose)
-
-# optimizer_backend_ax = OptimizerBackendAx(ax_client, search_space=all_params)
-
-
-
-
 os.environ["HYDRA_FULL_ERROR"] = "1"
 
 
 @hydra.main(version_base=None, config_path="./conf", config_name="config")
 def optimization(cfg):
     print(OmegaConf.to_yaml(cfg))
-    ray_optimization = instantiate(cfg)
+    ray_optimization: RayOptimization = instantiate(cfg)
     ray_optimization.logging_backend.log_config(
         OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     )
