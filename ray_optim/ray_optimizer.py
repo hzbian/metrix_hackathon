@@ -19,7 +19,12 @@ from ray_tools.base.parameter import (
     NumericalOutputParameter,
     OutputParameter,
 )
-from ray_tools.base.transform import RayTransformCompose, MultiLayer, Translation
+from ray_tools.base.transform import (
+    RayTransformCompose,
+    MultiLayer,
+    RayTransformDummy,
+    Translation,
+)
 from sub_projects.ray_optimization.losses.losses import RayLoss
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
@@ -60,7 +65,9 @@ class OffsetTarget(Target):
         target_compensation: Optional[RayParameterContainer] = None,
         validation_scan: Optional[RayScan] = None,
     ):
-        super().__init__(training_scan.observed_rays, offset_search_space, target_compensation)
+        super().__init__(
+            training_scan.observed_rays, offset_search_space, target_compensation
+        )
         self.uncompensated_parameters: List[
             RayParameterContainer
         ] = training_scan.uncompensated_parameters
@@ -86,17 +93,16 @@ class OptimizerBackend(metaclass=ABCMeta):
         pass
 
 
-
 class Sample:
     def __init__(
         self,
         params=RayParameterContainer(),
-        rays: Optional[torch.Tensor] = None,
+        rays: Optional[list[torch.Tensor]] = None,
         loss: float = float("inf"),
         epoch: int = 0,
     ):
         self._params: RayParameterContainer = params
-        self._rays: Optional[torch.Tensor] = rays
+        self._rays: Optional[list[torch.Tensor]] = rays
         self._loss: float = loss
         self._epoch: int = epoch
 
@@ -113,7 +119,7 @@ class Sample:
         return self._rays
 
     @rays.setter
-    def rays(self, rays: Optional[torch.Tensor]):
+    def rays(self, rays: Optional[list[torch.Tensor]]):
         self._rays = rays
 
     @property
@@ -152,7 +158,9 @@ class RayOptimizer:
         self.engine: Engine = engine
         self.criterion: RayLoss = criterion
         self.exported_plane: str = exported_plane
-        self.transforms: Optional[RayTransform] = transforms
+        self.transforms: RayTransform = (
+            transforms if transforms is not None else RayTransformDummy()
+        )
         self.logging_backend: LoggingBackend = logging_backend
         self.log_times: bool = log_times
         self.evaluation_counter: int = 0
@@ -175,11 +183,11 @@ class RayOptimizer:
     ):
         counter: int = 0
         mse: float = 0.0
-        normalized_parameters_a: RayParameterContainer = (
-            Plot.normalize_parameters(parameters_a, search_space)
+        normalized_parameters_a: RayParameterContainer = Plot.normalize_parameters(
+            parameters_a, search_space
         )
-        normalized_parameters_b: RayParameterContainer = (
-            Plot.normalize_parameters(parameters_b, search_space)
+        normalized_parameters_b: RayParameterContainer = Plot.normalize_parameters(
+            parameters_b, search_space
         )
         for key in search_space.keys():
             if key in normalized_parameters_b.keys() and key in normalized_parameters_a:
@@ -192,7 +200,7 @@ class RayOptimizer:
             return sqrt(mse / counter)
         else:
             return 0
-        
+
     @staticmethod
     def single_parameters_rmse(
         parameters_a: RayParameterContainer,
@@ -200,19 +208,19 @@ class RayOptimizer:
         search_space: RayParameterContainer,
     ):
         output_dict = {}
-        normalized_parameters_a: RayParameterContainer = (
-            Plot.normalize_parameters(parameters_a, search_space)
+        normalized_parameters_a: RayParameterContainer = Plot.normalize_parameters(
+            parameters_a, search_space
         )
-        normalized_parameters_b: RayParameterContainer = (
-            Plot.normalize_parameters(parameters_b, search_space)
+        normalized_parameters_b: RayParameterContainer = Plot.normalize_parameters(
+            parameters_b, search_space
         )
         for key in search_space.keys():
             if key in normalized_parameters_b.keys() and key in normalized_parameters_a:
-                mse = (
+                mse: float = (
                     normalized_parameters_a[key].get_value()
                     - normalized_parameters_b[key].get_value()
                 ) ** 2
-            output_dict["params_rmse/"+key] = sqrt(mse)
+                output_dict["params_rmse/" + key] = sqrt(mse)
         return output_dict
 
     @staticmethod
@@ -232,8 +240,10 @@ class RayOptimizer:
     def translate_transform(
         transform: RayTransform, xyz_translation: tuple[float, float, float]
     ) -> RayTransform:
-        transforms_copy = copy.deepcopy(transform)
-        if isinstance(transform, MultiLayer):
+        transforms_copy: RayTransform = copy.deepcopy(transform)
+        if isinstance(transform, MultiLayer) and isinstance(
+            transforms_copy, MultiLayer
+        ):
             transforms_copy.dist_layers = [
                 element + xyz_translation[2] for element in transform.dist_layers
             ]
@@ -264,9 +274,9 @@ class RayOptimizer:
     @staticmethod
     def translate_exported_plain_transforms(
         exported_plane: str,
-        param_container_list: List[RayParameterContainer],
+        param_container_list: list[RayParameterContainer],
         transform: RayTransform,
-    ):
+    ) -> list[RayTransform]:
         exported_plane_translations = [
             RayOptimizer.get_exported_plane_translation(
                 exported_plane, param_container_entry
@@ -280,7 +290,7 @@ class RayOptimizer:
         return transforms
 
     @staticmethod
-    def tensor_list_to_cpu(tensor_list: List[torch.Tensor]):
+    def tensor_list_to_cpu(tensor_list: list[torch.Tensor]) -> list[torch.Tensor]:
         return [element.cpu() for element in tensor_list]
 
     @staticmethod
@@ -329,7 +339,7 @@ class RayOptimizer:
         return flattened_list
 
     @staticmethod
-    def reshape_list(list: List[Any], list_list_length: int) -> List[List[Any]]:
+    def reshape_list(list: list[Any], list_list_length: int) -> List[List[Any]]:
         if len(list) % list_list_length != 0:
             raise ValueError(
                 "Lenght of list is not dividable by the length of the list lists."
@@ -377,14 +387,23 @@ class RayOptimizer:
             RayParameterContainer
         ] = RayOptimizer.flatten_list_list(evaluation_parameters)
 
-        transforms = RayOptimizer.translate_exported_plain_transforms(
+        transforms_list: list[
+            RayTransform
+        ] = RayOptimizer.translate_exported_plain_transforms(
             exported_plane, flattened_evaluation_parameters, transforms
         )
 
-        begin_execution_time: float = time.time() if log_times else None
-        output = engine.run(flattened_evaluation_parameters, transforms=transforms)
+        begin_execution_time: float = time.time() if log_times else 0.0
+        output: Iterable[Any] = engine.run(
+            flattened_evaluation_parameters, transforms=transforms_list
+        )
         execution_time = time.time() - begin_execution_time if log_times else None
-        reshaped_output = RayOptimizer.reshape_list(
+        if not isinstance(output, list):
+            raise Exception(
+                "Output of engine should be list since the input was a list."
+            )
+
+        reshaped_output: list[list[Any]] = RayOptimizer.reshape_list(
             output, len(evaluation_parameters[0])
         )
         return reshaped_output, execution_time
@@ -410,7 +429,8 @@ class RayOptimizer:
                 internal_list = new_internal_list
                 q.task_done()
 
-    def check_for_done(process_list: List[Process]):
+    @staticmethod
+    def check_for_done(process_list: list[Process]):
         for i, p in enumerate(process_list):
             if not p.is_alive():
                 return True, i
@@ -422,7 +442,7 @@ class RayOptimizer:
         assert isinstance(compensations, list)
         assert isinstance(compensations[0], RayParameterContainer)
 
-        begin_total_time: Optional[float] = time.time() if self.log_times else None
+        begin_total_time: float = time.time() if self.log_times else 0.0
 
         log_dict: Dict[str, Any] = {}
         current_epochs = RayOptimizer.current_epochs(
@@ -445,7 +465,7 @@ class RayOptimizer:
             log_dict["System/execution_time"] = execution_time
 
         self.evaluation_counter += len(output)
-        begin_loss_time: float = time.time() if self.log_times else None
+        begin_loss_time: float = time.time() if self.log_times else 0.0
         trials = self.calculate_loss_from_output(
             output,
             target.observed_rays,
@@ -458,7 +478,7 @@ class RayOptimizer:
             log_dict["System/loss_time"] = time.time() - begin_loss_time
 
         if self.log_times:
-            log_dict["System/total_time"]: time.time() - begin_total_time
+            log_dict["System/total_time"] = time.time() - begin_total_time
 
         if self.logger_consumer_process is None:
             self.logger_consumer_process = Process(
@@ -494,11 +514,11 @@ class RayOptimizer:
                     self.running_logger_processes.pop(num)
                     wait = False
                 else:
-                    time.sleep(0.5) 
+                    time.sleep(0.5)
         logger_process.start()
         self.running_logger_processes.append(logger_process)
         # check if all jobs are complete and wait if not at the end
-        if self.iterations-1 in current_epochs:
+        if self.iterations - 1 in current_epochs:
             while len(self.running_logger_processes) != 0:
                 done, num = RayOptimizer.check_for_done(self.running_logger_processes)
                 if done:
@@ -507,7 +527,9 @@ class RayOptimizer:
                     time.sleep(0.5)
 
         for sample in trials:
-            if RayOptimizer.is_new_interval(self.plot_interval_best.epoch, sample.epoch, self.plot_interval):
+            if RayOptimizer.is_new_interval(
+                self.plot_interval_best.epoch, sample.epoch, self.plot_interval
+            ):
                 self.plot_interval_best = Sample()
             if sample.loss < self.plot_interval_best.loss:
                 self.plot_interval_best = sample
@@ -520,7 +542,7 @@ class RayOptimizer:
         old_plot_interval = epoch_old // plot_interval
         new_plot_interval = epoch_new // plot_interval
         return old_plot_interval != new_plot_interval
-    
+
     @staticmethod
     def new_logger(
         queue: JoinableQueue,
@@ -535,7 +557,7 @@ class RayOptimizer:
         transforms: RayTransform,
         logging_backend: LoggingBackend,
         compensations,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         for sample_idx, sample in enumerate(trials):
             log_dict["epoch"] = sample.epoch
@@ -554,17 +576,19 @@ class RayOptimizer:
                     target.search_space,
                 )
                 single_params_rmse = RayOptimizer.single_parameters_rmse(
-                    target.target_params,
-                    sample.params,
-                    target.search_space
+                    target.target_params, sample.params, target.search_space
                 )
                 log_dict = {**log_dict, **single_params_rmse}
             if sample.epoch % plot_interval == 0 and sample.epoch != 0:
-                plots = RayOptimizer.plot(target, exported_plane, plot_interval_best, verbose)
+                plots = RayOptimizer.plot(
+                    target, exported_plane, plot_interval_best, verbose
+                )
             else:
                 plots = {}
             if sample.epoch == 0:
-                initial_plots = RayOptimizer.plot_initial_plots(target, exported_plane, verbose)
+                initial_plots = RayOptimizer.plot_initial_plots(
+                    target, exported_plane, verbose
+                )
             else:
                 initial_plots = {}
             if sample.loss < overall_best.loss:
@@ -580,14 +604,17 @@ class RayOptimizer:
             else:
                 better_plots = {}
             log_plots = {**plots, **initial_plots, **better_plots}
-            log_plots = {key: logging_backend.figure_to_image(value) for key, value in log_plots.items()}
+            log_plots = {
+                key: logging_backend.figure_to_image(value)
+                for key, value in log_plots.items()
+            }
             queue.put({**log_dict, **log_plots})
             queue.join()
 
     @staticmethod
     def on_better_solution_found(
         target: Target,
-        transforms: List[RayTransform],
+        transforms: RayTransform,
         overall_best: Sample,
         exported_plane: str,
         engine: Engine,
@@ -595,33 +622,38 @@ class RayOptimizer:
         verbose: bool = False,
     ):
         output_dict = {}
-        if target.validation_scan is not None:
-            validation_parameters = RayOptimizer.compensate_parameters_list(
-                target.validation_scan.uncompensated_parameters, compensation
+        if overall_best.rays is None:
+            raise Exception(
+                "The rays of overall best should be simulated at this point, if there are no rays, it should be an empty tensor."
+            )
+        def to_cpu_tensor_list(ray_output: Union[Dict, List[Dict], Iterable[Dict]]) -> list[torch.Tensor]:
+            output_tensor_list = ray_output_to_tensor(ray_output, exported_plane, to_cpu=True)
+            if not isinstance(target_uncompensated_rays_list, list):
+                raise Exception("Target uncompensated rays list must be a list.")
+            return output_tensor_list
+        best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
+        target_observed_rays_list = to_cpu_tensor_list(target.observed_rays)
+
+
+        if isinstance(target, OffsetTarget):
+            target_uncompensated_rays_list = ray_output_to_tensor(
+                target.uncompensated_rays, exported_plane, to_cpu=True
             )
 
-        best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
-        target_observed_rays_list = ray_output_to_tensor(
-            target.observed_rays, exported_plane, to_cpu=True
-        )
-        target_uncompensated_rays_list = ray_output_to_tensor(
-            target.uncompensated_rays, exported_plane, to_cpu=True
-        )
-        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
-        if verbose:
-            print("Plotting overall fixed position plot.")
-        fixed_position_plot = Plot.fixed_position_plot(
-            best_rays_list,
-            target_observed_rays_list,
-            target_uncompensated_rays_list,
-            epoch=overall_best.epoch,
-            training_samples_count=len(target.observed_rays),
-            xlim=xlim,
-            ylim=ylim,
-        )
-        output_dict["overall_fixed_position_plot"] = fixed_position_plot
+            if verbose:
+                print("Plotting overall fixed position plot.")
+            if not isinstance(target.observed_rays, list):
+                raise Exception("Target observed rays must be a list.")
 
-        if target.validation_scan is not None:
+            output_dict[
+                "overall_fixed_position_plot"
+            ] = RayOptimizer.overall_fixed_position_plot(
+                best_rays_list,
+                target_observed_rays_list,
+                target_uncompensated_rays_list,
+            )
+
+        if isinstance(target, OffsetTarget) and target.validation_scan is not None:
             validation_scan = target.validation_scan
             validation_rays_list = ray_output_to_tensor(
                 validation_scan.observed_rays, exported_plane=exported_plane
@@ -629,16 +661,28 @@ class RayOptimizer:
             validation_parameters_rays_list = ray_output_to_tensor(
                 validation_scan.uncompensated_rays, exported_plane
             )
-            transforms = RayOptimizer.translate_exported_plain_transforms(
+            validation_parameters = RayOptimizer.compensate_parameters_list(
+                target.validation_scan.uncompensated_parameters, compensation
+            )
+
+            translated_transforms: list[
+                RayTransform
+            ] = RayOptimizer.translate_exported_plain_transforms(
                 exported_plane, validation_parameters, transforms
             )
-            compensated_rays_list = engine.run(validation_parameters, transforms)
+            compensated_rays_list = engine.run(
+                validation_parameters, translated_transforms
+            )
             compensated_rays_list = ray_output_to_tensor(
                 compensated_rays_list, exported_plane=exported_plane
             )
-            xlim, ylim = Plot.switch_lims_if_out_of_lim(validation_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
+            xlim, ylim = Plot.switch_lims_if_out_of_lim(
+                validation_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
+            )
             if verbose:
                 print("Plot validation fixed position plot.")
+            if not isinstance(target.observed_rays, list):
+                raise Exception("Target observed rays must be a list.")
             validation_fixed_position_plot = Plot.fixed_position_plot(
                 compensated_rays_list,
                 validation_rays_list,
@@ -653,27 +697,50 @@ class RayOptimizer:
         return output_dict
 
     @staticmethod
+    def overall_fixed_position_plot(
+        best_rays_list, target_observed_rays_list, target_uncompensated_rays_list
+    ):
+        xlim, ylim = Plot.switch_lims_if_out_of_lim(
+            target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
+        )
+        fixed_position_plot = Plot.fixed_position_plot(
+            best_rays_list,
+            target_observed_rays_list,
+            target_uncompensated_rays_list,
+            epoch=overall_best.epoch,
+            training_samples_count=len(target.observed_rays),
+            xlim=xlim,
+            ylim=ylim,
+        )
+        return fixed_position_plot
+
+    @staticmethod
     def plot_initial_plots(target: Target, exported_plane: str, verbose: bool = False):
         output_dict = {}
         labels = []
         plot_data_list = []
         if isinstance(target, OffsetTarget):
-          uncompensated_rays = ray_output_to_tensor(
-                  target.uncompensated_rays,
-                  exported_plane,
-                  to_cpu=True,
-                )
-          plot_data_list.append(uncompensated_rays)
-          labels.append("Uncompensated")
-          
-        target_tensor = ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True)
+            uncompensated_rays = ray_output_to_tensor(
+                target.uncompensated_rays,
+                exported_plane,
+                to_cpu=True,
+            )
+            plot_data_list.append(uncompensated_rays)
+            labels.append("Uncompensated")
+
+        target_tensor = ray_output_to_tensor(
+            target.observed_rays, exported_plane, to_cpu=True
+        )
         if isinstance(target_tensor, torch.Tensor):
             target_tensor = [target_tensor]
         plot_data_list.append(target_tensor)
         labels.append("Observed")
-        #target_plot = Plot.plot_data(target_tensor)
-        #output_dict["target_footprint"] = target_plot
-        z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output'][exported_plane].keys()]
+        # target_plot = Plot.plot_data(target_tensor)
+        # output_dict["target_footprint"] = target_plot
+        z_index: List[float] = [
+            float(i)
+            for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
+        ]
         if verbose:
             print("Plot fancy ray plot.")
         fancy_plot = Plot.fancy_ray(plot_data_list, labels, z_index=z_index)
@@ -681,18 +748,25 @@ class RayOptimizer:
         return output_dict
 
     @staticmethod
-    def plot(target: Target, exported_plane: str, plot_interval_best: Sample, verbose: bool = False):
+    def plot(
+        target: Target,
+        exported_plane: str,
+        plot_interval_best: Sample,
+        verbose: bool = False,
+    ):
         output_dict = {}
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
-        #plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
-        #output_dict["footprint"] = plot
+        # plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
+        # output_dict["footprint"] = plot
         if isinstance(target, OffsetTarget):
-            observed_rays = ray_output_to_tensor(target.observed_rays, exported_plane, to_cpu=True)
+            observed_rays = ray_output_to_tensor(
+                target.observed_rays, exported_plane, to_cpu=True
+            )
             uncompensated_rays = ray_output_to_tensor(
-                    target.uncompensated_rays,
-                    exported_plane,
-                    to_cpu=True,
-                )
+                target.uncompensated_rays,
+                exported_plane,
+                to_cpu=True,
+            )
             if verbose:
                 print("Plotting compensation plot.")
             compensation_plot = Plot.compensation_plot(
@@ -700,13 +774,20 @@ class RayOptimizer:
                 observed_rays,
                 uncompensated_rays,
                 epoch=plot_interval_best.epoch,
-                training_samples_count=len(target.observed_rays)
+                training_samples_count=len(target.observed_rays),
             )
             output_dict["compensation"] = compensation_plot
-            z_index: List[float] = [float(i) for i in target.observed_rays[0]['ray_output'][exported_plane].keys()]
+            z_index: List[float] = [
+                float(i)
+                for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
+            ]
             if verbose:
                 print("Plotting fancy ray plot.")
-            fancy_ray_plot = Plot.fancy_ray([uncompensated_rays, observed_rays, interval_best_rays], ["Uncompensated", "Observed", "Compensated"], z_index=z_index)
+            fancy_ray_plot = Plot.fancy_ray(
+                [uncompensated_rays, observed_rays, interval_best_rays],
+                ["Uncompensated", "Observed", "Compensated"],
+                z_index=z_index,
+            )
             output_dict["fancy_ray"] = fancy_ray_plot
         max_ray_index = torch.argmax(
             torch.Tensor(
@@ -716,12 +797,16 @@ class RayOptimizer:
                 ]
             )
         ).item()
-        target_observed_rays_list = [ray_output_to_tensor(
-                    target.observed_rays[max_ray_index],
-                    exported_plane,
-                    to_cpu=True,
-                )]
-        xlim, ylim = Plot.switch_lims_if_out_of_lim(target_observed_rays_list, lims_x=(-2., 2.), lims_y=(-2., 2.))
+        target_observed_rays_list = [
+            ray_output_to_tensor(
+                target.observed_rays[max_ray_index],
+                exported_plane,
+                to_cpu=True,
+            )
+        ]
+        xlim, ylim = Plot.switch_lims_if_out_of_lim(
+            target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
+        )
         fixed_position_plot = Plot.fixed_position_plot(
             [interval_best_rays[max_ray_index]],
             target_observed_rays_list,
@@ -828,7 +913,9 @@ class RayOptimizer:
             self.overall_best.rays = output_tensor
         return losses, num_rays, losses_mean
 
-    def optimize(self, target: Target, starting_point: Optional[dict[str, float]] = None):
+    def optimize(
+        self, target: Target, starting_point: Optional[dict[str, float]] = None
+    ):
         self.optimizer_backend.setup_optimization(target=target)
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
