@@ -34,12 +34,12 @@ class RayOptimization:
         self.target_configuration = target_configuration
         self.rg: RandomGenerator = rg
         self.ray_optimizer = ray_optimizer
-        self.real_data_configuration: RealDataConfiguration = (
+        self.real_data_configuration: RealDataConfiguration | None = (
             target_configuration.real_data_configuration
         )
         self.logging_backend: LoggingBackend = logging_backend
         self.logging: bool = logging
-        self.z_layers: List[float] = target_configuration.z_layers
+        self.z_layers: list[float] = target_configuration.z_layers
         self.ray_parameter_container: RayParameterContainer = (
             self.target_configuration.param_func()
         )
@@ -126,8 +126,8 @@ class RayOptimization:
         return compensated_transforms
 
     def create_observed_rays(self, uncompensated_parameters, target_compensation):
-        compensated_parameters: List[
-            RayParameterContainer[str, RayParameter]
+        compensated_parameters: list[
+            RayParameterContainer
         ] = self.create_compensated_parameters(
             uncompensated_parameters, target_compensation
         )
@@ -178,7 +178,10 @@ class RayOptimization:
         )
 
     def import_set(self, validation_set: bool = False):
-        import_set = (
+        if self.real_data_configuration is None:
+            raise Exception("Real data configuration is not set but trying to import.")
+        
+        import_set: list[str] | None = (
             self.real_data_configuration.train_set
             if not validation_set
             else self.real_data_configuration.validation_set
@@ -191,6 +194,7 @@ class RayOptimization:
             check_value_lims=not validation_set,
         )
 
+    @staticmethod
     def prune_param_container(container_list):
         return [element["param_container_dict"] for element in container_list]
 
