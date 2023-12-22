@@ -16,10 +16,11 @@ from .transform import RayTransform
 
 
 class Engine(abc.ABC):
+    @abc.abstractmethod
     def run(self,
-            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
-            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+            param_containers: Iterable[RayParameterContainer],
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] | None = None,
+            ) -> Iterable[dict]:
         pass
 
 
@@ -57,9 +58,9 @@ class RayEngine(Engine):
         self.template = self._raypyng_rml.beamline
 
     def run(self,
-            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
-            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+            param_containers: list[RayParameterContainer],
+            transforms: Union[RayTransformType, Iterable[RayTransformType]] | None = None,
+            ) -> list[dict]:
         """
         Runs simulation for given (Iterable of) parameter containers.
         :param param_containers: (Iterable of) :class:`ray_tools.base.parameter.RayParameterContainer` to be processed.
@@ -72,30 +73,26 @@ class RayEngine(Engine):
             see also :class:`ray_tools.base.backend.RayBackend`) and used parameters for simulation
             (field ``param_container_dict``, dict with same keys as in ``param_containers``).
         """
-        # wrap param_containers into list if it was a singleton
-        if isinstance(param_containers, RayParameterContainer):
-            param_containers = [param_containers]
 
         # convert transforms into list if it was a singleton
         if transforms is None or isinstance(transforms, (RayTransform, dict)):
-            transforms = len(param_containers) * [transforms]
+            transforms_list = len(param_containers) * [transforms]
+        else:
+            transforms_list = transforms
 
         # Iterable of arguments used for RayEngine._run_func
         _iter = ((run_params, transform) for (run_params, transform) in
-                 zip(param_containers, transforms))
-        if not self.as_generator:
-            # multi-threading (if self.num_workers > 1)
-            worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
-            jobs = (delayed(self._run_func)(*item) for item in _iter)
-            result = worker(jobs)
-            # extract only element if param_containers was a singleton
-            return result if len(result) > 1 else result[0]
-        else:
-            return (self._run_func(*item) for item in _iter)
+                 zip(param_containers, transforms_list))
+        # multi-threading (if self.num_workers > 1)
+        worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
+        jobs = (delayed(self._run_func)(*item) for item in _iter)
+        result = worker(jobs)
+        # extract only element if param_containers was a singleton
+        return result
 
     def _run_func(self,
                   param_container: RayParameterContainer,
-                  transform: RayTransformType = None,
+                  transform: RayTransformType | None = None,
                   ) -> Dict:
         """
         This method performs the actual simulation run.
@@ -124,7 +121,7 @@ class RayEngine(Engine):
                 result['ray_output'][plane] = t(result['ray_output'][plane])
         return result
 
-    def _key_to_element(self, key: str, template: XmlElement = None) -> XmlElement:
+    def _key_to_element(self, key: str, template: XmlElement | None = None) -> XmlElement:
         """
         Helper function that retrieves an XML-subelement given a key (same format as in RayParameterContainer).
         """
