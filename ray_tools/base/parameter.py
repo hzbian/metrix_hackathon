@@ -162,7 +162,7 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
             dict_copy[key] = param.clone()
         return dict_copy
 
-    def perturb(self, perturbation_dict: Dict[Union[str, XmlElement], RayParameter]):
+    def perturb(self, perturbation_dict: RayParameterContainer):
         for k, v in perturbation_dict.items():
             if isinstance(self[k], NumericalParameter) and isinstance(v, NumericalParameter):
                 self[k].value += v.get_value()
