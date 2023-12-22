@@ -60,10 +60,12 @@ class OptimizerBackendAx(OptimizerBackend):
 def get_model(selection: str):
     if selection == "SOBOL":
        return Models.SOBOL
+    else:
+        raise Exception("This name does not exist.")
        
-def get_step(model: str, max_parallelism: int, num_trials: int):
+def get_step(model_name: str, max_parallelism: int, num_trials: int):
     return GenerationStep(
-        model = get_model(model),
+        model = get_model(model_name),
         max_parallelism=max_parallelism,
         num_trials=num_trials,
     )
