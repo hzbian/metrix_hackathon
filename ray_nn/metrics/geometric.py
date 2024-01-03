@@ -1,5 +1,3 @@
-from typing import Dict, Union
-
 import torch
 from torch import nn
 from geomloss import SamplesLoss
@@ -21,7 +19,7 @@ class SinkhornLoss(nn.Module):
     def __init__(self,
                  p: int = 2,
                  blur: float = 0.05,
-                 normalize_weights: Union[bool, str] = False,
+                 normalize_weights: bool | str = False,
                  backend: str = 'tensorized',
                  reduction='mean') -> None:
         super().__init__()
@@ -35,8 +33,8 @@ class SinkhornLoss(nn.Module):
     def forward(self,
                 inp1: torch.Tensor,
                 inp2: torch.Tensor,
-                weights1: torch.tensor = None,
-                weights2: torch.tensor = None) -> torch.Tensor:
+                weights1: torch.Tensor | None = None,
+                weights2: torch.Tensor | None = None) -> torch.Tensor:
         """
         ``weights1=None`` and ``weights2=None`` means that all points have weight 1.
         """
@@ -99,7 +97,7 @@ class SurrogateLoss(nn.Module):
 
         self._hist_to_pc = HistToPointCloud()
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Note that batch is already with respect to a specific (image) plane.
         """
@@ -166,7 +164,7 @@ class HistZeroAccuracy(nn.Module):
     Validation metric that measures the accuracy of correct predictions of empty histograms.
     """
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         hist_zero_tar = (batch['tar_n_rays'] < 2.0).to(torch.get_default_dtype())
         hist_zero_pred = (batch['pred_hist_zero_prob'] > 0.5).to(torch.get_default_dtype())
         loss = 1.0 - (hist_zero_pred - hist_zero_tar).abs().mean()
@@ -179,5 +177,5 @@ class NRaysAccuracy(nn.Module):
     |1 - pred_n_rays / tar_n_rays|
     """
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         return (1.0 - batch['pred_n_rays'] / batch['tar_n_rays']).abs().mean()
