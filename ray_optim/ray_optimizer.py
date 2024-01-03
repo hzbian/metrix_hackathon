@@ -3,7 +3,7 @@ from operator import itemgetter
 import time
 from abc import ABCMeta, abstractmethod
 from math import sqrt
-from typing import Any, Dict, List, Iterable, Union, Optional, Callable
+from typing import Any, Callable
 from torch.multiprocessing import JoinableQueue, Process
 
 import torch
@@ -32,25 +32,23 @@ from sub_projects.ray_optimization.utils import ray_output_to_tensor
 class RayScan:
     def __init__(
         self,
-        uncompensated_parameters: List[RayParameterContainer],
-        uncompensated_rays: Union[dict, Iterable[dict], List[dict]],
-        observed_rays: Union[dict, Iterable[dict], List[dict]],
+        uncompensated_parameters: list[RayParameterContainer],
+        uncompensated_rays: list[dict],
+        observed_rays: list[dict],
     ):
-        self.uncompensated_parameters: List[
+        self.uncompensated_parameters: list[
             RayParameterContainer
         ] = uncompensated_parameters
-        self.uncompensated_rays: Union[
-            dict, Iterable[dict], List[dict]
-        ] = uncompensated_rays
-        self.observed_rays: Union[dict, Iterable[dict], List[dict]] = observed_rays
+        self.uncompensated_rays: list[dict] = uncompensated_rays
+        self.observed_rays: list[dict] = observed_rays
 
 
 class Target:
     def __init__(
         self,
-        observed_rays: Union[dict, Iterable[dict], List[dict]],
+        observed_rays: list[dict],
         search_space: RayParameterContainer,
-        target_params: Optional[RayParameterContainer] = None,
+        target_params: RayParameterContainer | None = None,
     ):
         self.observed_rays = observed_rays
         self.search_space = search_space
@@ -62,19 +60,17 @@ class OffsetTarget(Target):
         self,
         training_scan: RayScan,
         offset_search_space: RayParameterContainer,
-        target_compensation: Optional[RayParameterContainer] = None,
-        validation_scan: Optional[RayScan] = None,
+        target_compensation: RayParameterContainer | None = None,
+        validation_scan: RayScan | None = None,
     ):
         super().__init__(
             training_scan.observed_rays, offset_search_space, target_compensation
         )
-        self.uncompensated_parameters: List[
+        self.uncompensated_parameters: list[
             RayParameterContainer
         ] = training_scan.uncompensated_parameters
-        self.uncompensated_rays: Union[
-            dict, Iterable[dict], List[dict]
-        ] = training_scan.uncompensated_rays
-        self.validation_scan: Optional[RayScan] = validation_scan
+        self.uncompensated_rays: list[dict] = training_scan.uncompensated_rays
+        self.validation_scan: RayScan | None = validation_scan
 
 
 class OptimizerBackend(metaclass=ABCMeta):
@@ -88,7 +84,7 @@ class OptimizerBackend(metaclass=ABCMeta):
         objective: Callable,
         iterations: int,
         target: Target,
-        starting_point: Optional[dict[str, float]] = None,
+        starting_point: dict[str, float] | None = None,
     ):
         pass
 
@@ -97,12 +93,12 @@ class Sample:
     def __init__(
         self,
         params=RayParameterContainer(),
-        rays: Optional[list[torch.Tensor]] = None,
+        rays: list[torch.Tensor] | None = None,
         loss: float = float("inf"),
         epoch: int = 0,
     ):
         self._params: RayParameterContainer = params
-        self._rays: Optional[list[torch.Tensor]] = rays
+        self._rays: list[torch.Tensor] | None = rays
         self._loss: float = loss
         self._epoch: int = epoch
 
@@ -119,7 +115,7 @@ class Sample:
         return self._rays
 
     @rays.setter
-    def rays(self, rays: Optional[list[torch.Tensor]]):
+    def rays(self, rays: list[torch.Tensor] | None):
         self._rays = rays
 
     @property
@@ -147,12 +143,12 @@ class RayOptimizer:
         exported_plane: str,
         engine: Engine,
         logging_backend: LoggingBackend,
-        transforms: Optional[RayTransform] = None,
+        transforms: RayTransform | None = None,
         log_times: bool = False,
         plot_interval: int = 10,
         iterations: int = 1000,
         max_logging_processes: int = 20,
-        starting_point: Optional[dict[str, float]] = None,
+        starting_point: dict[str, float] | None = None,
     ):
         self.optimizer_backend: OptimizerBackend = optimizer_backend
         self.engine: Engine = engine
@@ -169,11 +165,11 @@ class RayOptimizer:
         self.overall_best: Sample = Sample()
         self.plot_interval: int = plot_interval
         self.logger_queue: JoinableQueue = JoinableQueue()
-        self.logger_consumer_process: Optional[Process] = None
+        self.logger_consumer_process: Process | None = None
         self.max_logging_processes: int = max_logging_processes
-        self.running_logger_processes: List[Process] = []
-        self.waiting_logger_processes: List[Process] = []
-        self.starting_point: Optional[dict[str, float]] = starting_point
+        self.running_logger_processes: list[Process] = []
+        self.waiting_logger_processes: list[Process] = []
+        self.starting_point: dict[str, float] | None = starting_point
 
     @staticmethod
     def parameters_rmse(
@@ -226,7 +222,7 @@ class RayOptimizer:
     @staticmethod
     def parameters_list_rmse(
         parameters_a: RayParameterContainer,
-        parameters_b_list: List[RayParameterContainer],
+        parameters_b_list: list[RayParameterContainer],
         search_space: RayParameterContainer,
     ):
         rmse_sum: float = 0.0
@@ -295,9 +291,9 @@ class RayOptimizer:
 
     @staticmethod
     def compensate_parameters_list(
-        uncompensated_parameters_list: List[RayParameterContainer],
+        uncompensated_parameters_list: list[RayParameterContainer],
         compensation: RayParameterContainer,
-    ) -> List[RayParameterContainer]:
+    ) -> list[RayParameterContainer]:
         evaluation_parameters_list = [
             element.clone() for element in uncompensated_parameters_list
         ]
@@ -320,8 +316,8 @@ class RayOptimizer:
 
     @staticmethod
     def compensate_list_parameters_list(
-        uncompensated_parameters_list: List[RayParameterContainer],
-        compensation_list: List[RayParameterContainer],
+        uncompensated_parameters_list: list[RayParameterContainer],
+        compensation_list: list[RayParameterContainer],
     ):
         return [
             RayOptimizer.compensate_parameters_list(
@@ -331,7 +327,7 @@ class RayOptimizer:
         ]
 
     @staticmethod
-    def flatten_list_list(list_list: List[List[Any]]):
+    def flatten_list_list(list_list: list[list[Any]]):
         flattened_list = []
         for list in list_list:
             for element in list:
@@ -339,7 +335,7 @@ class RayOptimizer:
         return flattened_list
 
     @staticmethod
-    def reshape_list(list: list[Any], list_list_length: int) -> List[List[Any]]:
+    def reshape_list(list: list[Any], list_list_length: int) -> list[list[Any]]:
         if len(list) % list_list_length != 0:
             raise ValueError(
                 "Lenght of list is not dividable by the length of the list lists."
@@ -351,7 +347,7 @@ class RayOptimizer:
         ]
 
     @staticmethod
-    def current_epochs(evaluation_counter: int, length: int) -> List[int]:
+    def current_epochs(evaluation_counter: int, length: int) -> list[int]:
         """This function returns all current epochs. This can be multiple values for multi-arm optimization methods.
 
         Args:
@@ -359,14 +355,14 @@ class RayOptimizer:
             length (int): This is the amount of new current epochs.
 
         Returns:
-            List[int]: A list with integers of current evaluation epochs.
+            list[int]: A list with integers of current evaluation epochs.
         """
         return [i for i in range(evaluation_counter, evaluation_counter + length)]
 
     @staticmethod
     def evaluation_parameters(
-        target: Target, compensations: List[RayParameterContainer]
-    ) -> List[List[RayParameterContainer]]:
+        target: Target, compensations: list[RayParameterContainer]
+    ) -> list[list[RayParameterContainer]]:
         if isinstance(target, OffsetTarget):
             evaluation_parameters = RayOptimizer.compensate_list_parameters_list(
                 target.uncompensated_parameters, compensations
@@ -378,12 +374,12 @@ class RayOptimizer:
     @staticmethod
     def run_engine(
         engine: Engine,
-        evaluation_parameters: List[List[RayParameterContainer]],
+        evaluation_parameters: list[list[RayParameterContainer]],
         exported_plane: str,
         transforms: RayTransform,
         log_times: bool,
     ):
-        flattened_evaluation_parameters: List[
+        flattened_evaluation_parameters: list[
             RayParameterContainer
         ] = RayOptimizer.flatten_list_list(evaluation_parameters)
 
@@ -394,7 +390,7 @@ class RayOptimizer:
         )
 
         begin_execution_time: float = time.time() if log_times else 0.0
-        output: Iterable[Any] = engine.run(
+        output: list[dict] = engine.run(
             flattened_evaluation_parameters, transforms=transforms_list
         )
         execution_time = time.time() - begin_execution_time if log_times else None
@@ -437,14 +433,14 @@ class RayOptimizer:
         return False, -1
 
     def evaluation_function(
-        self, compensations: List[RayParameterContainer], target: Target
-    ) -> List[Any]:
+        self, compensations: list[RayParameterContainer], target: Target
+    ) -> list[Any]:
         assert isinstance(compensations, list)
         assert isinstance(compensations[0], RayParameterContainer)
 
         begin_total_time: float = time.time() if self.log_times else 0.0
 
-        log_dict: Dict[str, Any] = {}
+        log_dict: dict[str, Any] = {}
         current_epochs = RayOptimizer.current_epochs(
             self.evaluation_counter, len(compensations)
         )
@@ -546,7 +542,7 @@ class RayOptimizer:
     @staticmethod
     def new_logger(
         queue: JoinableQueue,
-        log_dict: Dict[str, Any],
+        log_dict: dict[str, Any],
         trials,
         target: Target,
         exported_plane: str,
@@ -626,14 +622,19 @@ class RayOptimizer:
             raise Exception(
                 "The rays of overall best should be simulated at this point, if there are no rays, it should be an empty tensor."
             )
-        def to_cpu_tensor_list(ray_output: Union[Dict, List[Dict], Iterable[Dict]]) -> list[torch.Tensor]:
-            output_tensor_list = ray_output_to_tensor(ray_output, exported_plane, to_cpu=True)
-            if not isinstance(target_uncompensated_rays_list, list):
-                raise Exception("Target uncompensated rays list must be a list.")
+
+        def to_cpu_tensor_list(
+            ray_output: list[dict]
+        ) -> list[torch.Tensor]:
+            output_tensor_list = ray_output_to_tensor(
+                ray_output, exported_plane, to_cpu=True
+            )
+            if not isinstance(output_tensor_list, list):
+                raise Exception("Output tensor list must be a list.")
             return output_tensor_list
+
         best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
         target_observed_rays_list = to_cpu_tensor_list(target.observed_rays)
-
 
         if isinstance(target, OffsetTarget):
             target_uncompensated_rays_list = ray_output_to_tensor(
@@ -651,6 +652,8 @@ class RayOptimizer:
                 best_rays_list,
                 target_observed_rays_list,
                 target_uncompensated_rays_list,
+                overall_best.epoch,
+                len(target.observed_rays),
             )
 
         if isinstance(target, OffsetTarget) and target.validation_scan is not None:
@@ -698,7 +701,11 @@ class RayOptimizer:
 
     @staticmethod
     def overall_fixed_position_plot(
-        best_rays_list, target_observed_rays_list, target_uncompensated_rays_list
+        best_rays_list,
+        target_observed_rays_list,
+        target_uncompensated_rays_list,
+        epoch: int | None = None,
+        training_samples_count: int | None = None,
     ):
         xlim, ylim = Plot.switch_lims_if_out_of_lim(
             target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
@@ -707,8 +714,8 @@ class RayOptimizer:
             best_rays_list,
             target_observed_rays_list,
             target_uncompensated_rays_list,
-            epoch=overall_best.epoch,
-            training_samples_count=len(target.observed_rays),
+            epoch=epoch,
+            training_samples_count=training_samples_count,
             xlim=xlim,
             ylim=ylim,
         )
@@ -737,7 +744,7 @@ class RayOptimizer:
         labels.append("Observed")
         # target_plot = Plot.plot_data(target_tensor)
         # output_dict["target_footprint"] = target_plot
-        z_index: List[float] = [
+        z_index: list[float] = [
             float(i)
             for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
         ]
@@ -777,7 +784,7 @@ class RayOptimizer:
                 training_samples_count=len(target.observed_rays),
             )
             output_dict["compensation"] = compensation_plot
-            z_index: List[float] = [
+            z_index: list[float] = [
                 float(i)
                 for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
             ]
@@ -837,13 +844,13 @@ class RayOptimizer:
 
     @staticmethod
     def calculate_loss_from_output(
-        output: List[List[dict]],
+        output: list[list[dict]],
         target_rays,
-        current_epochs: List[int],
+        current_epochs: list[int],
         criterion: RayLoss,
         exported_plane: str,
-        compensations: List[RayParameterContainer],
-    ) -> List[Sample]:
+        compensations: list[RayParameterContainer],
+    ) -> list[Sample]:
         list = [
             RayOptimizer.loss_from_epoch(
                 current_epochs[i],
@@ -914,7 +921,7 @@ class RayOptimizer:
         return losses, num_rays, losses_mean
 
     def optimize(
-        self, target: Target, starting_point: Optional[dict[str, float]] = None
+        self, target: Target, starting_point: dict[str, float] | None = None
     ):
         self.optimizer_backend.setup_optimization(target=target)
         best_parameters, metrics = self.optimizer_backend.optimize(
