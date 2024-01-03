@@ -15,11 +15,13 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
     def basinhopping_objective(objective, target: Target):
         def output_objective(input: np.ndarray):
             optimize_parameters = target.search_space.copy()
+            mutable_index: int = 0
             for i, (key, value) in enumerate(optimize_parameters.items()):
                 if isinstance(value, MutableParameter):
-                    optimize_parameters[key] = NumericalParameter(input[i].item())
-            output = objective(optimize_parameters, target=target)
-            return tuple(value.mean().item() for value in output[min(output.keys())])
+                    optimize_parameters[key] = NumericalParameter(input[mutable_index].item())
+                    mutable_index += 1
+            output = objective([optimize_parameters], target=target)
+            return output
 
         return output_objective
 
@@ -35,7 +37,10 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
                                          niter=iterations, interval=iterations, stepsize=1, T=0.01,
                                          minimizer_kwargs={"bounds": bounds}, disp=True)
         x_dict = {}
-        for idx, key in enumerate(optimize_parameters.keys()):
-            x_dict[key] = ret.x[idx]
+        mutable_index: int = 0
+        for key in optimize_parameters.keys():
+            if isinstance(optimize_parameters[key], MutableParameter):
+                x_dict[key] = ret.x[mutable_index]
+                mutable_index += 1
         return x_dict, ret.fun
 
