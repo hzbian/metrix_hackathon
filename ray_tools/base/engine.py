@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import torch
-from typing import Iterable, Optional, Union, Dict, List
+from typing import Iterable 
 
 from joblib import Parallel, delayed
 
@@ -18,9 +18,9 @@ from .transform import RayTransform
 class Engine(abc.ABC):
     @abc.abstractmethod
     def run(self,
-            param_containers: Iterable[RayParameterContainer],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] | None = None,
-            ) -> Iterable[dict]:
+            param_containers: list[RayParameterContainer],
+            transforms: RayTransformType | Iterable[RayTransformType] | None = None,
+            ) -> list[dict]:
         pass
 
 
@@ -39,7 +39,7 @@ class RayEngine(Engine):
 
     def __init__(self,
                  rml_basefile: str,
-                 exported_planes: List[str],
+                 exported_planes: list[str],
                  ray_backend: RayBackend,
                  num_workers: int = 1,
                  as_generator: bool = False,
@@ -59,7 +59,7 @@ class RayEngine(Engine):
 
     def run(self,
             param_containers: list[RayParameterContainer],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] | None = None,
+            transforms: RayTransformType | Iterable[RayTransformType] | None = None,
             ) -> list[dict]:
         """
         Runs simulation for given (Iterable of) parameter containers.
@@ -87,13 +87,15 @@ class RayEngine(Engine):
         worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
         jobs = (delayed(self._run_func)(*item) for item in _iter)
         result = worker(jobs)
+        if not isinstance(result, list):
+            raise Exception("The result must be a list if we input a list.")
         # extract only element if param_containers was a singleton
         return result
 
     def _run_func(self,
                   param_container: RayParameterContainer,
                   transform: RayTransformType | None = None,
-                  ) -> Dict:
+                  ) -> dict:
         """
         This method performs the actual simulation run.
         """
@@ -128,25 +130,32 @@ class RayEngine(Engine):
         if template is None:
             template = self.template
         component, param = key.split('.')
-        return template.__getattr__(component).__getattr__(param)
+        if template is None:
+            raise Exception("Template cannot be None.")
+        element = template.__getattr__(component)
+        if not isinstance(element, XmlElement):
+            raise Exception("Element must be XmlElement.")
+        return element.__getattr__(param)
 
 
 class GaussEngine(Engine):
-    def __init__(self, device: Optional[torch.device] = None) -> None:
+    def __init__(self, device: torch.device | None = None) -> None:
         super().__init__()
         self.device = device
 
     def run(self,
-            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None
-            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+            param_containers: list[RayParameterContainer],
+            transforms: RayTransformType | list[RayTransformType] | None = None,
+            ) -> list[dict]:
 
         if isinstance(param_containers, RayParameterContainer):
             param_containers = [param_containers]
 
         # convert transforms into list if it was a singleton
         if transforms is None or isinstance(transforms, (RayTransform, dict)):
-            transforms = len(param_containers) * [transforms]
+            transforms_list = len(param_containers) * [transforms]
+        else:
+            transforms_list = transforms
 
         outputs = []
         for param_container_num, param_container in enumerate(param_containers):
@@ -171,19 +180,21 @@ class GaussEngine(Engine):
                                 param_container['y_dir'].get_value() + samples_directions[:, 1],
                                 param_container['z_dir'].get_value() + samples_directions[:, 2],
                                 torch.ones_like(samples[:, 0]))
-            if transforms[param_container_num] is not None:
-                ray_out = transforms[param_container_num](ray_out)
+            if transforms_list[param_container_num] is not None:
+                ray_out = transforms_list[param_container_num](ray_out)
 
             outputs.append({'ray_output': {'ImagePlane': ray_out}, 'param_container_dict': param_container})
         return outputs
 
 class SurrogateEngine(Engine):
-    def __init__(self,  checkpoint_path:str, model: torch.nn.module, device: torch.device, is_vae:bool = True):
+    def __init__(self,  checkpoint_path:str, model: torch.nn.Module, device: torch.device, is_vae:bool = True):
         super(SurrogateEngine, self).__init__()
         self.is_vae = is_vae
         self.device = device
-        # if is_vae:
-        #     self.latent_size = 200
+        if is_vae:
+            self.latent_size = 200
+        else:
+            self.latent_size = None
         #     model = CVAE(20 * 20, self.latent_size, 5).to(device)
         # else:
         #     model = Transformer(hist_dim=(20, 20), param_dim=36, transformer_dim=2048,
@@ -200,9 +211,9 @@ class SurrogateEngine(Engine):
 
 
     def run(self,
-            param_containers: Union[RayParameterContainer, Iterable[RayParameterContainer]],
-            transforms: Union[RayTransformType, Iterable[RayTransformType]] = None,
-            ) -> Union[Dict, Iterable[Dict], List[Dict]]:
+            param_containers: list[RayParameterContainer],
+            transforms: RayTransformType | Iterable[RayTransformType] | None = None,
+            ) -> list[dict]:
 
         if isinstance(param_containers, RayParameterContainer):
             param_containers = [param_containers]
@@ -213,17 +224,21 @@ class SurrogateEngine(Engine):
 
         # convert transforms into list if it was a singleton
         if transforms is None or isinstance(transforms, (RayTransform, dict)):
-            transforms = len(param_containers) * [transforms]
+            transforms_list = len(param_containers) * [transforms]
+        else:
+            transforms_list = transforms
+
 
         outputs = []
         for param_container_num, param_container in enumerate(param_containers):
             params = param_container
             keys = []
             for key in params.keys():
-                if isinstance(params[key], RandomParameter):
-                    value_lims = params[key].value_lims
-                    norm_value = (params[key].get_value() - value_lims[0]) / (value_lims[1] - value_lims[0])
-                    params[key].set_value(value=norm_value)
+                current_param = params[key]
+                if isinstance(current_param, RandomParameter):
+                    value_lims = current_param.value_lims
+                    norm_value = (current_param.get_value() - value_lims[0]) / (value_lims[1] - value_lims[0])
+                    current_param.value = norm_value
                 else:
                     keys.append(key)
             if keys != list(params.keys()):
@@ -234,7 +249,7 @@ class SurrogateEngine(Engine):
                 params_list.append(torch.Tensor([params[key].get_value()]))
             params_tensor = torch.cat(params_list, dim=0)
             params_tensor = torch.unsqueeze(params_tensor,0)
-            if self.is_vae:
+            if self.is_vae and self.latent_size is not None:
                 means = torch.zeros(self.latent_size).to(self.device)
                 std = torch.ones(self.latent_size).to(self.device)
                 draw = torch.normal(means, std).to(self.device)
