@@ -1,5 +1,3 @@
-from typing import List, Tuple, Dict
-
 import torch
 
 from ray_nn.utils.ray_processing import HistSubsampler
@@ -41,10 +39,10 @@ class SurrogateModelPreparation:
     """
 
     def __init__(self,
-                 planes_info: Dict[str, Tuple[List[str], List[str]]],
+                 planes_info: dict[str, tuple[list[str], list[str]]],
                  params_key: str,
-                 params_info: Dict[str, Tuple[float, float]],
-                 hist_subsampler: HistSubsampler = None):
+                 params_info: dict[str, tuple[float, float]],
+                 hist_subsampler: HistSubsampler | None = None):
         super().__init__()
         self.planes_info = planes_info
         self.params_key = params_key
@@ -95,7 +93,7 @@ class SurrogateModelPreparation:
         x_lims[idx_zeros, 1] = y_lims[idx_zeros, 1] = 1e-4
         n_rays[idx_zeros] = hist[idx_zeros, ...].sum(dim=[-2, -1]).to(n_rays.dtype)
 
-    def _process_params(self, params: Dict[str, float]) -> Dict[str, float]:
+    def _process_params(self, params: dict[str, float]) -> dict[str, float]:
         """
         Normalize parameters to the interval [-1, 1] according to ``params_info``.
         """
@@ -114,10 +112,10 @@ class SurrogatePreparation:
 
     def __init__(self,
                  params_key: str,
-                 params_info: List[Tuple[str, Tuple[float, float]]],
+                 params_info: list[tuple[str, tuple[float, float]]],
                  hist_key: str,
                  hist_subsampler: HistSubsampler,
-                 inp_hist_key: str = None
+                 inp_hist_key: str | None = None
                  ):
         super().__init__()
         self.params_key = params_key
