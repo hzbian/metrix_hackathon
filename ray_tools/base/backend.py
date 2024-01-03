@@ -10,11 +10,12 @@ import subprocess
 import shlex
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import Optional
 
 import docker
 import docker.errors
 import docker.types
+from docker.models.resource import Model
 
 import h5py
 import torch
@@ -49,13 +50,13 @@ class RayBackend(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def run(self, raypyng_rml: RMLFile, exported_planes: List[str], run_id: Optional[str] = None) -> Dict[str, RayOutput]:
+    def run(self, raypyng_rml: RMLFile, exported_planes: list[str], run_id: Optional[str] = None) -> dict[str, RayOutput]:
         """
         Run raytracing given an RMLFile instance.
     :param raypyng_rml: RMLFile instance to be processed.
     :param exported_planes: Image planes and component outputs to be exported.
     :param run_id: Run identifier (as string).
-    :return: Dict with 'exported_planes' as keys and generated :class:`RayOutput` instances as values.
+    :return: dict with 'exported_planes' as keys and generated :class:`RayOutput` instances as values.
     """
 
     pass
@@ -75,11 +76,11 @@ class RayBackendDockerRAYUI(RayBackend):
     def __init__(self,
                  docker_image: str,
                  ray_workdir: str,
-                 dockerfile_path: str = None,
-                 docker_container_name: str = None,
+                 dockerfile_path: str | None = None,
+                 docker_container_name: str | None = None,
                  max_retry: int = 1000,
                  verbose=True,
-                 additional_mount_files: Optional[List[str]] = None, device: torch.device = torch.device('cpu')) -> None:
+                 additional_mount_files: Optional[list[str]] = None, device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
@@ -129,6 +130,7 @@ class RayBackendDockerRAYUI(RayBackend):
         if self.container_system == "docker":
             try:
                 self.docker_container = self.client.containers.get(self.docker_container_name)
+                assert isinstance(self.docker_container, Model)
                 print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
                 self.docker_container.stop()
                 try:
@@ -144,13 +146,15 @@ class RayBackendDockerRAYUI(RayBackend):
             output = subprocess.check_output(shlex.split(cleanup_command), stderr=self.print_device)
             if self.verbose:
                 print(output)
-            build_command = self.container_executable + " build --security-opt label=disable -f {} -t {}".format(
-                os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile')), self.docker_image)
-            if self.verbose:
-                print(build_command)
-            output = subprocess.check_output(shlex.split(build_command), stderr=self.print_device)
-            if self.verbose:
-                print(output)
+            if dockerfile_path is not None:
+                str_path = os.path.abspath(os.path.join(dockerfile_path, 'Dockerfile'))
+                build_command = self.container_executable + " build --security-opt label=disable -f {} -t {}".format(
+                   str_path, self.docker_image)
+                if self.verbose:
+                    print(build_command)
+                output = subprocess.check_output(shlex.split(build_command), stderr=self.print_device)
+                if self.verbose:
+                    print(output)
 
             podman_command = f"{self.container_executable} run -d --cgroups=disabled --security-opt label=disable --name {self.docker_container_name} --mount" \
                  f"=type=bind,src={self.ray_workdir}," \
@@ -200,8 +204,8 @@ class RayBackendDockerRAYUI(RayBackend):
 
     def run(self,
             raypyng_rml: RMLFile,
-            exported_planes: List[str],
-            run_id: str = None) -> Dict[str, RayOutput]:
+            exported_planes: list[str],
+            run_id: str | None = None) -> dict[str, RayOutput]:
 
         # create random id if not given
         if run_id is None:
@@ -295,8 +299,8 @@ class RayBackendDockerRAYX(RayBackend):
     def __init__(self,
                  docker_image: str,
                  ray_workdir: str,
-                 docker_container_name: str = None,
-                 gpu_ids: List[str] = None,
+                 docker_container_name: str | None = None,
+                 gpu_ids: list[str] | None = None,
                  verbose=True) -> None:
         super().__init__()
         self.docker_image = docker_image
@@ -346,8 +350,8 @@ class RayBackendDockerRAYX(RayBackend):
 
     def run(self,
             raypyng_rml: RMLFile,
-            exported_planes: List[str],
-            run_id: str = None, additional_mount_files: Optional[List[str]] = None) -> Dict[str, RayOutput]:
+            exported_planes: list[str],
+            run_id: str | None = None, additional_mount_files: Optional[list[str]] = None) -> dict[str, RayOutput]:
 
         if run_id is None:
             run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
