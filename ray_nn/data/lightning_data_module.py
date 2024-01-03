@@ -1,5 +1,3 @@
-from typing import List
-
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -12,11 +10,11 @@ class DefaultDataModule(pl.LightningDataModule):
             dataset,
             batch_size_train: int = 32,
             batch_size_val: int = 32,
-            split: List[float] = None,
+            split: list[float] | None = None,
             num_workers: int = 0,
-            on_gpu: str = None,  # if on_gpu is not None, it should be the device to be used for pinning
-            seed_split: int = None,  # fixed seed to be used for random train-val-test split
-            seed_train: int = None,  # fixed seed to be used shuffle in train dataloader
+            on_gpu: str | None = None,  # if on_gpu is not None, it should be the device to be used for pinning
+            seed_split: int = 42,  # fixed seed to be used for random train-val-test split
+            seed_train: int = 42,  # fixed seed to be used shuffle in train dataloader
     ):
         super().__init__()
         self.save_hyperparameters(ignore=['dataset'])
@@ -28,7 +26,7 @@ class DefaultDataModule(pl.LightningDataModule):
 
         self.batch_size_train = batch_size_train
         self.batch_size_val = batch_size_val
-        self.split = [0.8, 0.1, 0.1] if split is None else split
+        self.split: list[float] = [0.8, 0.1, 0.1] if split is None else split
         self.num_workers = num_workers
         if on_gpu is not None:
             self.pin_memory = True
@@ -36,7 +34,6 @@ class DefaultDataModule(pl.LightningDataModule):
         else:
             self.pin_memory = False
             self.pin_memory_device = ''
-        self.split = split
         self.seed_train = seed_train
         self.seed_split = seed_split
 
@@ -52,6 +49,7 @@ class DefaultDataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self):
+        assert self.train_dataset is not None
         return DataLoader(self.train_dataset,
                           shuffle=True,
                           batch_size=self.batch_size_train,
@@ -61,6 +59,7 @@ class DefaultDataModule(pl.LightningDataModule):
                           generator=torch.Generator().manual_seed(self.seed_train))
 
     def val_dataloader(self):
+        assert self.val_dataset is not None
         return DataLoader(self.val_dataset,
                           shuffle=False,
                           batch_size=self.batch_size_val,
@@ -69,6 +68,7 @@ class DefaultDataModule(pl.LightningDataModule):
                           pin_memory_device=self.pin_memory_device)
 
     def test_dataloader(self):
+        assert self.test_dataset is not None
         return DataLoader(self.test_dataset,
                           shuffle=False,
                           batch_size=self.batch_size_val,
