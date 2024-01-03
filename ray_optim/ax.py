@@ -52,9 +52,10 @@ class OptimizerBackendAx(OptimizerBackend):
            results = objective(ray_parameter_container_list, target=target)
 
            for i in range(len(results)):
-               self.ax_client.complete_trial(trial_index_list[i], {'mse': results[i].item()})
-
-       best_parameters, metrics = self.ax_client.get_best_parameters()
+               self.ax_client.complete_trial(trial_index_list[i], {'mse': results[i]})
+       best_parameters_metrics = self.ax_client.get_best_parameters()
+       assert best_parameters_metrics is not None
+       best_parameters, metrics = best_parameters_metrics
        return best_parameters, metrics
    
 def get_model(selection: str):
