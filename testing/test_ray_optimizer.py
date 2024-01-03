@@ -1,4 +1,3 @@
-from typing import List
 import unittest
 
 from ray_optim.ray_optimizer import RayOptimizer, Sample
@@ -35,9 +34,11 @@ class TestRayOptimizer(unittest.TestCase):
 
     def test_run_engine(self):
         output, timer = RayOptimizer.run_engine(self.engine, self.evaluation_parameters, "ImagePlane", MultiLayer([0., 1., 2.]), True)
-        self.assertTrue(timer > 0.)
-        self.assertTrue(len(output[0]) == 5)
-        self.assertTrue(len(output) == 4)
+        # timer cannot be None since we set log_times to True
+        assert timer is not None
+        self.assertGreater(timer, 0.)
+        self.assertEqual(len(output[0]), 5)
+        self.assertEqual(len(output), 4)
 
     def test_reshape_list(self):
         list = [i for i in range(10)]

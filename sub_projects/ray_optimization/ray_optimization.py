@@ -4,6 +4,7 @@ from typing import Dict, Optional, List
 import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from torch import Tensor
 from sub_projects.ray_optimization.configuration import (
     RealDataConfiguration,
     TargetConfiguration,
@@ -15,8 +16,8 @@ from sub_projects.ray_optimization.real_data import import_data
 from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetTarget, RayScan
 
 from ray_tools.base.parameter import (
+    MutableParameter,
     RayParameterContainer,
-    RayParameter,
     RandomParameter,
 )
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
@@ -79,9 +80,12 @@ class RayOptimization:
     ):
         ray_parameters = {}
         for k, v in input_parameter_container.items():
-            ray_parameters[k] = v.clone()
-            if isinstance(v, RandomParameter):
-                ray_parameters[k].value = (v.value_lims[1] + v.value_lims[0]) / 2
+            if isinstance(v, MutableParameter):
+                ray_parameters[k] = v.clone()
+                if v.value_lims is not None:
+                    ray_parameters[k].value = (v.value_lims[1] + v.value_lims[0]) / 2
+                else:
+                    ray_parameters[k].value = v.value
         return RayParameterContainer(ray_parameters)
 
 
@@ -107,7 +111,7 @@ class RayOptimization:
         ]
         mean_parameter_container = RayOptimization.get_mean_parameter_container(self.target_configuration.param_func())
         for configuration in uncompensated_parameters:
-            configuration.perturb(mean_parameter_container)
+            configuration.perturb_limits(mean_parameter_container)
     
         return uncompensated_parameters
 
@@ -243,11 +247,11 @@ class RayOptimization:
         except NameError:
             raise Exception("You need to run setup_target() first.")
 
-    def is_output_ray_list_empty(self, input: List[Dict]) -> bool:
-        input = ray_output_to_tensor(
+    def is_output_ray_list_empty(self, input: list[dict]) -> bool:
+        output: Tensor | list[Tensor] = ray_output_to_tensor(
             input, exported_plane=self.target_configuration.exported_plane
         )
-        return not True in [len(entry.reshape(-1)) != 0 for entry in input]
+        return not True in [len(entry.reshape(-1)) != 0 for entry in output]
 
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
@@ -257,8 +261,10 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 def optimization(cfg):
     print(OmegaConf.to_yaml(cfg))
     ray_optimization: RayOptimization = instantiate(cfg)
+    omega_conf_container = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+    assert isinstance(omega_conf_container, dict)
     ray_optimization.logging_backend.log_config(
-        OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+       omega_conf_container 
     )
     ray_optimization.setup_target()
     ray_optimization.optimize()

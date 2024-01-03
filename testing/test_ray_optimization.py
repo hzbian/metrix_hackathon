@@ -1,4 +1,3 @@
-from typing import OrderedDict
 import unittest
 from unittest.mock import Mock
 from ray_optim.logging import DebugPlotBackend
@@ -6,11 +5,7 @@ from ray_optim.ray_optimizer import OffsetTarget, RayOptimizer
 from ray_tools.base.engine import GaussEngine
 from ray_tools.base.parameter import (
     MutableParameter,
-    NumericalOutputParameter,
-    NumericalParameter,
-    RandomOutputParameter,
     RandomParameter,
-    RayParameterContainer,
 )
 from ray_tools.base.transform import MultiLayer
 
@@ -64,14 +59,15 @@ class TestRayOptimization(unittest.TestCase):
     def test_create_target_compensation(self):
         target_compensation = self.ray_optimization.create_target_compensation()
         for key, value in target_compensation.items():
+            assert isinstance(value, MutableParameter)
             interval_size = (
                 (self.parameters[key][1] - self.parameters[key][0])
                 * self.max_target_deviation
                 / 2
             )
             # check if all chosen values are within the intervals
-            self.assertTrue(value.value >= -interval_size)
-            self.assertTrue(value.value <= interval_size)
+            self.assertTrue(value.get_value() >= -interval_size)
+            self.assertTrue(value.get_value() <= interval_size)
             # check if intervals match
             self.assertTrue(value.value_lims[0] == -interval_size)
             self.assertTrue(value.value_lims[1] == interval_size)
@@ -84,34 +80,51 @@ class TestRayOptimization(unittest.TestCase):
         uncompensated_parameters = (
             self.ray_optimization.create_uncompensated_parameters()
         )
-        self.assertTrue(
-            len(uncompensated_parameters)
-            == self.ray_optimization.target_configuration.num_beamline_samples
+        self.assertEqual(
+            len(uncompensated_parameters),
+            self.ray_optimization.target_configuration.num_beamline_samples,
         )
         for sample in uncompensated_parameters:
             for key, value in sample.items():
                 if not isinstance(value, MutableParameter):
-                    self.assertTrue(value.value == self.parameters[key])
+                    self.assertEqual(value.get_value(), self.parameters[key])
                 else:
-                    self.assertTrue(value.value_lims == tuple(self.parameters[key]))
-    
+                    self.assertEqual(value.value_lims, tuple(self.parameters[key]))
+
     def test_create_observed_rays(self):
         target_compensation = self.ray_optimization.create_target_compensation()
-        uncompensated_parameters = self.ray_optimization.create_uncompensated_parameters()
-        observed_rays = self.ray_optimization.create_observed_rays(uncompensated_parameters, target_compensation)
+        uncompensated_parameters = (
+            self.ray_optimization.create_uncompensated_parameters()
+        )
+        observed_rays = self.ray_optimization.create_observed_rays(
+            uncompensated_parameters, target_compensation
+        )
         # TODO checks required
-    
+
     def test_limited_search_space(self):
         max_deviation = 0.1
-        test_output = RayOptimization.limited_search_space(self.param_func(), rg=self.rg, max_deviation=0.1, random_parameters_only=False)
+        test_output = RayOptimization.limited_search_space(
+            self.param_func(),
+            rg=self.rg,
+            max_deviation=0.1,
+            random_parameters_only=False,
+        )
         for k, v in self.param_func().items():
-            if isinstance(test_output[k], RandomParameter):
-                if not test_output[k].enforce_lims:
-                    self.assertTrue(test_output[k].value >= - max_deviation * (v.value_lims[1]- v.value_lims[0]) / 2)
-                    self.assertTrue(test_output[k].value <= max_deviation * (v.value_lims[1]- v.value_lims[0]) / 2)
+            current_output = test_output[k]
+            if isinstance(current_output, RandomParameter):
+                # if current output is random, the according value in param_func should be also
+                assert isinstance(v, RandomParameter)
+                if not current_output.enforce_lims:
+                    self.assertTrue(
+                        current_output.get_value()
+                        >= -max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
+                    )
+                    self.assertTrue(
+                        current_output.get_value()
+                        <= max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
+                    )
             else:
                 self.assertTrue(k in test_output.keys())
-
 
     def test_setup(self):
         self.ray_optimization.setup_target()

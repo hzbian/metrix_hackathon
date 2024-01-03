@@ -42,7 +42,7 @@ class TestRealData(unittest.TestCase):
     
     def test_subtract_black(self):
         self.assertTrue(isinstance(self.diff, Image.Image))
-        self.assertGreater(to_tensor(self.image).sum(), self.tensor.sum())
+        self.assertGreater(to_tensor(self.image).sum().item(), self.tensor.sum().item())
 
     def test_to_tensor(self):
         self.assertTrue(isinstance(self.tensor, torch.Tensor))
@@ -62,7 +62,7 @@ class TestRealData(unittest.TestCase):
         self.assertLess(((center_of_mass - torch.Tensor([0.0014, 0.0010]))).mean().item(), 1.49e-5)
 
     def test_clean_intensity(self):
-        self.assertGreater(self.cleaned_intensity.min(), self.threshold)
+        self.assertGreater(self.cleaned_intensity.min().item(), self.threshold)
         center_of_mass = TestRealData.first_center_of_mass(self.grid, self.intensity)
         center_of_mass_cleaned = TestRealData.first_center_of_mass(self.grid[:,self.cleaned_indices,:], self.cleaned_intensity)
         self.assertLess(((center_of_mass - center_of_mass_cleaned)**2).mean().item(), 0.00063)

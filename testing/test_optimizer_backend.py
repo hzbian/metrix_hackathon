@@ -7,17 +7,14 @@ import scipy
 from ray_optim.ax import OptimizerBackendAx
 from ray_optim.basinhopping import OptimizerBackendBasinhopping
 from ray_optim.optuna import OptimizerBackendOptuna
-from ax.service.ax_client import AxClient
 from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
-from ax.modelbridge.registry import ModelRegistryBase, Models
+from ax.modelbridge.registry import Models
 
-from ray_optim.ray_optimizer import RayOptimizer, Sample, Target
+from ray_optim.ray_optimizer import RayOptimizer, Target
 from ray_tools.base.engine import GaussEngine
 from ray_tools.base.parameter import RayParameterContainer
 from ray_tools.base.transform import MultiLayer
 from sub_projects.ray_optimization.configuration import params_to_func
-from sub_projects.ray_optimization.losses.torch import BoxIoULoss
-from sub_projects.ray_optimization.losses.losses import RayLoss
 
 
 class TestOptimizerBackend(unittest.TestCase):
@@ -101,8 +98,8 @@ class TestOptimizerBackend(unittest.TestCase):
         )
         search_space=self.param_func()
         abo = OptimizerBackendAx()
-        abo.setup_optimization(target)
         target = Target(Mock(), search_space, target_params=self.param_func())
+        abo.setup_optimization(target)
         abo.optimize(self.mock_objective, 10, target)
     
     def test_basinhopping(self):

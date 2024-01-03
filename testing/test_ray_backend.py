@@ -1,6 +1,5 @@
 import unittest
 
-import hydra
 import omegaconf
 from hydra.utils import instantiate
 from hydra import initialize, compose
@@ -19,7 +18,7 @@ class RayBackendTest(unittest.TestCase):
         self.n_rays = 100
 
         self.rg = RandomGenerator(seed=42)
-        self.dist_layers = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+        self.dist_layers = [-25., -20., -15., -10., -5., 0., 5., 10., 15., 20., 25., 30.]
         self.transform = RayTransformConcat({
             'ml': MultiLayer(dist_layers=self.dist_layers,
                              copy_directions=False,
@@ -46,12 +45,12 @@ class RayBackendTest(unittest.TestCase):
         ])
 
     def test_output_type_single_output(self):
-        # For single output the output should be a dictionary
+        # For single output the output should be a list
         n_examples = 1
 
         result = self.engine.run(param_containers=[self.param_func() for _ in range(n_examples)],
                                  transforms={exported_plane: self.transform for exported_plane in self.exported_planes})
-        self.assertTrue(type(result) is dict)
+        self.assertTrue(type(result) is list)
 
     def test_output_type_multiple_outputs(self):
         # For more than one output, the outputs should be a list of dictionaries
