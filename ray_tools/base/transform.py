@@ -40,8 +40,8 @@ class RayTransformConcat(RayTransform):
     ``transforms`` is given as a dictionary of RayTransform, and the keys are used to generate the output dictionary.
     """
 
-    def __init__(self, transforms=Dict[str, List[RayTransform]]):
-        self.transforms = transforms
+    def __init__(self, transforms:dict[str, RayTransform]):
+        self.transforms: dict[str, RayTransform] = transforms
 
     def __call__(self, ray_output: RayOutput) -> Dict:
         return {k: transform(ray_output) for k, transform in self.transforms.items()}
@@ -199,7 +199,7 @@ class MultiLayer(RayTransform):
     :param transform: Optional :class:`RayTransform` applied to each created layer.
     """
 
-    def __init__(self, dist_layers: List[float], copy_directions: bool = True, transform: RayTransform = None):
+    def __init__(self, dist_layers: list[float | int], copy_directions: bool = True, transform: RayTransform = None):
         self.dist_layers = dist_layers
         self.copy_directions = copy_directions
         self.transform = transform
@@ -212,6 +212,7 @@ class MultiLayer(RayTransform):
         layers = {}
         # compute x, y, z coordinates at each layer
         for dist in self.dist_layers:
+            dist = float(dist)
             x_cur = ray_output.x_loc + xz_dir * dist
             y_cur = ray_output.y_loc + yz_dir * dist
             z_cur = ray_output.z_loc + dist

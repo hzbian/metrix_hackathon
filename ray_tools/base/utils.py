@@ -11,7 +11,7 @@ class RandomGenerator:
     :param seed: Random seed to be used for all generators.
     """
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: int | None = None):
         # dummies
         self.rg_torch = None
         self.rg_numpy = None
@@ -20,7 +20,7 @@ class RandomGenerator:
 
         self.set_seed(seed)
 
-    def set_seed(self, seed: int = None):
+    def set_seed(self, seed: int | None = None):
         """
         Creates random generators with given seed. Use random seed if None.
         """
