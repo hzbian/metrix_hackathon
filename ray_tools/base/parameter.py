@@ -57,7 +57,7 @@ class MutableParameter(NumericalParameter):
     Extends :class:`NumericalParameter` by value_lims, specifying lower and upper limits for value. If `enforce_lims` is True, the limits of this parameter should always be enforced, e.g. in an optimization.
     """
 
-    def __init__(self, value: float, value_lims: Tuple[float, float] = None, enforce_lims: bool = False):
+    def __init__(self, value: float, value_lims: Tuple[float, float], enforce_lims: bool = False):
         super().__init__(value)
         self.value_lims = value_lims
         self.enforce_lims: bool = enforce_lims
@@ -74,8 +74,9 @@ class RandomParameter(MutableParameter):
     Draws a random value in the interval value_lims.
     """
 
-    def __init__(self, value_lims: Tuple[float, float] = None, rg: RandomGenerator = None, enforce_lims: bool = False):
+    def __init__(self, value_lims: Tuple[float, float], rg: RandomGenerator | None = None, enforce_lims: bool = False):
         self.rg = rg if rg is not None else RandomGenerator()
+        assert self.rg.rg_random is not None
         value = self.rg.rg_random.uniform(*value_lims)
         super().__init__(value, value_lims, enforce_lims=enforce_lims)
 
@@ -83,6 +84,7 @@ class RandomParameter(MutableParameter):
         """
         Resample value from value_lims.
         """
+        assert self.rg.rg_random is not None
         self.value = self.rg.rg_random.uniform(*self.value_lims)
 
     def clone(self) -> RandomParameter:
@@ -164,10 +166,23 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
 
     def perturb(self, perturbation_dict: RayParameterContainer):
         for k, v in perturbation_dict.items():
-            if isinstance(self[k], NumericalParameter) and isinstance(v, NumericalParameter):
-                self[k].value += v.get_value()
+            perturbed_entry = self[k]
+            if isinstance(perturbed_entry, NumericalParameter) and isinstance(v, NumericalParameter):
+                perturbed_entry.value += v.get_value()
+    
+    def perturb_limits(self, perturbation_dict: RayParameterContainer):
+        for k, v in perturbation_dict.items():
+            perturbed_entry = self[k]
+            if isinstance(perturbed_entry, MutableParameter) and isinstance(v, NumericalParameter):
+                new_x_lim = perturbed_entry.value_lims[0] + v.get_value()
+                new_y_lim = perturbed_entry.value_lims[1] + v.get_value()
+                perturbed_entry.value_lims = (new_x_lim, new_y_lim)
+                if isinstance(perturbed_entry, RandomParameter):
+                    perturbed_entry.resample()
+                else:
+                    perturbed_entry.value += v.get_value()
 
-    def to_value_dict(self) -> Dict[str, Any]:
+    def to_value_dict(self) -> dict[str, Any]:
         """
         Converts container into an ordinary dictionary with values.
         """
@@ -181,7 +196,9 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
         """
         Builds string-key from a given :class:`XmlElement`.
         """
-        return '.'.join(element.get_full_path().split('.')[2:])
+        full_path = element.get_full_path()
+        assert full_path is not None
+        return '.'.join(full_path.split('.')[2:])
 
 
 def build_parameter_grid(param_container: RayParameterContainer):
