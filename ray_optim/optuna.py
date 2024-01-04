@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from optuna import Study
 import torch
 from ray_optim.ray_optimizer import Target, OptimizerBackend
@@ -26,7 +26,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective: Callable[[List[RayParameterContainer], Target], List[float]], iterations: int, target: Target, starting_point: Optional[dict[str, float]] = None):
+    def optimize(self, objective: Callable[[List[RayParameterContainer], Target], List[float]], iterations: int, target: Target, starting_point: Optional[dict[str, Any]] = None):
         self.optuna_study.optimize(
             self.optuna_objective(objective, target),
             n_trials=iterations,

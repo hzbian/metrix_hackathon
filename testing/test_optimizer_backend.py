@@ -69,6 +69,7 @@ class TestOptimizerBackend(unittest.TestCase):
         obo.optimize(self.mock_objective, 10, target)
         target = Target(Mock(), self.param_func(), target_params=None)
         obo.optimize(self.mock_objective, 10, target)
+        obo.optimize(self.mock_objective, 10, target, starting_point=self.param_func().to_value_dict())
 
     def test_ax(self):
         gs = GenerationStrategy(
