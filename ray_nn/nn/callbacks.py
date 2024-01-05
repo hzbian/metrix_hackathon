@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import Any
 
 import psutil
 from collections import defaultdict
@@ -146,7 +146,7 @@ class ImagePlaneCallback(Callback):
 
 class PlaneMutator(Callback):
 
-    def __init__(self, mutator_planes: List[List[str]], mutator_epochs: List[int]):
+    def __init__(self, mutator_planes: list[list[str]], mutator_epochs: list[int]):
         self.mutator_planes = mutator_planes
         self.mutator_epochs = mutator_epochs
 
@@ -194,7 +194,7 @@ class HistNRaysAlternator(Callback):
         print(ModelSummary(pl_module))
 
     def on_load_checkpoint(self, trainer: Trainer, pl_module: SurrogateModel,
-                           checkpoint: Dict[str, Any]) -> None:
+                           checkpoint: dict[str, Any]) -> None:
         # Hack to reset (possibly) non-matching optimizer states loaded from a checkpoint
         optim = pl_module.configure_optimizers()[0][0]
         checkpoint['optimizer_states'][0]['state'].clear()

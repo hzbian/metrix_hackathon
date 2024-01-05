@@ -1,5 +1,4 @@
 import random
-from typing import List, Optional
 import unittest
 from unittest.mock import Mock
 import optuna
@@ -39,12 +38,12 @@ class TestOptimizerBackend(unittest.TestCase):
 
     def mock_objective(
         self, param_container: list[RayParameterContainer], target: Target
-    ) -> List[float]:
+    ) -> list[float]:
         self.assertIsInstance(param_container, list)
         self.assertIsInstance(param_container[0], RayParameterContainer)
         self.assertIsInstance(target, Target)
         self.assertIsInstance(target.search_space, RayParameterContainer)
-        self.assertIsInstance(target.target_params, Optional[RayParameterContainer])
+        self.assertIsInstance(target.target_params, RayParameterContainer | None)
         return [random.random() for _ in range(len(param_container))]
 
     def test_current_epochs(self):

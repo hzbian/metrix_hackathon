@@ -1,5 +1,3 @@
-from typing import Dict
-
 import numpy as np
 import torch
 from torch import nn
@@ -36,7 +34,7 @@ class SurrogateLoss(nn.Module):
         self.mae_lims_weight = mae_lims_weight
         self.mae_n_rays_weight = mae_n_rays_weight
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         dim_x = dim_y = int(np.sqrt(batch['pred_hist'].shape[1]))
 
         pred_x_lims, pred_y_lims = batch['pred_x_lims'].clone(), batch['pred_y_lims'].clone()

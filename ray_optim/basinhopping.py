@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from collections.abc import Callable
 import numpy as np
 from ray_optim.ray_optimizer import Target, OptimizerBackend
 from ray_tools.base.parameter import MutableParameter, NumericalParameter
@@ -25,7 +25,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: Optional[dict[str, float]] = None):
+    def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: dict[str, float] | None = None):
         optimize_parameters = target.search_space.copy()
         x0 = []
         bounds = []

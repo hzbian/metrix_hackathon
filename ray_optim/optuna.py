@@ -1,4 +1,5 @@
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from optuna import Study, Trial
 import torch
 from ray_optim.ray_optimizer import Target, OptimizerBackend

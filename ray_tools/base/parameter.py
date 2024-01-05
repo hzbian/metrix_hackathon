@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 from itertools import product
-from typing import Tuple, Union, List, Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -57,7 +57,7 @@ class MutableParameter(NumericalParameter):
     Extends :class:`NumericalParameter` by value_lims, specifying lower and upper limits for value. If `enforce_lims` is True, the limits of this parameter should always be enforced, e.g. in an optimization.
     """
 
-    def __init__(self, value: float, value_lims: Tuple[float, float], enforce_lims: bool = False):
+    def __init__(self, value: float, value_lims: tuple[float, float], enforce_lims: bool = False):
         super().__init__(value)
         self.value_lims = value_lims
         self.enforce_lims: bool = enforce_lims
@@ -74,7 +74,7 @@ class RandomParameter(MutableParameter):
     Draws a random value in the interval value_lims.
     """
 
-    def __init__(self, value_lims: Tuple[float, float], rg: RandomGenerator | None = None, enforce_lims: bool = False):
+    def __init__(self, value_lims: tuple[float, float], rg: RandomGenerator | None = None, enforce_lims: bool = False):
         self.rg = rg if rg is not None else RandomGenerator()
         assert self.rg.rg_random is not None
         value = self.rg.rg_random.uniform(*value_lims)
@@ -122,13 +122,13 @@ class GridParameter(RayParameter):
     Can be used to build a grid of :class:`RayParameterContainer`.
     """
 
-    def __init__(self, value: Union[List[float], np.ndarray]):
+    def __init__(self, value: list[float] | np.ndarray):
         self.value = np.array(value).flatten()
 
     def get_value(self) -> np.ndarray:
         return self.value
 
-    def expand(self) -> List[NumericalParameter]:
+    def expand(self) -> list[NumericalParameter]:
         """
         Expands values into list of individual :class:`NumericalParameter`.
         """

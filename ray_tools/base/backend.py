@@ -10,7 +10,6 @@ import subprocess
 import shlex
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 import docker
 import docker.errors
@@ -50,7 +49,7 @@ class RayBackend(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def run(self, raypyng_rml: RMLFile, exported_planes: list[str], run_id: Optional[str] = None) -> dict[str, RayOutput]:
+    def run(self, raypyng_rml: RMLFile, exported_planes: list[str], run_id: str | None = None) -> dict[str, RayOutput]:
         """
         Run raytracing given an RMLFile instance.
     :param raypyng_rml: RMLFile instance to be processed.
@@ -80,7 +79,7 @@ class RayBackendDockerRAYUI(RayBackend):
                  docker_container_name: str | None = None,
                  max_retry: int = 1000,
                  verbose=True,
-                 additional_mount_files: Optional[list[str]] = None, device: torch.device = torch.device('cpu')) -> None:
+                 additional_mount_files: list[str] | None = None, device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
@@ -351,7 +350,7 @@ class RayBackendDockerRAYX(RayBackend):
     def run(self,
             raypyng_rml: RMLFile,
             exported_planes: list[str],
-            run_id: str | None = None, additional_mount_files: Optional[list[str]] = None) -> dict[str, RayOutput]:
+            run_id: str | None = None, additional_mount_files: list[str] | None = None) -> dict[str, RayOutput]:
 
         if run_id is None:
             run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))

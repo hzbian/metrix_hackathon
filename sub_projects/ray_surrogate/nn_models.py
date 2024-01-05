@@ -1,4 +1,4 @@
-from typing import Type, Dict, Any, List, Tuple
+from typing import Type, Any
 from collections import OrderedDict
 
 import torch
@@ -11,21 +11,21 @@ class SurrogateModel(LightningModule):
     def __init__(self,
                  dim_bottleneck: int,
                  net_bottleneck: Type[nn.Module],
-                 net_bottleneck_params: Dict,
-                 net_hist: Tuple[Type[nn.Module], Type[nn.Module]],
-                 net_hist_params: Tuple[Dict, Dict],
-                 net_lims: Tuple[Type[nn.Module], Type[nn.Module]],
-                 net_lims_params: Tuple[Dict, Dict],
+                 net_bottleneck_params: dict,
+                 net_hist: tuple[Type[nn.Module], Type[nn.Module]],
+                 net_hist_params: tuple[dict, dict],
+                 net_lims: tuple[Type[nn.Module], Type[nn.Module]],
+                 net_lims_params: tuple[dict, dict],
                  enc_params: Type[nn.Module],
-                 enc_params_params: Dict,
+                 enc_params_params: dict,
                  loss_func: Type[nn.Module],
-                 loss_func_params: Dict,
+                 loss_func_params: dict,
                  optimizer: Type[Any] = torch.optim.Adam,
-                 optimizer_params: Dict = {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4},
+                 optimizer_params: dict = {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4},
                  scheduler: Type[Any] = torch.optim.lr_scheduler.StepLR,
-                 scheduler_params: Dict = {"step_size": 1, "gamma": 1.0},
-                 val_metrics: List[Tuple[str, nn.Module]] = None,
-                 keep_batch: List[int] = [0],
+                 scheduler_params: dict = {"step_size": 1, "gamma": 1.0},
+                 val_metrics: list[tuple[str, nn.Module]] | None = None,
+                 keep_batch: list[int] = [0],
                  ):
         super().__init__()
         self.save_hyperparameters()
@@ -53,7 +53,7 @@ class SurrogateModel(LightningModule):
         self.loss_func = loss_func(**loss_func_params)
         self.val_metrics = val_metrics if val_metrics is not None else []
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         params = batch['params']
 
         if 'inp_hist' in batch:
@@ -105,7 +105,7 @@ class SurrogateModel(LightningModule):
 
         return batch
 
-    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
+    def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int):
         loss, batch = self._process_batch(batch)
         bs = batch['params'].shape[0]
         self.log("train/loss", loss.item(), batch_size=bs)
@@ -116,7 +116,7 @@ class SurrogateModel(LightningModule):
             out = None
         return {"loss": loss, "out": out}
 
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
+    def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int):
         out = {}
         for dl_name, dl_batch in batch.items():
             loss, dl_batch = self._process_batch(dl_batch)
@@ -133,7 +133,7 @@ class SurrogateModel(LightningModule):
                 out[dl_name] = None
         return {"out": out}
 
-    def _process_batch(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def _process_batch(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         batch = self(batch)
         loss = self.loss_func(batch)
         return loss, batch
@@ -147,9 +147,9 @@ class SurrogateModel(LightningModule):
 class MLP(nn.Module):
 
     def __init__(self,
-                 dim_in: int, dim_out: int, dim_hidden: List[int],
+                 dim_in: int, dim_out: int, dim_hidden: list[int],
                  activation: Type[Any] = nn.ReLU,
-                 activation_params: Dict = dict(inplace=True)):
+                 activation_params: dict = dict(inplace=True)):
         super().__init__()
 
         self.dim_in = dim_in

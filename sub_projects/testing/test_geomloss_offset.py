@@ -1,6 +1,5 @@
 import os
 import sys
-from typing import Tuple
 
 sys.path.insert(0, '../../')
 
@@ -60,7 +59,7 @@ class Shifter(nn.Module):
         self._hist_to_pc = HistToPointCloud()
         self._subsampler = HistSubsampler(factor=8)
 
-    def forward(self, inp) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, inp) -> tuple[torch.Tensor, torch.Tensor]:
         inp_supp, inp_weights = self._hist_to_pc(
             hist=self._subsampler(inp['1e6/ray_output/ImagePlane/ml/0']['histogram'].cuda()),
             x_lims=inp['1e6/ray_output/ImagePlane/ml/0']['x_lims'].cuda(),

@@ -1,4 +1,4 @@
-from typing import Tuple, Type, Any, Dict, List
+from typing import Type, Any
 from collections import OrderedDict
 from abc import ABCMeta, abstractmethod
 
@@ -13,9 +13,9 @@ class MLP(nn.Module):
     """
 
     def __init__(self,
-                 dim_in: int, dim_out: int, dim_hidden: List[int],
+                 dim_in: int, dim_out: int, dim_hidden: list[int],
                  activation: Type[Any] = nn.ReLU,
-                 activation_params: Dict = dict(inplace=True)):
+                 activation_params: dict = dict(inplace=True)):
         super().__init__()
 
         self.dim_in = dim_in
@@ -47,14 +47,14 @@ class SurrogateBackbone(nn.Module, metaclass=ABCMeta):
                 inp_params: torch.Tensor,
                 inp_hist: torch.Tensor,
                 inp_x_lims: torch.Tensor,
-                inp_y_lims: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                inp_y_lims: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         pass
 
 
 class TransformerBackbone(SurrogateBackbone):
 
     def __init__(self,
-                 hist_dim: Tuple[int, int],  # x- and y-dim of histograms
+                 hist_dim: tuple[int, int],  # x- and y-dim of histograms
                  n_hist_layers_inp: int,  # number of histograms in input plane or number of templates
                  n_hist_layers_out: int,  # number of histograms in output plane
                  param_dim: int,  # total number of parameters
@@ -133,7 +133,7 @@ class TransformerBackbone(SurrogateBackbone):
                 inp_params: torch.Tensor,
                 inp_hist: torch.Tensor,
                 inp_x_lims: torch.Tensor,
-                inp_y_lims: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                inp_y_lims: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         bs = inp_params.shape[0]
         inp_params = self.to_param_embedding(inp_params)
         if self.use_inp_template:
@@ -162,7 +162,7 @@ class CNNBackbone(SurrogateBackbone):
     """
 
     def __init__(self,
-                 hist_dim: Tuple[int, int],
+                 hist_dim: tuple[int, int],
                  param_dim: int,
                  n_hist_layers: int,
                  n_templates: int = 32,
@@ -211,7 +211,7 @@ class CNNBackbone(SurrogateBackbone):
         self.y_lims_predictor = MLP(dim_in=self.param_emb_dim, dim_out=2 * self.n_hist_layers,
                                     dim_hidden=(self.lims_n_layers - 1) * [self.lims_dim_hidden])
 
-    def forward(self, inp_params: torch.Tensor, *args) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, inp_params: torch.Tensor, *args) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         bs = inp_params.shape[0]
         param_emb = self.param_embedder(inp_params)
 

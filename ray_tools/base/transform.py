@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 from abc import ABCMeta, abstractmethod
-from typing import Any, Optional, Tuple, Dict, List
+from typing import Any
 
 import torch
 
@@ -43,7 +43,7 @@ class RayTransformConcat(RayTransform):
     def __init__(self, transforms:dict[str, RayTransform]):
         self.transforms: dict[str, RayTransform] = transforms
 
-    def __call__(self, ray_output: RayOutput) -> Dict:
+    def __call__(self, ray_output: RayOutput) -> dict:
         return {k: transform(ray_output) for k, transform in self.transforms.items()}
 
 
@@ -62,10 +62,10 @@ class ToDict(RayTransform):
     :param ignore: Fields of :class:`RayOutput` to be ignored.
     """
 
-    def __init__(self, ignore: List[str] = None):
+    def __init__(self, ignore: list[str] | None = None):
         self.ignore = ignore if ignore else []
 
-    def __call__(self, ray_output: RayOutput) -> Dict:
+    def __call__(self, ray_output: RayOutput) -> dict:
         out = dict(x_loc=ray_output.x_loc,
                    y_loc=ray_output.y_loc,
                    z_loc=ray_output.z_loc,
@@ -89,9 +89,9 @@ class Crop(RayTransform):
     """
 
     def __init__(self,
-                 x_lims: Tuple[float, float] = None,
-                 y_lims: Tuple[float, float] = None,
-                 z_lims: Tuple[float, float] = None):
+                 x_lims: tuple[float, float] = None,
+                 y_lims: tuple[float, float] = None,
+                 z_lims: tuple[float, float] = None):
         self.x_lims = x_lims if x_lims else (-float('inf'), float('inf'))
         self.y_lims = y_lims if y_lims else (-float('inf'), float('inf'))
         self.z_lims = z_lims if z_lims else (-float('inf'), float('inf'))
@@ -131,10 +131,10 @@ class Histogram(RayTransform):
 
     def __init__(self,
                  n_bins: int,
-                 x_lims: Tuple[float, float] = None,
-                 y_lims: Tuple[float, float] = None,
+                 x_lims: tuple[float, float] | None = None,
+                 y_lims: tuple[float, float] | None = None,
                  auto_center: bool = False,
-                 n_bins_y: Optional[int] = None):
+                 n_bins_y: int | None = None):
         self.n_bins_x = n_bins
         if n_bins_y is not None:
             self.n_bins_y = n_bins_y
@@ -144,7 +144,7 @@ class Histogram(RayTransform):
         self.y_lims = y_lims
         self.auto_center = auto_center
 
-    def __call__(self, ray_output: RayOutput) -> Dict:
+    def __call__(self, ray_output: RayOutput) -> dict:
         if isinstance(ray_output, dict):
             return_dict = {}
             for key, entry in ray_output.items():
@@ -152,7 +152,7 @@ class Histogram(RayTransform):
             return return_dict
         return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
 
-    def compute_histogram(self, x_loc: torch.Tensor, y_loc: torch.Tensor) -> Dict:
+    def compute_histogram(self, x_loc: torch.Tensor, y_loc: torch.Tensor) -> dict:
         # store number of rays
         out = {'n_rays': x_loc.shape[0]}
 
@@ -194,7 +194,7 @@ class MultiLayer(RayTransform):
     """
     Creates (virtual) image plane layers (as :class:`RayOutput`) at given distances from an RayOutput.
     Transforms are stored in dictionary of RayOutput, with each key indicating the distance.
-    :param dist_layers: List of layer distances, relative to the original image plane layer (which is at 0).
+    :param dist_layers: list of layer distances, relative to the original image plane layer (which is at 0).
     :param copy_directions: If True, directions and energy fields are deeply copied (increases memory).
     :param transform: Optional :class:`RayTransform` applied to each created layer.
     """
@@ -204,7 +204,7 @@ class MultiLayer(RayTransform):
         self.copy_directions = copy_directions
         self.transform = transform
 
-    def __call__(self, ray_output: RayOutput) -> Dict[str, RayOutput]:
+    def __call__(self, ray_output: RayOutput) -> dict[str, RayOutput]:
         # compute x and y direction for normalized z direction (zz_dir would be 1)
         xz_dir = ray_output.x_dir / ray_output.z_dir
         yz_dir = ray_output.y_dir / ray_output.z_dir

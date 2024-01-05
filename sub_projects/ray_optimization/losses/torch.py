@@ -1,10 +1,10 @@
-from typing import Callable, Dict, Iterable, List, Union
+from collections.abc import Callable
 import torch
 import torchvision
 from ray_tools.base.backend import RayOutput
 from ray_tools.base.transform import Histogram
 from sub_projects.ray_optimization.losses.losses import RayLoss
-from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
+from sub_projects.ray_optimization.utils import ray_dict_to_tensor
 
 
 class TorchLoss(RayLoss):

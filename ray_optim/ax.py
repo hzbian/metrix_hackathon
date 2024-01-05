@@ -1,6 +1,5 @@
 # this needs some major work
 import time
-from typing import List, Optional
 import ax
 from ax.service.ax_client import AxClient, ObjectiveProperties
 from ax.service.ax_client import AxClient
@@ -11,7 +10,7 @@ from ax.modelbridge.registry import Cont_X_trans, Models
 from ax.modelbridge.generation_strategy import GenerationStep
 
 class OptimizerBackendAx(OptimizerBackend):
-   def __init__(self, ax_client: Optional[AxClient] = None):
+   def __init__(self, ax_client: AxClient | None = None):
        if ax_client is not None:
            self.ax_client = ax_client
        else:

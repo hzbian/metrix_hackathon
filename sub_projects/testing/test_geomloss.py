@@ -1,6 +1,5 @@
 import os
 import sys
-from typing import Tuple
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -84,7 +83,7 @@ plot_data(s2_raw)
 loss = SamplesLoss("sinkhorn", p=2, backend='auto')
 
 
-def hist_to_pc(hist: torch.Tensor, x_lims: Tuple[float, float], y_lims: Tuple[float, float]):
+def hist_to_pc(hist: torch.Tensor, x_lims: tuple[float, float], y_lims: tuple[float, float]):
     dim_x, dim_y = hist.shape
     coord_x_width = (x_lims[1] - x_lims[0]) / dim_x
     coord_y_width = (y_lims[1] - y_lims[0]) / dim_y
@@ -122,7 +121,7 @@ print(loss(s1_weights / s1_weights.sum(), s1_raw_recov,
 print(loss(s1_raw_recov, (s2_raw_recov - s2_com + s1_com)))
 
 
-def sample_from_hist(hist: torch.Tensor, x_lims: Tuple[float, float], y_lims: Tuple[float, float], n_samples: int):
+def sample_from_hist(hist: torch.Tensor, x_lims: tuple[float, float], y_lims: tuple[float, float], n_samples: int):
     coords, weights = hist_to_pc(hist, x_lims, y_lims)
     return F.gumbel_softmax(weights.cuda().unsqueeze(0).expand(n_samples, -1), tau=1, hard=True) @ coords
 

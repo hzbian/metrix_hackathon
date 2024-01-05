@@ -3,7 +3,8 @@ from operator import itemgetter
 import time
 from abc import ABCMeta, abstractmethod
 from math import sqrt
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from torch.multiprocessing import JoinableQueue, Process
 
 import torch

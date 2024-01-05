@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import torch
-from typing import Iterable 
+from collections.abc import Iterable 
 
 from joblib import Parallel, delayed
 

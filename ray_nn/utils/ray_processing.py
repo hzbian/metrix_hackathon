@@ -1,4 +1,3 @@
-from typing import Tuple
 
 import torch
 from torch import nn
@@ -31,7 +30,7 @@ class HistToPointCloud(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+    def forward(self, hist: torch.Tensor, x_lims: torch.Tensor, y_lims: torch.Tensor) -> tuple[torch.Tensor, ...]:
         _, dim_x, dim_y = hist.shape
 
         coord_x_width = (x_lims[:, 1] - x_lims[:, 0]) / dim_x

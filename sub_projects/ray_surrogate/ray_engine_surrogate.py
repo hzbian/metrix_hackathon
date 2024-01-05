@@ -1,4 +1,3 @@
-from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -14,7 +13,7 @@ class RayEngineSurrogate:
     def __init__(self,
                  ckpt_path: str,
                  hist_dim: int,
-                 params_info: List[Tuple[str, Tuple[float, float]]],
+                 params_info: list[tuple[str, tuple[float, float]]],
                  gpu_id: int = None):
 
         self.ckpt_path = ckpt_path
@@ -32,7 +31,7 @@ class RayEngineSurrogate:
         for param in self.surrogate_model.parameters():
             param.requires_grad = False
 
-    def run(self, param_containers: List[RayParameterContainer]) -> List[Dict]:
+    def run(self, param_containers: list[RayParameterContainer]) -> list[dict]:
         bs = len(param_containers)
         params = torch.zeros(bs, len(self.params_info))
         for idx, container in enumerate(param_containers):

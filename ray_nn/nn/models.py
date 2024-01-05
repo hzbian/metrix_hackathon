@@ -1,4 +1,4 @@
-from typing import Type, Dict, Any, List, Tuple
+from typing import Type, Any
 
 import torch
 from torch import nn
@@ -27,7 +27,7 @@ def unfreeze(model: nn.Module) -> None:
 class SurrogateModel(LightningModule):
     """
     Main PyTorch LightningModule to represent a surrogate model.
-    :param planes: List of (image) planes to be considered. The order of the list determines the order of
+    :param planes: list of (image) planes to be considered. The order of the list determines the order of
         beamline components.
     :param backbone: Dictionary of :class:`ray_nn.nn.backbones.SurrogateBackbone` (keys = planes)
     :param backbone_params:
@@ -51,27 +51,27 @@ class SurrogateModel(LightningModule):
     :param scheduler_params:
     :param val_metrics: Tuples of validation metrics (name, nn.Module) that are computed in each training and
         validation step.
-    :param keep_batch: List of batches to keep until the end of epoch (e.g., for plotting callbacks)
+    :param keep_batch: list of batches to keep until the end of epoch (e.g., for plotting callbacks)
     """
 
     def __init__(self,
-                 planes: List[str],
-                 backbone: Dict[str, Type[SurrogateBackbone]],
-                 backbone_params: Dict[str, Dict],
-                 loss_func: Dict[str, Type[SurrogateLoss]],
-                 loss_func_params: Dict[str, Dict],
-                 hist_zero_classifier: Dict[str, Type[nn.Module]] = None,
-                 hist_zero_classifier_params: Dict[str, Dict] = None,
-                 n_rays_predictor: Dict[str, Type[nn.Module]] = None,
-                 n_rays_predictor_params: Dict[str, Dict] = None,
+                 planes: list[str],
+                 backbone: dict[str, Type[SurrogateBackbone]],
+                 backbone_params: dict[str, dict],
+                 loss_func: dict[str, Type[SurrogateLoss]],
+                 loss_func_params: dict[str, dict],
+                 hist_zero_classifier: dict[str, Type[nn.Module]] = None,
+                 hist_zero_classifier_params: dict[str, dict] = None,
+                 n_rays_predictor: dict[str, Type[nn.Module]] = None,
+                 n_rays_predictor_params: dict[str, dict] = None,
                  use_prev_plane_pred: bool = True,
                  n_rays_known: bool = False,
                  optimizer: Type[Any] = torch.optim.Adam,
-                 optimizer_params: Dict = {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4},
+                 optimizer_params: dict = {"lr": 2e-4, "eps": 1e-5, "weight_decay": 1e-4},
                  scheduler: Type[Any] = torch.optim.lr_scheduler.StepLR,
-                 scheduler_params: Dict = {"step_size": 1, "gamma": 1.0},
-                 val_metrics: List[Tuple[str, nn.Module]] = None,
-                 keep_batch: List[int] = [0],
+                 scheduler_params: dict = {"step_size": 1, "gamma": 1.0},
+                 val_metrics: list[tuple[str, nn.Module]] = None,
+                 keep_batch: list[int] = [0],
                  ):
         super().__init__()
         self.save_hyperparameters()
@@ -99,7 +99,7 @@ class SurrogateModel(LightningModule):
         else:
             self.n_rays_predictor = None
 
-    def forward(self, batch: Dict[str, Dict[str, torch.Tensor]]) -> Dict[str, Dict[str, torch.Tensor]]:
+    def forward(self, batch: dict[str, dict[str, torch.Tensor]]) -> dict[str, dict[str, torch.Tensor]]:
         # iterate over plane in the right order to write prediction to batch
         for idx, plane in enumerate(self.planes):
             inp_params = batch[plane]['params']
@@ -161,7 +161,7 @@ class SurrogateModel(LightningModule):
         return batch
 
     @staticmethod
-    def _hist_zero_batch(hist_like: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+    def _hist_zero_batch(hist_like: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """
         See :func:`ray_nn.data.transform.SurrogateModelPreparation._process_zero_hist`
         """
@@ -174,7 +174,7 @@ class SurrogateModel(LightningModule):
         n_rays = hist.sum(dim=[-2, -1])
         return hist, x_lims, y_lims, n_rays
 
-    def freeze(self, planes: List[str] = None):
+    def freeze(self, planes: list[str] = None):
         """
         Set required_grad of all components in planes to False.
         """
@@ -187,7 +187,7 @@ class SurrogateModel(LightningModule):
             if self.n_rays_predictor is not None:
                 freeze(self.n_rays_predictor[plane])
 
-    def unfreeze(self, planes: List[str] = None):
+    def unfreeze(self, planes: list[str] = None):
         """
         Set required_grad of all components in planes to True.
         """
@@ -200,7 +200,7 @@ class SurrogateModel(LightningModule):
             if self.n_rays_predictor is not None:
                 unfreeze(self.n_rays_predictor[plane])
 
-    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int):
+    def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int):
         loss, batch = self._process_batch(batch)
         # total loss is sum over losses for all planes
         loss_total = torch.stack(list(loss.values())).sum()
@@ -224,7 +224,7 @@ class SurrogateModel(LightningModule):
             out = None
         return {"loss": loss_total, "out": out}
 
-    def validation_step(self, batch: Dict[str, Dict[str, torch.Tensor]], batch_idx: int):
+    def validation_step(self, batch: dict[str, dict[str, torch.Tensor]], batch_idx: int):
         with torch.no_grad():
             out = {}
             for dl_name, dl_batch in batch.items():
@@ -250,7 +250,7 @@ class SurrogateModel(LightningModule):
                 out[dl_name] = None
         return {"out": out}
 
-    def _process_batch(self, batch: Dict[str, Dict[str, torch.Tensor]]) -> Tuple[Dict, Dict]:
+    def _process_batch(self, batch: dict[str, dict[str, torch.Tensor]]) -> tuple[dict, dict]:
         batch = self(batch)
         loss = {}
         # compute loss for all planes

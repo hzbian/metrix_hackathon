@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 from evotorch import Problem
 from evotorch.algorithms import SNES

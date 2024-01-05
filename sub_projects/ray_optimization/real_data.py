@@ -1,5 +1,5 @@
 import os
-from typing import List, OrderedDict, Tuple
+from collections import OrderedDict
 
 import pandas as pd
 import torch
@@ -24,7 +24,7 @@ class SampleGridWeightedHist(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int, fill=True) -> Tuple[
+    def forward(self, hist: torch.Tensor, pc_weights: torch.Tensor, num_rays: int, fill=True) -> tuple[
         torch.Tensor, ...]:
         rays_per_weights = num_rays / pc_weights.sum(dim=1)
         repetitions = (pc_weights * rays_per_weights).floor().int()[0]
@@ -138,7 +138,7 @@ def get_lims(dimension_dilation_mm: float, dimension_size_pixel: int, mm_per_pix
     return torch.tensor(
                     (dimension_dilation_mm, dimension_dilation_mm + dimension_size_pixel * mm_per_pixel)).unsqueeze(0)
 
-def clean_intensity(intensity: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
+def clean_intensity(intensity: torch.Tensor, threshold: float) -> tuple[torch.Tensor, torch.Tensor]:
                 cleaned_indices = intensity > threshold
                 cleaned_intensity = intensity[cleaned_indices]
                 return cleaned_intensity, cleaned_indices

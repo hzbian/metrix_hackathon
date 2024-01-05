@@ -1,5 +1,6 @@
 import os
-from typing import Callable, List, Dict, Union, Any
+from collections.abc import Callable
+from typing import Any
 
 import h5py
 import numpy as np
@@ -27,7 +28,7 @@ class RandomRayDatasetGenerator:
 
     def __init__(self,
                  ray_engine: RayEngine,
-                 param_container_sampler: Callable[..., Dict],
+                 param_container_sampler: Callable[..., dict],
                  h5_datadir: str,
                  h5_basename: str = 'raw',
                  h5_max_size: int = 1000,
@@ -92,16 +93,16 @@ class RandomRayDatasetGenerator:
         h5_file_obj.close()
 
     @staticmethod
-    def build_param_container_sampler(param_container_func: Callable[..., List[RayParameterContainer]],
-                                      idx_sub: List[str],
-                                      transform: List[RayTransformType]) -> Callable[..., Dict]:
+    def build_param_container_sampler(param_container_func: Callable[..., list[RayParameterContainer]],
+                                      idx_sub: list[str],
+                                      transform: list[RayTransformType]) -> Callable[..., dict]:
         """
         Helper function to conveniently build a ``param_container_sampler``.
         """
         return lambda: dict(idx_sub=idx_sub, transform=transform, param_container=param_container_func())
 
 
-def dict_to_h5(h5_grp: h5py.Group, d: Dict, compress_numpy=False) -> None:
+def dict_to_h5(h5_grp: h5py.Group, d: dict, compress_numpy=False) -> None:
     """
     Helper to write a dictionary into a :class:`h5py.Group`.
     If a dictionary value is again a dictionary, this function is called recursively and a new h5-group is created.
@@ -125,7 +126,7 @@ def dict_to_h5(h5_grp: h5py.Group, d: Dict, compress_numpy=False) -> None:
             h5_grp.create_dataset(name=str(k), data=v)
 
 
-def h5_to_dict(h5_obj: Union[h5py.Group, h5py.Dataset]) -> Any:
+def h5_to_dict(h5_obj: h5py.Group | h5py.Dataset) -> Any:
     """
     Helper to create a dictionary from a :class:`h5py.Group` or :class:`h5py.Dataset`.
     This function works recursively.

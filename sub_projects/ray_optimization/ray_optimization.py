@@ -1,5 +1,4 @@
 import os
-from typing import Dict, Optional, List
 
 import hydra
 from hydra.utils import instantiate
@@ -50,7 +49,7 @@ class RayOptimization:
         input_parameter_container: RayParameterContainer,
         rg: RandomGenerator,
         max_deviation: float = 1.0,
-        overwrite_offset: Optional[RayParameterContainer] = None,
+        overwrite_offset: RayParameterContainer | None = None,
         random_parameters_only: bool = True,
     ):
         ray_parameters = []

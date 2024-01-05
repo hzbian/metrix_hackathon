@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Union, Dict, List, Iterable
 
 import torch
 
-from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
+from sub_projects.ray_optimization.utils import ray_dict_to_tensor
 
 
 class RayLoss(ABC):
@@ -14,8 +13,8 @@ class RayLoss(ABC):
     @abstractmethod
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
         """
@@ -51,8 +50,8 @@ class MultiObjectiveLoss(RayLoss):
 
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
         return torch.stack(
@@ -85,8 +84,8 @@ class ScheduledLoss(RayLoss):
 
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
         if self.passed_epochs < self.loss_a_epochs:
