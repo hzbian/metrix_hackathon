@@ -1,5 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional
-from optuna import Study
+from typing import Any, Callable
+from optuna import Study, Trial
 import torch
 from ray_optim.ray_optimizer import Target, OptimizerBackend
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
@@ -13,22 +13,22 @@ class OptimizerBackendOptuna(OptimizerBackend):
         pass
 
     @staticmethod
-    def optuna_objective(objective: Callable[[list[RayParameterContainer], Target], list[float]], target: Target):
-        def output_objective(trial):
+    def optuna_objective(objective: Callable[[list[RayParameterContainer], Target], list[float]], target: Target) -> Callable[[Trial], float]:
+        def output_objective(trial: Trial) -> float:
             optimize_parameters = target.search_space.copy()
             for key, value in optimize_parameters.items():
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(trial.suggest_float(key, value.value_lims[0],
                                                                                       value.value_lims[1]))
 
-            output = objective([optimize_parameters], target=target)
-            return torch.tensor(output).mean()
+            output: list[float] = objective([optimize_parameters], target)
+            return torch.tensor(output).mean().item()
 
         return output_objective
 
-    def optimize(self, objective: Callable[[List[RayParameterContainer], Target], List[float]], iterations: int, target: Target, starting_point: Optional[dict[str, Any]] = None):
+    def optimize(self, objective: Callable[[list[RayParameterContainer], Target], list[float]], iterations: int, target: Target, starting_point: dict[str, Any] | None = None):
         self.optuna_study.optimize(
-            self.optuna_objective(objective, target),
+            OptimizerBackendOptuna.optuna_objective(objective, target),
             n_trials=iterations,
             show_progress_bar=True)
         return self.optuna_study.best_params, {}
