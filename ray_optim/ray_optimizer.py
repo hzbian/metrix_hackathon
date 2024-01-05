@@ -623,9 +623,7 @@ class RayOptimizer:
                 "The rays of overall best should be simulated at this point, if there are no rays, it should be an empty tensor."
             )
 
-        def to_cpu_tensor_list(
-            ray_output: list[dict]
-        ) -> list[torch.Tensor]:
+        def to_cpu_tensor_list(ray_output: list[dict]) -> list[torch.Tensor]:
             output_tensor_list = ray_output_to_tensor(
                 ray_output, exported_plane, to_cpu=True
             )
@@ -798,20 +796,22 @@ class RayOptimizer:
             )
             output_dict["fancy_ray"] = fancy_ray_plot
         if isinstance(target, OffsetTarget):
-            max_ray_index = int(torch.argmax(
-                torch.Tensor(
-                    [
-                        ray_output_to_tensor([element], exported_plane)[0].shape[1]
-                        for element in target.observed_rays
-                    ]
-                )
-            ).item())
+            max_ray_index = int(
+                torch.argmax(
+                    torch.Tensor(
+                        [
+                            ray_output_to_tensor([element], exported_plane)[0].shape[1]
+                            for element in target.observed_rays
+                        ]
+                    )
+                ).item()
+            )
             target_observed_rays_list: list[torch.Tensor] = ray_output_to_tensor(
-                    [target.observed_rays[max_ray_index]],
-                    exported_plane,
-                    to_cpu=True,
-                )
-            
+                [target.observed_rays[max_ray_index]],
+                exported_plane,
+                to_cpu=True,
+            )
+
             xlim, ylim = Plot.switch_lims_if_out_of_lim(
                 target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
             )
@@ -922,9 +922,7 @@ class RayOptimizer:
             self.overall_best.rays = output_tensor
         return losses, num_rays, losses_mean
 
-    def optimize(
-        self, target: Target, starting_point: dict[str, float] | None = None
-    ):
+    def optimize(self, target: Target, starting_point: dict[str, float] | None = None):
         self.optimizer_backend.setup_optimization(target=target)
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
