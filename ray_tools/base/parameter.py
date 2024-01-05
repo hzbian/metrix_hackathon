@@ -145,12 +145,12 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
     Key format: ``beamline_component.parameter`` (internal format) or corresponding :class:`XmlElement`.
     """
 
-    def __setitem__(self, k: Union[str, XmlElement], v: RayParameter) -> None:
+    def __setitem__(self, k: str | XmlElement, v: RayParameter) -> None:
         if isinstance(k, XmlElement):
             k = self._element_to_key(k)  # get string-key
         super().__setitem__(k, v)
 
-    def __getitem__(self, k: Union[str, XmlElement]) -> RayParameter:
+    def __getitem__(self, k: str | XmlElement) -> RayParameter:
         if isinstance(k, XmlElement):
             k = self._element_to_key(k)  # get string-key
         return super().__getitem__(k)
