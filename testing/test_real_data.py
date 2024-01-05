@@ -1,7 +1,7 @@
 import os
+from pathlib import Path
 import unittest
 import torch
-
 from PIL import Image
 from matplotlib import pyplot as plt
 from ray_nn.utils.ray_processing import HistToPointCloud
@@ -79,7 +79,9 @@ class TestRealData(unittest.TestCase):
         hist_out: torch.Tensor = self.hist(self.ray_output)['histogram']
         plt.clf()
         plt.imshow(hist_out.T)
-        plt.savefig("out.png")
+        out_dir = "outputs/test_real_data/"
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        plt.savefig(os.path.join(out_dir, "test_plot.png"))
     @staticmethod
     def first_center_of_mass(t: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
         return (t[0] * weights[0].unsqueeze(-1)).mean(dim=(0))
