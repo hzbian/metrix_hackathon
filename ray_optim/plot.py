@@ -1,7 +1,8 @@
-from typing import List, Optional, Tuple, Union
 import matplotlib as mpl
 from matplotlib import pyplot as plt
+from matplotlib.ticker import NullLocator
 from matplotlib.figure import Figure
+from matplotlib.layout_engine import ConstrainedLayoutEngine, TightLayoutEngine
 from matplotlib.ticker import FormatStrFormatter
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
@@ -26,9 +27,9 @@ plt.switch_backend("Agg")
 class Plot:
     @staticmethod
     def plot_data(
-        pc_supp: List[torch.Tensor],
-        pc_weights: Optional[List[torch.Tensor]] = None,
-        epoch: Optional[int] = None,
+        pc_supp: list[torch.Tensor],
+        pc_weights: list[torch.Tensor] | None = None,
+        epoch: int | None = None,
     ) -> Figure:
         pc_supp = [v.detach().cpu() for v in pc_supp]
         pc_weights = (
@@ -42,7 +43,7 @@ class Plot:
                 axs[i, j].scatter(line[:, 0], line[:, 1], s=0.5, alpha=0.5)
         if epoch is not None:
             fig.suptitle("Epoch " + str(epoch))
-        if len(column) > 1:
+        if len(pc_supp[0]) > 1:
             fig.supxlabel("Shifting in Ray Direction")
         if len(pc_supp) > 1:
             fig.supylabel("Varying Parameters")
@@ -50,7 +51,7 @@ class Plot:
 
     @staticmethod
     def get_scatter_xyz(
-        ray_tensor: torch.Tensor, z_index: Optional[List[float]] = None
+        ray_tensor: torch.Tensor, z_index: list[float] | None = None
     ):
         if z_index is None:
             z_index = [i for i in range(ray_tensor.shape[0])]
@@ -66,9 +67,9 @@ class Plot:
 
     @staticmethod
     def fancy_ray(
-        data: List[torch.Tensor],
-        labels: Optional[List[str]] = None,
-        z_index: Optional[List[float]] = None,
+        data: list[list[torch.Tensor]],
+        labels: list[str] | None = None,
+        z_index: list[float] | None = None,
     ):
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         fig = go.Figure()
@@ -105,16 +106,22 @@ class Plot:
         #        zaxis = dict(range=[-0.25,0],),
         #        yaxis = dict(range=[-1.35,-1.1],),))
         steps = []
-        for i in range(0, len(fig.data), len(data)):
+        fig_data = fig.data
+        assert isinstance(fig_data, tuple)
+        for i in range(0, len(fig_data), len(data)):
             step = dict(
                 method="update",
                 args=[
-                    {"visible": [False] * len(fig.data)},
+                    {"visible": [False] * len(fig_data)},
                     {"title": "Sample: " + str(i // len(data))},
                 ],
             )
             for j in range(i, i + len(data)):
-                step["args"][0]["visible"][j] = True
+                first_arg = step["args"][0]
+                assert isinstance(first_arg, dict)
+                visible = first_arg["visible"]
+                assert isinstance(visible, list)
+                visible[j] = True
             steps.append(step)
 
         sliders = [dict(active=0, steps=steps)]
@@ -125,8 +132,8 @@ class Plot:
 
     @staticmethod
     def get_lims_per_entry(
-        tensor_list: List[torch.Tensor],
-        lims_if_empty: Tuple[float],
+        tensor_list: list[torch.Tensor],
+        lims_if_empty: tuple[float, float],
         index: int = 0,
         minimum=True,
     ):
@@ -148,13 +155,13 @@ class Plot:
 
     @staticmethod
     def compensation_plot(
-        compensated: List[torch.Tensor],
-        target: List[torch.Tensor],
-        without_compensation: List[torch.Tensor],
-        epoch: Optional[int] = None,
-        training_samples_count: int = None,
+        compensated: list[torch.Tensor],
+        target: list[torch.Tensor],
+        without_compensation: list[torch.Tensor],
+        epoch: int | None = None,
+        training_samples_count: int | None = None,
         covariance_ellipse: bool = True,
-        lims_if_empty: Tuple[float] = (-2, 2),
+        lims_if_empty: tuple[float, float] = (-2, 2),
     ) -> Figure:
         xlim_min = Plot.get_lims_per_entry(target, lims_if_empty, 0, True)
         xlim_max = Plot.get_lims_per_entry(target, lims_if_empty, 0, False)
@@ -182,7 +189,7 @@ class Plot:
         xlim,
         ylim,
         training_samples_count=None,
-        epoch: Optional[int] = None,
+        epoch: int | None = None,
         covariance_ellipse: bool = True,
     ) -> Figure:
         y_label = ["Uncompensated", "Observed", "Compensated"]
@@ -217,11 +224,11 @@ class Plot:
 
     @staticmethod
     def get_lims_per_row(
-        xlim: Union[Tuple[float], Tuple[List[float]]],
-        ylim: Union[Tuple[float], Tuple[List[float]]],
+        xlim: tuple[float, float] | tuple[list[float], list[float]],
+        ylim: tuple[float, float] | tuple[list[float], list[float]],
         row_length: int,
     ):
-        if isinstance(xlim[0], float):
+        if isinstance(xlim[0], float) and isinstance(xlim[1], float):
             xlim_min = [
                 xlim[0] if xlim[0] is not math.isnan(xlim[0]) else 0
                 for _ in range(row_length)
@@ -231,10 +238,12 @@ class Plot:
                 for _ in range(row_length)
             ]
         else:
+            assert isinstance(xlim[0], list)
+            assert isinstance(xlim[1], list)
             xlim_min = [element if element is not math.isnan(element) else 0. for element in xlim[0]]
             xlim_max = [element if element is not math.isnan(element) else 1. for element in xlim[1]]
 
-        if isinstance(ylim[0], float):
+        if isinstance(ylim[0], float) and isinstance(ylim[1], float):
             ylim_min = [
                 ylim[0] if ylim[0] is not math.isnan(ylim[0]) else 0
                 for _ in range(row_length)
@@ -244,6 +253,8 @@ class Plot:
                 for _ in range(row_length)
             ]
         else:
+            assert isinstance(ylim[0], list)
+            assert isinstance(ylim[1], list)
             ylim_min = [element if element is not math.isnan(element) else 0. for element in ylim[0]]
             ylim_max = [element if element is not math.isnan(element) else 1. for element in ylim[1]]
 
@@ -260,13 +271,13 @@ class Plot:
 
     @staticmethod
     def fixed_position_plot_base(
-        tensor_list_list: List[List[torch.Tensor]],
-        xlim: Union[Tuple[float], Tuple[List[float]]],
-        ylim: Union[Tuple[float], Tuple[List[float]]],
+        tensor_list_list: list[list[torch.Tensor]],
+        xlim: tuple[float, float] | tuple[list[float], list[float]],
+        ylim: tuple[float, float] | tuple[list[float], list[float]],
         ylabel,
-        suptitle: Optional[str] = None,
+        suptitle: str | None = None,
         covariance_ellipse: bool = True,
-        draw_all_ellipses_rows: Tuple[int] = (1,),
+        draw_all_ellipses_rows: tuple[int] = (1,),
     ) -> Figure:
         share_xy = isinstance(xlim[0], float)
         fig, axs = plt.subplots(
@@ -282,8 +293,9 @@ class Plot:
         xlim_min, xlim_max, ylim_min, ylim_max = Plot.get_lims_per_row(
             xlim, ylim, len(tensor_list_list[0])
         )
-        fig.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
         engine = fig.get_layout_engine()
+        assert isinstance(engine, TightLayoutEngine) or isinstance(engine, ConstrainedLayoutEngine)
+        engine.set(w_pad=0, h_pad=0)#, hspace=0, wspace=0)
         engine.set(rect=(0.1, 0.0, 0.8, 1.0))
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for idx_list_list in range(len(tensor_list_list)):
@@ -301,8 +313,8 @@ class Plot:
                         ylim_min[beamline_idx], ylim_max[beamline_idx], 1.2
                     )
                 )
-                ax.xaxis.set_major_locator(plt.NullLocator())
-                ax.yaxis.set_major_locator(plt.NullLocator())
+                ax.xaxis.set_major_locator(NullLocator())
+                ax.yaxis.set_major_locator(NullLocator())
                 ax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 if share_xy:
@@ -411,8 +423,8 @@ class Plot:
         pearson = cov[0, 1] / torch.sqrt(cov[0, 0] * cov[1, 1])
         # Using a special case to obtain the eigenvalues of this
         # two-dimensionl dataset.
-        ell_radius_x = torch.sqrt(1 + pearson)
-        ell_radius_y = torch.sqrt(1 - pearson)
+        ell_radius_x = torch.sqrt(1 + pearson).item()
+        ell_radius_y = torch.sqrt(1 - pearson).item()
         ellipse = Ellipse(
             (0, 0),
             width=ell_radius_x * 2,
@@ -426,12 +438,12 @@ class Plot:
         # Calculating the stdandard deviation of x from
         # the squareroot of the variance and multiplying
         # with the given number of standard deviations.
-        scale_x = torch.sqrt(cov[0, 0]) * n_std
-        mean_x = torch.mean(x)
+        scale_x = torch.sqrt(cov[0, 0]).item() * n_std
+        mean_x = torch.mean(x).item()
 
         # calculating the stdandard deviation of y ...
-        scale_y = torch.sqrt(cov[1, 1]) * n_std
-        mean_y = torch.mean(y)
+        scale_y = torch.sqrt(cov[1, 1]).item() * n_std
+        mean_y = torch.mean(y).item()
 
         transf = (
             transforms.Affine2D()
@@ -449,9 +461,9 @@ class Plot:
         predicted_params: RayParameterContainer,
         search_space: RayParameterContainer,
         epoch: int,
-        training_samples_count: Optional[int] = None,
-        real_params: Optional[RayParameterContainer] = None,
-        omit_labels: Optional[List[str]] = None,
+        training_samples_count: int | None = None,
+        real_params: RayParameterContainer | None = None,
+        omit_labels: list[str] | None = None,
     ) -> Figure:
         if omit_labels is None:
             omit_labels = []
@@ -514,7 +526,7 @@ class Plot:
 
     @staticmethod
     def is_out_of_lim(
-        torch_list: List[torch.Tensor], lims: Tuple[float], coordinate_idx=0
+        torch_list: list[torch.Tensor], lims: tuple[float, float], coordinate_idx=0
     ):
         is_out_of_min = True in [
             element[:, :, coordinate_idx].mean() < lims[0] for element in torch_list
@@ -525,7 +537,7 @@ class Plot:
         return is_out_of_min | is_out_of_max
 
     @staticmethod
-    def mean(torch_list: List[torch.Tensor], coordinate_idx: int = 0):
+    def mean(torch_list: list[torch.Tensor], coordinate_idx: int = 0):
         return (
             torch.stack(
                 [element[:, :, coordinate_idx].mean() for element in torch_list]
@@ -535,7 +547,7 @@ class Plot:
         )
 
     @staticmethod
-    def switch_lims_if_out_of_lim(torch_list, lims_x, lims_y, lims_if_empty: Tuple[float]=(0.,1.)):
+    def switch_lims_if_out_of_lim(torch_list, lims_x, lims_y, lims_if_empty: tuple[float, float]=(0.,1.)):
         if Plot.is_out_of_lim(torch_list, lims_x, 0):
             mean_x = Plot.mean(torch_list, 0)
             lims_x = (

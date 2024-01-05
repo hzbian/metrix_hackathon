@@ -3,7 +3,7 @@ from typing import Union, Dict, List, Iterable
 
 import torch
 
-from sub_projects.ray_optimization.utils import ray_output_to_tensor
+from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
 
 
 class RayLoss(ABC):
@@ -12,8 +12,12 @@ class RayLoss(ABC):
     """
 
     @abstractmethod
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
         """
         Function that calculates the loss from input parameters a and b.
         :param a: Ray_output that should be compared.
@@ -24,14 +28,20 @@ class RayLoss(ABC):
         pass
 
 
-
 class RayCountMSE(RayLoss):
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
-        a_tensor = ray_output_to_tensor(a, exported_plane=exported_plane)
-        b_tensor = ray_output_to_tensor(b, exported_plane=exported_plane)
-        return torch.tensor((a_tensor.shape[1] - b_tensor.shape[1]) ** 2 / 2, dtype=a_tensor.dtype,
-                            device=a_tensor.device)
+    def loss_fn(
+        self,
+        a: dict,
+        b: dict,
+        exported_plane: str,
+    ) -> torch.Tensor:
+        a_tensor = ray_dict_to_tensor(a, exported_plane=exported_plane)
+        b_tensor = ray_dict_to_tensor(b, exported_plane=exported_plane)
+        return torch.tensor(
+            (a_tensor.shape[1] - b_tensor.shape[1]) ** 2 / 2,
+            dtype=a_tensor.dtype,
+            device=a_tensor.device,
+        )
 
 
 class MultiObjectiveLoss(RayLoss):
@@ -39,9 +49,18 @@ class MultiObjectiveLoss(RayLoss):
         self.loss_fn_a: RayLoss = loss_fn_a
         self.loss_fn_b: RayLoss = loss_fn_b
 
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
-        return torch.stack((self.loss_fn_a.loss_fn(a, b, exported_plane), self.loss_fn_b.loss_fn(a, b, exported_plane)))
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
+        return torch.stack(
+            (
+                self.loss_fn_a.loss_fn(a, b, exported_plane),
+                self.loss_fn_b.loss_fn(a, b, exported_plane),
+            )
+        )
 
 
 class ScheduledLoss(RayLoss):
@@ -64,11 +83,13 @@ class ScheduledLoss(RayLoss):
     def end_epoch(self):
         self.passed_epochs += 1
 
-    def loss_fn(self, a: Union[Dict, List[Dict], Iterable[Dict]], b: Union[Dict, List[Dict], Iterable[Dict]],
-                exported_plane: str) -> torch.Tensor:
+    def loss_fn(
+        self,
+        a: Union[Dict, List[Dict], Iterable[Dict]],
+        b: Union[Dict, List[Dict], Iterable[Dict]],
+        exported_plane: str,
+    ) -> torch.Tensor:
         if self.passed_epochs < self.loss_a_epochs:
             return self.loss_a.loss_fn(a, b, exported_plane)
         else:
             return self.loss_b.loss_fn(a, b, exported_plane)
-
-

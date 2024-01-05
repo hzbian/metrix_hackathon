@@ -1,9 +1,10 @@
 from typing import Callable, Dict, Iterable, List, Union
 import torch
 import torchvision
+from ray_tools.base.backend import RayOutput
 from ray_tools.base.transform import Histogram
 from sub_projects.ray_optimization.losses.losses import RayLoss
-from sub_projects.ray_optimization.utils import ray_output_to_tensor
+from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
 
 
 class TorchLoss(RayLoss):
@@ -16,32 +17,32 @@ class TorchLoss(RayLoss):
 
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
-        a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
-        b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
+        a_tensor: torch.Tensor = ray_dict_to_tensor(a, exported_plane=exported_plane)
+        b_tensor: torch.Tensor = ray_dict_to_tensor(b, exported_plane=exported_plane)
 
         # if both are empty, it is a perfect fit
-        if a.nelement() == 0 and b.nelement() == 0:
-            return torch.tensor(0.0, device=a.device)
+        if a_tensor.nelement() == 0 and b_tensor.nelement() == 0:
+            return torch.tensor(0.0, device=a_tensor.device)
 
         # if not one of them is empty, cut the larger one
-        if a.nelement() != 0 and b.nelement() != 0:
-            new_size = torch.min(torch.tensor(a.shape), torch.tensor(b.shape))
-            a = a[[slice(0, new_size[i]) for i in range(len(new_size))]]
-            b = b[[slice(0, new_size[i]) for i in range(len(new_size))]]
+        if a_tensor.nelement() != 0 and b_tensor.nelement() != 0:
+            new_size = torch.min(torch.tensor(a_tensor.shape), torch.tensor(b_tensor.shape))
+            a_tensor = a_tensor[[slice(0, new_size[i]) for i in range(len(new_size))]]
+            b_tensor = b_tensor[[slice(0, new_size[i]) for i in range(len(new_size))]]
 
         # if one is empty, the other one is not, let us count the rays and take the difference with base function
-        if a.nelement() == 0 or b.nelement() == 0:
+        if a_tensor.nelement() == 0 or b_tensor.nelement() == 0:
             return self.base_fn(
-                torch.tensor(a.nelement(), device=a.device).float(),
-                torch.tensor(b.nelement(), device=a.device).float(),
+                torch.tensor(a_tensor.nelement(), device=a_tensor.device).float(),
+                torch.tensor(b_tensor.nelement(), device=a_tensor.device).float(),
             )
 
         losses = torch.stack(
-            [self.base_fn(element, b[i]) for i, element in enumerate(a)]
+            [self.base_fn(element, b_tensor[i]) for i, element in enumerate(a_tensor)]
         )
         return losses.mean()
 
@@ -77,14 +78,14 @@ class CovMSE(RayLoss):
 
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
-        a = ray_output_to_tensor(ray_output=a, exported_plane=exported_plane)
-        b = ray_output_to_tensor(ray_output=b, exported_plane=exported_plane)
-        cov_a = torch.stack([torch.cov(element) for element in a])
-        cov_b = torch.stack([torch.cov(element) for element in b])
+        a_tensor: torch.Tensor = ray_dict_to_tensor(a, exported_plane=exported_plane)
+        b_tensor: torch.Tensor = ray_dict_to_tensor(b, exported_plane=exported_plane)
+        cov_a = torch.stack([torch.cov(element) for element in a_tensor])
+        cov_b = torch.stack([torch.cov(element) for element in b_tensor])
         return ((cov_a - cov_b) ** 2).mean()
 
 
@@ -97,7 +98,7 @@ class BoxIoULoss(RayLoss):
     """
 
     def __init__(
-        self, base_fn: Union[Callable[..., torch.Tensor], str], reduction="none"
+        self, base_fn: Callable[..., torch.Tensor] | str, reduction="none"
     ):
         if isinstance(base_fn, str):
             if base_fn == "complete_box_iou_loss":
@@ -106,13 +107,14 @@ class BoxIoULoss(RayLoss):
                 base_fn = torchvision.ops.distance_box_iou_loss
             if base_fn == "generalized_box_iou_loss":
                 base_fn = torchvision.ops.generalized_box_iou_loss
+        assert isinstance(base_fn, Callable)
         self.base_fn: Callable[..., torch.Tensor] = base_fn
         self.reduction = reduction
 
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
         a_dict = a["ray_output"][exported_plane]
@@ -122,8 +124,10 @@ class BoxIoULoss(RayLoss):
 
         for key, a in a_dict.items():
             b = b_dict[key]
-            global_x_min = min(a.x_loc.min(), b.x_loc.min())
-            global_y_min = min(a.y_loc.min(), b.y_loc.min())
+            assert isinstance(a, RayOutput)
+            assert isinstance(b, RayOutput)
+            global_x_min = torch.min(a.x_loc.min(), b.x_loc.min())
+            global_y_min = torch.min(a.y_loc.min(), b.y_loc.min())
             shift_x = -global_x_min if global_x_min < -1 else 0
             shift_y = -global_y_min if global_y_min < -1 else 0
             box_a = torch.tensor(
@@ -161,8 +165,8 @@ class HistogramMSE(RayLoss):
 
     def loss_fn(
         self,
-        a: Union[Dict, List[Dict], Iterable[Dict]],
-        b: Union[Dict, List[Dict], Iterable[Dict]],
+        a: dict,
+        b: dict,
         exported_plane: str,
     ) -> torch.Tensor:
         a_dict = a["ray_output"][exported_plane]
@@ -172,10 +176,12 @@ class HistogramMSE(RayLoss):
 
         for key, a in a_dict.items():
             b = b_dict[key]
-            x_min = min(a.x_loc.min(), b.x_loc.min())
-            x_max = max(a.x_loc.max(), b.x_loc.max())
-            y_min = min(a.y_loc.min(), b.y_loc.min())
-            y_max = max(a.y_loc.max(), b.y_loc.max())
+            assert isinstance(a, RayOutput)
+            assert isinstance(b, RayOutput)
+            x_min = torch.min(a.x_loc.min(), b.x_loc.min()).item()
+            x_max = torch.max(a.x_loc.max(), b.x_loc.max()).item()
+            y_min = torch.min(a.y_loc.min(), b.y_loc.min()).item()
+            y_max = torch.max(a.y_loc.max(), b.y_loc.max()).item()
             hist_a_list.append(
                 Histogram(self.n_bins, (x_min, x_max), (y_min, y_max))(a)["histogram"]
             )

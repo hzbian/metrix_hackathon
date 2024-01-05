@@ -21,7 +21,7 @@ class SinkhornLoss(nn.Module):
                  blur: float = 0.05,
                  normalize_weights: bool | str = False,
                  backend: str = 'tensorized',
-                 reduction='mean') -> None:
+                 reduction: str | None ='mean') -> None:
         super().__init__()
         self.p = p
         self.blur = blur
