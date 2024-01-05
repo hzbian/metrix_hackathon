@@ -55,7 +55,7 @@ class SurrogateLoss(nn.Module):
                                                         pred_x_lims, pred_y_lims)
         tar_pc_supp, tar_pc_weights = self.hist_to_pc(batch['tar_hist'].view(-1, dim_x, dim_y),
                                                       tar_x_lims, tar_y_lims)
-        loss = 0.0
+        loss = torch.tensor(0.0)
         if self.sinkhorn_weight > 0:
             loss_ = self.loss_sinkhorn(inp1=pred_pc_supp,
                                        inp2=tar_pc_supp,
