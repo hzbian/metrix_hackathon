@@ -1,6 +1,6 @@
 
 from collections import OrderedDict
-from typing import Callable, Optional, List
+from typing import Callable, Optional
 
 import os
 import uuid
@@ -14,23 +14,23 @@ from sub_projects.ray_optimization.losses.losses import RayLoss
 
 
 class RealDataConfiguration:
-    def __init__(self, path: str, train_set: List[str],
-                 validation_set: Optional[List[str]] = None):
+    def __init__(self, path: str, train_set: list[str],
+                 validation_set: Optional[list[str]] = None):
         self.path: str = path
-        self.train_set: List[str] = train_set
-        self.validation_set: Optional[List[str]] = validation_set
+        self.train_set: list[str] = train_set
+        self.validation_set: Optional[list[str]] = validation_set
 
 
 class TargetConfiguration:
     def __init__(self, param_func: Callable, engine: Engine, exported_plane: str, num_beamline_samples: int = 20,
                  max_target_deviation: float = 0.3, max_offset_search_deviation: float = 0.3, max_sample_generation_deviation: float = 1.0,
                  logging_project: Optional[str] = None,
-                 z_layers: List[float] = (0.),
+                 z_layers: list[float] = [0.,],
                  transforms: Optional[RayTransform] = None,
                  real_data_configuration: Optional[RealDataConfiguration] = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
         self.z_layers = z_layers
-        self.transforms: RayTransform = transforms
+        self.transforms: RayTransform | None = transforms
         self.num_beamline_samples: int = num_beamline_samples
         self.max_sample_generation_deviation: float = max_sample_generation_deviation
         self.exported_plane: str = exported_plane
@@ -40,8 +40,8 @@ class TargetConfiguration:
         self.real_data_configuration = real_data_configuration
         self.logging_project = logging_project
 
-def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: List[str] = (),
-                   output_parameters: List[str] = (), fixed_parameters: List[str] = ()):
+def params_to_func(parameters, rg: Optional[RandomGenerator] = None, enforce_lims_keys: list[str] = [],
+                   output_parameters: list[str] = [], fixed_parameters: list[str] = []):
     def output_func():
         elements = []
         for k, v in parameters.items():
