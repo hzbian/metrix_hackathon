@@ -85,7 +85,7 @@ class OptimizerBackend(metaclass=ABCMeta):
         iterations: int,
         target: Target,
         starting_point: dict[str, float] | None = None,
-    ):
+    ) -> tuple:
         pass
 
 
@@ -762,6 +762,7 @@ class RayOptimizer:
         verbose: bool = False,
     ):
         output_dict = {}
+        assert plot_interval_best.rays is not None
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
         # plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
         # output_dict["footprint"] = plot
@@ -796,40 +797,41 @@ class RayOptimizer:
                 z_index=z_index,
             )
             output_dict["fancy_ray"] = fancy_ray_plot
-        max_ray_index = torch.argmax(
-            torch.Tensor(
-                [
-                    ray_output_to_tensor(element, exported_plane).shape[1]
-                    for element in target.observed_rays
-                ]
-            )
-        ).item()
-        target_observed_rays_list = [
-            ray_output_to_tensor(
-                target.observed_rays[max_ray_index],
-                exported_plane,
-                to_cpu=True,
-            )
-        ]
-        xlim, ylim = Plot.switch_lims_if_out_of_lim(
-            target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
-        )
-        fixed_position_plot = Plot.fixed_position_plot(
-            [interval_best_rays[max_ray_index]],
-            target_observed_rays_list,
-            [
-                ray_output_to_tensor(
-                    target.uncompensated_rays[max_ray_index],
+        if isinstance(target, OffsetTarget):
+            max_ray_index = int(torch.argmax(
+                torch.Tensor(
+                    [
+                        ray_output_to_tensor([element], exported_plane)[0].shape[1]
+                        for element in target.observed_rays
+                    ]
+                )
+            ).item())
+            target_observed_rays_list: list[torch.Tensor] = ray_output_to_tensor(
+                    [target.observed_rays[max_ray_index]],
                     exported_plane,
                     to_cpu=True,
                 )
-            ],
-            epoch=plot_interval_best.epoch,
-            training_samples_count=len(target.observed_rays),
-            xlim=xlim,
-            ylim=ylim,
-        )
-        output_dict["fixed_position_plot"] = fixed_position_plot
+            
+            xlim, ylim = Plot.switch_lims_if_out_of_lim(
+                target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
+            )
+            fixed_position_plot = Plot.fixed_position_plot(
+                [interval_best_rays[max_ray_index]],
+                target_observed_rays_list,
+                [
+                    ray_output_to_tensor(
+                        [target.uncompensated_rays[max_ray_index]],
+                        exported_plane,
+                        to_cpu=True,
+                    )[0]
+                ],
+                epoch=plot_interval_best.epoch,
+                training_samples_count=len(target.observed_rays),
+                xlim=xlim,
+                ylim=ylim,
+            )
+            output_dict["fixed_position_plot"] = fixed_position_plot
+
         if verbose:
             print("Plot param comparison.")
         parameter_comparison_plot = Plot.plot_param_comparison(
