@@ -41,11 +41,14 @@ class TargetConfiguration:
         self.logging_project = logging_project
 
 def params_to_func(parameters, rg: RandomGenerator | None = None, enforce_lims_keys: list[str] = [],
-                   output_parameters: list[str] = [], fixed_parameters: list[str] = []):
-    def output_func():
+                   output_parameters: list[str] = [], fixed_parameters: list[str] = [], mutable_only: bool = False) -> Callable[[], RayParameterContainer]:
+    def output_func() -> RayParameterContainer:
         elements = []
         for k, v in parameters.items():
             if hasattr(v, '__getitem__'):
+                if mutable_only and k in fixed_parameters:
+                    continue
+
                 if k in output_parameters:
                     typ = RandomOutputParameter
                 else:
@@ -53,6 +56,8 @@ def params_to_func(parameters, rg: RandomGenerator | None = None, enforce_lims_k
 
                 elements.append((k, typ(value_lims=(v[0], v[1]), rg=rg, enforce_lims=k in enforce_lims_keys)))
             else:
+                if mutable_only:
+                    continue
                 if k in output_parameters:
                     typ = NumericalOutputParameter
                 else:
@@ -71,7 +76,6 @@ def params_to_func(parameters, rg: RandomGenerator | None = None, enforce_lims_k
                     typ = NumericalParameter
       
                 elements[key] = typ((old_param.value_lims[1] + old_param.value_lims[0]) / 2)
-
         return RayParameterContainer(elements)
     return output_func
 
