@@ -13,9 +13,7 @@ class TestRealData(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(42)
         self.path = 'testing/datasets/test_dataset'
-        self.path = 'datasets/metrix_real_data/2021_march_complete'
-        #self.image_path = os.path.join(self.path, 'M03/-15.bmp')
-        self.image_path = os.path.join(self.path, 'M03 09.03.21 13-16-19/-15.bmp')
+        self.image_path = os.path.join(self.path, 'M03/10.bmp')
         self.image = get_image(self.image_path)
         self.black = get_image(os.path.join(self.path, 'black.bmp'))
         self.diff = subtract_black(self.image, self.black)
