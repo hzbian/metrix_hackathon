@@ -10,9 +10,6 @@ class OptimizerBackendOptuna(OptimizerBackend):
     def __init__(self, optuna_study: Study):
         self.optuna_study: Study = optuna_study
 
-    def setup_optimization(self, target: Target):
-        pass
-
     @staticmethod
     def optuna_objective(objective: Callable[[list[RayParameterContainer], Target], list[float]], target: Target) -> Callable[[Trial], float]:
         def output_objective(trial: Trial) -> float:
@@ -27,9 +24,10 @@ class OptimizerBackendOptuna(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective: Callable[[list[RayParameterContainer], Target], list[float]], iterations: int, target: Target, starting_point: dict[str, Any] | None = None):
+    def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: dict[str, float] | None = None) -> tuple[dict[str, float], dict[str, float]]:
         self.optuna_study.optimize(
             OptimizerBackendOptuna.optuna_objective(objective, target),
             n_trials=iterations,
             show_progress_bar=True)
-        return self.optuna_study.best_params, {}
+        best_value: float = self.optuna_study.best_value
+        return self.optuna_study.best_params, {"loss": best_value}

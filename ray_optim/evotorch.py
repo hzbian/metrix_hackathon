@@ -11,9 +11,6 @@ from ray_tools.base.parameter import MutableParameter, NumericalParameter
 
 
 class OptimizerBackendEvoTorch(OptimizerBackend):
-    def setup_optimization(self):
-        pass
-
     def optimize(self, objective: Callable, iterations: int, target: Target):
         optimize_parameters = target.search_space.copy()
         bounds = []
