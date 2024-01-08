@@ -8,8 +8,9 @@ from ray_optim.basinhopping import OptimizerBackendBasinhopping
 from ray_optim.optuna import OptimizerBackendOptuna
 from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
 from ax.modelbridge.registry import Models
+from ax.service.ax_client import AxClient
 
-from ray_optim.ray_optimizer import RayOptimizer, Target
+from ray_optim.ray_optimizer import OptimizerBackend, RayOptimizer, Target
 from ray_tools.base.engine import GaussEngine
 from ray_tools.base.parameter import RayParameterContainer
 from ray_tools.base.transform import MultiLayer
@@ -32,9 +33,11 @@ class TestOptimizerBackend(unittest.TestCase):
             "y_var": [0.001, 0.01],
         }
         self.param_func = params_to_func(parameters)
+        self.starting_point_func = params_to_func(parameters, mutable_only=True)
         self.evaluation_parameters = [
             [self.param_func() for _ in range(5)] for _ in range(4)
         ]
+        self.target = Target(Mock(), self.param_func(), target_params=self.param_func())
 
     def mock_objective(
         self, param_container: list[RayParameterContainer], target: Target
@@ -45,7 +48,19 @@ class TestOptimizerBackend(unittest.TestCase):
         self.assertIsInstance(target.search_space, RayParameterContainer)
         self.assertIsInstance(target.target_params, RayParameterContainer | None)
         return [random.random() for _ in range(len(param_container))]
-
+    
+    def check_optimization_from_backend(self, backend: OptimizerBackend):
+        best_parameters, metrics = backend.optimize(self.mock_objective, 10, self.target)
+        self.assertGreater(len(best_parameters), 0)
+        self.assertIsInstance(best_parameters, dict)
+        self.assertGreater(len(metrics), 0)
+        self.assertIsInstance(metrics, dict)
+        best_parameters, metrics = backend.optimize(self.mock_objective, 10, self.target, starting_point=best_parameters)
+        self.assertGreater(len(best_parameters), 0)
+        self.assertIsInstance(best_parameters, dict)
+        self.assertGreater(len(metrics), 0)
+        self.assertIsInstance(metrics, dict)
+    
     def test_current_epochs(self):
         evaluation_counter = 10
         length = 4
@@ -63,12 +78,8 @@ class TestOptimizerBackend(unittest.TestCase):
 
     def test_optuna(self):
         study = optuna.create_study()
-        obo = OptimizerBackendOptuna(optuna_study=study)
-        target = Target(Mock(), self.param_func(), target_params=self.param_func())
-        obo.optimize(self.mock_objective, 10, target)
-        target = Target(Mock(), self.param_func(), target_params=None)
-        obo.optimize(self.mock_objective, 10, target)
-        obo.optimize(self.mock_objective, 10, target, starting_point=self.param_func().to_value_dict())
+        backend = OptimizerBackendOptuna(optuna_study=study)
+        self.check_optimization_from_backend(backend)
 
     def test_ax(self):
         gs = GenerationStrategy(
@@ -88,7 +99,7 @@ class TestOptimizerBackend(unittest.TestCase):
                 # 2. Bayesian optimization step (requires data obtained from previous phase and learns
                 # from all data available at the time of each new candidate generation call)
                 GenerationStep(
-                    model=Models.BOTORCH_MODULAR,
+                    model=Models.SAASBO,
                     num_trials=-1,  # No limitation on how many trials should be produced from this step
                     max_parallelism=3,  # Parallelism limit for this step, often lower than for Sobol
                     # More on parallelism vs. required samples in BayesOpt:
@@ -96,15 +107,10 @@ class TestOptimizerBackend(unittest.TestCase):
                 ),
             ]
         )
-        search_space=self.param_func()
-        abo = OptimizerBackendAx()
-        target = Target(Mock(), search_space, target_params=self.param_func())
-        abo.setup_optimization(target)
-        abo.optimize(self.mock_objective, 10, target)
+        ax_client = AxClient(generation_strategy=gs)
+        backend = OptimizerBackendAx(ax_client=ax_client)
+        self.check_optimization_from_backend(backend)
     
     def test_basinhopping(self):
-        search_space=self.param_func()
-        obb = OptimizerBackendBasinhopping(scipy.optimize.basinhopping)
-        target = Target(Mock(), search_space, target_params=self.param_func())
-        obb.setup_optimization(target)
-        obb.optimize(self.mock_objective, 10, target)
+        backend = OptimizerBackendBasinhopping(scipy.optimize.basinhopping)
+        self.check_optimization_from_backend(backend)
