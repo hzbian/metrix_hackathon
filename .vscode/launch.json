@@ -12,9 +12,11 @@
             "justMyCode": true,
             "args": [
                 "logging_backend=",
+                "ray_optimizer=ax",
                 "+logging_backend._target_=ray_optim.logging.DebugPlotBackend",
                 "target_configuration=gauss",
-                "ray_optimizer.criterion._target_=sub_projects.ray_optimization.losses.torch.MSELoss"
+                "ray_optimizer.criterion._target_=sub_projects.ray_optimization.losses.torch.MSELoss",
+                "+ray_optimizer.starting_point={correlation_factor: 0.02576, x_mean: -0.493535, y_mean: -0.290368, x_var: 0.001314, y_var: 0.0011563}"
             ],
         }
     ]
