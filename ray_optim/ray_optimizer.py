@@ -76,17 +76,13 @@ class OffsetTarget(Target):
 
 class OptimizerBackend(metaclass=ABCMeta):
     @abstractmethod
-    def setup_optimization(self, target: Target):
-        pass
-
-    @abstractmethod
     def optimize(
         self,
         objective: Callable,
         iterations: int,
         target: Target,
         starting_point: dict[str, float] | None = None,
-    ) -> tuple:
+    ) -> tuple[dict[str, float], dict[str, float]]:
         pass
 
 
@@ -924,7 +920,6 @@ class RayOptimizer:
         return losses, num_rays, losses_mean
 
     def optimize(self, target: Target, starting_point: dict[str, float] | None = None):
-        self.optimizer_backend.setup_optimization(target=target)
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
             iterations=self.iterations,
