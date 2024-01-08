@@ -1,13 +1,14 @@
-# this needs some major work
+from collections.abc import Callable
 import time
-import ax
+from typing import cast
 from ax.service.ax_client import AxClient, ObjectiveProperties
 from ax.service.ax_client import AxClient
 from tqdm import trange
 from ray_optim.ray_optimizer import OptimizerBackend, Target
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
-from ax.modelbridge.registry import Cont_X_trans, Models
+from ax.modelbridge.registry import Models
 from ax.modelbridge.generation_strategy import GenerationStep
+from ax.core.types import TParameterization, TModelPredictArm
 
 class OptimizerBackendAx(OptimizerBackend):
    def __init__(self, ax_client: AxClient | None = None):
@@ -27,7 +28,7 @@ class OptimizerBackendAx(OptimizerBackend):
            trial_index_list.append(trial_index)
        return trial_index_list, param_container_list
    
-   def setup_optimization(self, target: Target):
+   def _setup_optimization(self, target: Target):
        experiment_parameters = []
        for key, value in target.search_space.items():
            if isinstance(value, MutableParameter):
@@ -38,9 +39,14 @@ class OptimizerBackendAx(OptimizerBackend):
            name="metrix_experiment",
            parameters=experiment_parameters,
            objectives={"mse": ObjectiveProperties(minimize=True)},
+           overwrite_existing_experiment=True,
        )
 
-   def optimize(self, objective, iterations, target: Target):
+   def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: dict[str, float] | None = None) -> tuple[dict[str, float], dict[str, float]]:
+       self._setup_optimization(target)
+       start: TParameterization = cast(TParameterization, starting_point)
+       if starting_point is not None:
+           self.ax_client.attach_trial(parameters=start, arm_name="initial_trial")
        ranger = trange(iterations)
        for _ in ranger:
            optimization_time = time.time()
@@ -55,7 +61,10 @@ class OptimizerBackendAx(OptimizerBackend):
        best_parameters_metrics = self.ax_client.get_best_parameters()
        assert best_parameters_metrics is not None
        best_parameters, metrics = best_parameters_metrics
-       return best_parameters, metrics
+       best_parameters_dict: dict[str, float] = cast(dict[str, float], best_parameters)
+       assert metrics is not None
+       metrics_dict: dict[str, float] = metrics[0]
+       return best_parameters_dict, metrics_dict
    
 def get_model(selection: str):
     if selection == "SOBOL":
