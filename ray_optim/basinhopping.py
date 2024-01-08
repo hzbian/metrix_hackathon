@@ -8,9 +8,6 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
     def __init__(self, basinhopping_function):
         self.basinhopping_function = basinhopping_function
 
-    def setup_optimization(self, target: Target):
-        pass
-
     @staticmethod
     def basinhopping_objective(objective, target: Target):
         def output_objective(input: np.ndarray):
@@ -25,14 +22,17 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
 
         return output_objective
 
-    def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: dict[str, float] | None = None):
+    def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: dict[str, float] | None = None) -> tuple[dict[str, float], dict[str, float]]:
         optimize_parameters = target.search_space.copy()
         x0 = []
         bounds = []
-        for _, value in optimize_parameters.items():
+        for key, value in optimize_parameters.items():
             if isinstance(value, MutableParameter):
                 bounds.append([value.value_lims[0], value.value_lims[1]])
-                x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
+                if starting_point is not None:
+                    x0.append(starting_point[key])
+                else:
+                    x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
         ret = self.basinhopping_function(self.basinhopping_objective(objective, target), x0,
                                          niter=iterations, interval=iterations, stepsize=1, T=0.01,
                                          minimizer_kwargs={"bounds": bounds}, disp=True)
@@ -42,5 +42,5 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
             if isinstance(optimize_parameters[key], MutableParameter):
                 x_dict[key] = ret.x[mutable_index]
                 mutable_index += 1
-        return x_dict, ret.fun
+        return x_dict, {"loss": ret.fun}
 
