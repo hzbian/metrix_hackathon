@@ -242,7 +242,7 @@ class RayOptimization:
         try:
             if self.is_output_ray_list_empty(self.target.observed_rays):
                 raise Exception("Refusing to optimize an empty target.")
-            self.ray_optimizer.optimize(target=self.target, starting_point=self.ray_optimizer.starting_point)
+            return self.ray_optimizer.optimize(target=self.target, starting_point=self.ray_optimizer.starting_point)
         except NameError:
             raise Exception("You need to run setup_target() first.")
 
@@ -266,7 +266,11 @@ def optimization(cfg):
        omega_conf_container 
     )
     ray_optimization.setup_target()
-    ray_optimization.optimize()
+    best_parameters, metrics = ray_optimization.optimize()
+    output_best_parameters = "{"
+    output_best_parameters += ", ".join(f"{key}: {value}" for key, value in best_parameters.items())
+    output_best_parameters += "}"
+    print(metrics, output_best_parameters)
 
 
 if __name__ == "__main__":
