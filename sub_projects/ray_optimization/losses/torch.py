@@ -12,8 +12,8 @@ class TorchLoss(RayLoss):
     Implementation of PyTorch losses. This class is meant to be used with a Torch loss function module. If shapes of `a` and `b` are different, the smaller sizes are taken and the excessing rays get discarded.
     """
 
-    def __init__(self, base_fn: torch.nn.Module):
-        self.base_fn: torch.nn.Module = base_fn
+    def __init__(self, base_fn: Callable):
+        self.base_fn: Callable = base_fn
 
     def loss_fn(
         self,
@@ -55,6 +55,20 @@ class KLDLoss(TorchLoss):
 class MSELoss(TorchLoss):
     def __init__(self, reduction="none"):
         super().__init__(torch.nn.MSELoss(reduction=reduction))
+
+class MeanMSELoss(TorchLoss):
+    def __init__(self, reduction="none"):
+        mse  = torch.nn.MSELoss(reduction=reduction)
+        def base_fn(a: torch.Tensor, b: torch.Tensor):
+            return mse(a.mean(), b.mean())
+        super().__init__(base_fn=base_fn)
+
+class VarMSELoss(TorchLoss):
+    def __init__(self, reduction="none"):
+        mse  = torch.nn.MSELoss(reduction=reduction)
+        def base_fn(a: torch.Tensor, b: torch.Tensor):
+            return mse(a.var(), b.var())
+        super().__init__(base_fn=base_fn)
 
 
 class JSLoss(TorchLoss):
