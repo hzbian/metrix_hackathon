@@ -620,16 +620,10 @@ class RayOptimizer:
                 "The rays of overall best should be simulated at this point, if there are no rays, it should be an empty tensor."
             )
 
-        def to_cpu_tensor_list(ray_output: list[dict]) -> list[torch.Tensor]:
-            output_tensor_list = ray_output_to_tensor(
-                ray_output, exported_plane, to_cpu=True
-            )
-            if not isinstance(output_tensor_list, list):
-                raise Exception("Output tensor list must be a list.")
-            return output_tensor_list
-
         best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
-        target_observed_rays_list = to_cpu_tensor_list(target.observed_rays)
+        target_observed_rays_list = ray_output_to_tensor(
+            target.observed_rays, exported_plane, to_cpu=True
+        )
 
         if isinstance(target, OffsetTarget):
             target_uncompensated_rays_list = ray_output_to_tensor(
@@ -733,12 +727,8 @@ class RayOptimizer:
         target_tensor = ray_output_to_tensor(
             target.observed_rays, exported_plane, to_cpu=True
         )
-        if isinstance(target_tensor, torch.Tensor):
-            target_tensor = [target_tensor]
         plot_data_list.append(target_tensor)
         labels.append("Observed")
-        # target_plot = Plot.plot_data(target_tensor)
-        # output_dict["target_footprint"] = target_plot
         z_index: list[float] = [
             float(i)
             for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
@@ -759,8 +749,6 @@ class RayOptimizer:
         output_dict = {}
         assert plot_interval_best.rays is not None
         interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
-        # plot = Plot.plot_data(interval_best_rays, epoch=plot_interval_best.epoch)
-        # output_dict["footprint"] = plot
         if isinstance(target, OffsetTarget):
             observed_rays = ray_output_to_tensor(
                 target.observed_rays, exported_plane, to_cpu=True
