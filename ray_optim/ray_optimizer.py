@@ -1,14 +1,13 @@
 import copy
 from operator import itemgetter
 import time
-from abc import ABCMeta, abstractmethod
 from math import sqrt
 from typing import Any
-from collections.abc import Callable
 from torch.multiprocessing import JoinableQueue, Process
 
 import torch
 from ray_optim.logging import LoggingBackend
+from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.plot import Plot
 from ray_optim.sample import Sample
 from ray_optim.target import OffsetTarget, Target
@@ -44,20 +43,6 @@ class RayScan:
         ] = uncompensated_parameters
         self.uncompensated_rays: list[dict] = uncompensated_rays
         self.observed_rays: list[dict] = observed_rays
-
-
-
-class OptimizerBackend(metaclass=ABCMeta):
-    @abstractmethod
-    def optimize(
-        self,
-        objective: Callable,
-        iterations: int,
-        target: Target,
-        starting_point: dict[str, float] | None = None,
-    ) -> tuple[dict[str, float], dict[str, float]]:
-        pass
-
 
 
 class RayOptimizer:

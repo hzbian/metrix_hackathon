@@ -4,7 +4,8 @@ from typing import cast
 from ax.service.ax_client import AxClient, ObjectiveProperties
 from ax.service.ax_client import AxClient
 from tqdm import trange
-from ray_optim.ray_optimizer import OptimizerBackend, Target
+from ray_optim.optimizer_backend.base import OptimizerBackend
+from ray_optim.ray_optimizer import Target
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 from ax.modelbridge.registry import Models
 from ax.modelbridge.generation_strategy import GenerationStep

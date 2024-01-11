@@ -5,8 +5,9 @@ from evotorch.algorithms import SNES
 from evotorch.core import BoundsPair
 from evotorch.logging import StdOutLogger
 import torch
+from ray_optim.optimizer_backend.base import OptimizerBackend
 
-from ray_optim.ray_optimizer import Target, OptimizerBackend
+from ray_optim.ray_optimizer import Target
 from ray_tools.base.parameter import MutableParameter, NumericalParameter
 
 

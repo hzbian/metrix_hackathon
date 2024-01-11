@@ -2,7 +2,8 @@ from typing import Any
 from collections.abc import Callable
 from optuna import Study, Trial
 import torch
-from ray_optim.ray_optimizer import Target, OptimizerBackend
+from ray_optim.optimizer_backend.base import OptimizerBackend
+from ray_optim.ray_optimizer import Target
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 
 
