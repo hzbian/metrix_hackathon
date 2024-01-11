@@ -4,6 +4,7 @@ import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from torch import Tensor
+from ray_optim.target import RayScan
 from sub_projects.ray_optimization.configuration import (
     RealDataConfiguration,
     TargetConfiguration,
@@ -12,7 +13,7 @@ from sub_projects.ray_optimization.configuration import (
 from ray_tools.base.utils import RandomGenerator
 
 from sub_projects.ray_optimization.real_data import import_data
-from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetTarget, RayScan
+from ray_optim.ray_optimizer import LoggingBackend, RayOptimizer, OffsetTarget
 
 from ray_tools.base.parameter import (
     MutableParameter,
