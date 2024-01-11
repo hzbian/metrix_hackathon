@@ -533,13 +533,13 @@ class RayOptimizer:
                 "The rays of overall best should be simulated at this point, if there are no rays, it should be an empty tensor."
             )
 
-        best_rays_list = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
-        target_observed_rays_list = ray_output_to_tensor(
+        overall_best_rays = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
+        observed_rays = ray_output_to_tensor(
             target.observed_rays, exported_plane, to_cpu=True
         )
 
         if isinstance(target, OffsetTarget):
-            target_uncompensated_rays_list = ray_output_to_tensor(
+            uncompensated_rays = ray_output_to_tensor(
                 target.uncompensated_rays, exported_plane, to_cpu=True
             )
 
@@ -551,54 +551,68 @@ class RayOptimizer:
             output_dict[
                 "overall_fixed_position_plot"
             ] = RayOptimizer.overall_fixed_position_plot(
-                best_rays_list,
-                target_observed_rays_list,
-                target_uncompensated_rays_list,
+                overall_best_rays,
+                observed_rays,
+                uncompensated_rays,
                 overall_best.epoch,
                 len(target.observed_rays),
             )
 
-        if isinstance(target, OffsetTarget) and target.validation_scan is not None:
-            validation_scan = target.validation_scan
-            validation_rays_list = ray_output_to_tensor(
-                validation_scan.observed_rays, exported_plane=exported_plane
-            )
-            validation_parameters_rays_list = ray_output_to_tensor(
-                validation_scan.uncompensated_rays, exported_plane
-            )
-            validation_parameters = RayOptimizer.compensate_parameters_list(
-                target.validation_scan.uncompensated_parameters, compensation
-            )
+            if target.validation_scan is not None:
+                validation_scan = target.validation_scan
+                validation_rays_list = ray_output_to_tensor(
+                    validation_scan.observed_rays, exported_plane=exported_plane
+                )
+                validation_parameters_rays_list = ray_output_to_tensor(
+                    validation_scan.uncompensated_rays, exported_plane
+                )
+                validation_parameters = RayOptimizer.compensate_parameters_list(
+                    target.validation_scan.uncompensated_parameters, compensation
+                )
 
-            translated_transforms: list[
-                RayTransform
-            ] = RayOptimizer.translate_exported_plain_transforms(
-                exported_plane, validation_parameters, transforms
-            )
-            compensated_rays_list = engine.run(
-                validation_parameters, translated_transforms
-            )
-            compensated_rays_list = ray_output_to_tensor(
-                compensated_rays_list, exported_plane=exported_plane
-            )
-            xlim, ylim = Plot.switch_lims_if_out_of_lim(
-                validation_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
-            )
-            if verbose:
-                print("Plot validation fixed position plot.")
-            if not isinstance(target.observed_rays, list):
-                raise Exception("Target observed rays must be a list.")
-            validation_fixed_position_plot = Plot.fixed_position_plot(
-                compensated_rays_list,
-                validation_rays_list,
-                validation_parameters_rays_list,
-                epoch=overall_best.epoch,
-                training_samples_count=len(target.observed_rays),
-                xlim=xlim,
-                ylim=ylim,
-            )
+                translated_transforms: list[
+                    RayTransform
+                ] = RayOptimizer.translate_exported_plain_transforms(
+                    exported_plane, validation_parameters, transforms
+                )
+                compensated_rays_list = engine.run(
+                    validation_parameters, translated_transforms
+                )
+                compensated_rays_list = ray_output_to_tensor(
+                    compensated_rays_list, exported_plane=exported_plane
+                )
+                xlim, ylim = Plot.switch_lims_if_out_of_lim(
+                    validation_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
+                )
+                if verbose:
+                    print("Plot validation fixed position plot.")
+                if not isinstance(target.observed_rays, list):
+                    raise Exception("Target observed rays must be a list.")
+                validation_fixed_position_plot = Plot.fixed_position_plot(
+                    compensated_rays_list,
+                    validation_rays_list,
+                    validation_parameters_rays_list,
+                    epoch=overall_best.epoch,
+                    training_samples_count=len(target.observed_rays),
+                    xlim=xlim,
+                    ylim=ylim,
+                )
+                output_dict["validation_fixed_position"] = validation_fixed_position_plot
+                z_index: list[float] = [
+                    float(i)
+                    for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
+                ]
+                if verbose:
+                    print("Plotting fancy ray plot.")
+                assert uncompensated_rays is not None
+                fancy_ray_plot = Plot.fancy_ray(
+                    [uncompensated_rays, observed_rays, overall_best_rays],
+                    ["Uncompensated", "Observed", "Compensated"],
+                    z_index=z_index,
+                )
+                output_dict["fancy_ray"] = fancy_ray_plot
 
-            output_dict["validation_fixed_position"] = validation_fixed_position_plot
+
         return output_dict
 
     @staticmethod
@@ -681,18 +695,6 @@ class RayOptimizer:
                 training_samples_count=len(target.observed_rays),
             )
             output_dict["compensation"] = compensation_plot
-            z_index: list[float] = [
-                float(i)
-                for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
-            ]
-            if verbose:
-                print("Plotting fancy ray plot.")
-            fancy_ray_plot = Plot.fancy_ray(
-                [uncompensated_rays, observed_rays, interval_best_rays],
-                ["Uncompensated", "Observed", "Compensated"],
-                z_index=z_index,
-            )
-            output_dict["fancy_ray"] = fancy_ray_plot
         if isinstance(target, OffsetTarget):
             max_ray_index = int(
                 torch.argmax(
