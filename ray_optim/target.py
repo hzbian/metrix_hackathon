@@ -1,5 +1,17 @@
-from ray_optim.ray_optimizer import RayScan
 from ray_tools.base.parameter import RayParameterContainer
+
+class RayScan:
+    def __init__(
+        self,
+        uncompensated_parameters: list[RayParameterContainer],
+        uncompensated_rays: list[dict],
+        observed_rays: list[dict],
+    ):
+        self.uncompensated_parameters: list[
+            RayParameterContainer
+        ] = uncompensated_parameters
+        self.uncompensated_rays: list[dict] = uncompensated_rays
+        self.observed_rays: list[dict] = observed_rays
 
 
 class Target:

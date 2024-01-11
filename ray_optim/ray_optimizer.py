@@ -31,20 +31,6 @@ from sub_projects.ray_optimization.losses.losses import RayLoss
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 
-class RayScan:
-    def __init__(
-        self,
-        uncompensated_parameters: list[RayParameterContainer],
-        uncompensated_rays: list[dict],
-        observed_rays: list[dict],
-    ):
-        self.uncompensated_parameters: list[
-            RayParameterContainer
-        ] = uncompensated_parameters
-        self.uncompensated_rays: list[dict] = uncompensated_rays
-        self.observed_rays: list[dict] = observed_rays
-
-
 class RayOptimizer:
     def __init__(
         self,
