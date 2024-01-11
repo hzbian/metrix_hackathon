@@ -1,7 +1,7 @@
 defaults:
   - base
 optimizer_backend:
-  _target_: "ray_optim.optuna.OptimizerBackendOptuna"
+  _target_: "ray_optim.optimizer_backend.optuna.OptimizerBackendOptuna"
   optuna_study:
     _target_: "optuna.create_study"
     sampler:

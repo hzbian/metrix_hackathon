@@ -1,4 +1,4 @@
 defaults:
   - base
 optimizer_backend:
-  _target_: "ray_optim.evotorch.OptimizerBackendEvoTorch"
+  _target_: "ray_optim.optimizer_backend.evotorch.OptimizerBackendEvoTorch"

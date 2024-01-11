@@ -1,7 +1,7 @@
 defaults:
   - base
 optimizer_backend:
-  _target_: "ray_optim.ax.OptimizerBackendAx"
+  _target_: "ray_optim.optimizer_backend.ax.OptimizerBackendAx"
   ax_client:
     _target_: "ax.service.ax_client.AxClient"
     #generation_strategy:
