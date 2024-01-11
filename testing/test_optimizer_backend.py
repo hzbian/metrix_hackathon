@@ -5,6 +5,7 @@ import optuna
 import scipy
 from ray_optim.optimizer_backend.ax import OptimizerBackendAx
 from ray_optim.optimizer_backend.basinhopping import OptimizerBackendBasinhopping
+from ray_optim.optimizer_backend.evotorch import OptimizerBackendEvoTorch
 from ray_optim.optimizer_backend.optuna import OptimizerBackendOptuna
 from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
 from ax.modelbridge.registry import Models
@@ -113,4 +114,8 @@ class TestOptimizerBackend(unittest.TestCase):
     
     def test_basinhopping(self):
         backend = OptimizerBackendBasinhopping(scipy.optimize.basinhopping)
+        self.check_optimization_from_backend(backend)
+
+    def test_evotorch(self):
+        backend = OptimizerBackendEvoTorch()
         self.check_optimization_from_backend(backend)
