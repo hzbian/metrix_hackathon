@@ -3,9 +3,9 @@ import unittest
 from unittest.mock import Mock
 import optuna
 import scipy
-from ray_optim.ax import OptimizerBackendAx
-from ray_optim.basinhopping import OptimizerBackendBasinhopping
-from ray_optim.optuna import OptimizerBackendOptuna
+from ray_optim.optimizer_backend.ax import OptimizerBackendAx
+from ray_optim.optimizer_backend.basinhopping import OptimizerBackendBasinhopping
+from ray_optim.optimizer_backend.optuna import OptimizerBackendOptuna
 from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
 from ax.modelbridge.registry import Models
 from ax.service.ax_client import AxClient

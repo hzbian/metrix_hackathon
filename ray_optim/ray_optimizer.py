@@ -10,6 +10,8 @@ from torch.multiprocessing import JoinableQueue, Process
 import torch
 from ray_optim.logging import LoggingBackend
 from ray_optim.plot import Plot
+from ray_optim.sample import Sample
+from ray_optim.target import OffsetTarget, Target
 
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import Engine
@@ -44,35 +46,6 @@ class RayScan:
         self.observed_rays: list[dict] = observed_rays
 
 
-class Target:
-    def __init__(
-        self,
-        observed_rays: list[dict],
-        search_space: RayParameterContainer,
-        target_params: RayParameterContainer | None = None,
-    ):
-        self.observed_rays = observed_rays
-        self.search_space = search_space
-        self.target_params = target_params
-
-
-class OffsetTarget(Target):
-    def __init__(
-        self,
-        training_scan: RayScan,
-        offset_search_space: RayParameterContainer,
-        target_compensation: RayParameterContainer | None = None,
-        validation_scan: RayScan | None = None,
-    ):
-        super().__init__(
-            training_scan.observed_rays, offset_search_space, target_compensation
-        )
-        self.uncompensated_parameters: list[
-            RayParameterContainer
-        ] = training_scan.uncompensated_parameters
-        self.uncompensated_rays: list[dict] = training_scan.uncompensated_rays
-        self.validation_scan: RayScan | None = validation_scan
-
 
 class OptimizerBackend(metaclass=ABCMeta):
     @abstractmethod
@@ -85,51 +58,6 @@ class OptimizerBackend(metaclass=ABCMeta):
     ) -> tuple[dict[str, float], dict[str, float]]:
         pass
 
-
-class Sample:
-    def __init__(
-        self,
-        params=RayParameterContainer(),
-        rays: list[torch.Tensor] | None = None,
-        loss: float = float("inf"),
-        epoch: int = 0,
-    ):
-        self._params: RayParameterContainer = params
-        self._rays: list[torch.Tensor] | None = rays
-        self._loss: float = loss
-        self._epoch: int = epoch
-
-    @property
-    def params(self):
-        return self._params
-
-    @params.setter
-    def params(self, value: RayParameterContainer):
-        self._params = value
-
-    @property
-    def rays(self):
-        return self._rays
-
-    @rays.setter
-    def rays(self, rays: list[torch.Tensor] | None):
-        self._rays = rays
-
-    @property
-    def loss(self):
-        return self._loss
-
-    @loss.setter
-    def loss(self, loss: float):
-        self._loss = loss
-
-    @property
-    def epoch(self):
-        return self._epoch
-
-    @epoch.setter
-    def epoch(self, epoch: int):
-        self._epoch = epoch
 
 
 class RayOptimizer:
