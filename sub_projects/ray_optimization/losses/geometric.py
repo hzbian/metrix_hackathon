@@ -47,4 +47,4 @@ class SinkhornLoss(RayLoss):
             torch.ones_like(a_tensor[..., 1]),
             torch.ones_like(b_tensor[..., 1]),
         )
-        return loss.mean().item()
+        return loss.mean()
