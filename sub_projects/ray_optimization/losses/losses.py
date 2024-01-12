@@ -26,7 +26,17 @@ class RayLoss(ABC):
         """
         pass
 
-
+class LogLoss(RayLoss):
+    def __init__(self, base_loss: RayLoss):
+        self.base_loss: RayLoss = base_loss
+    def loss_fn(
+        self,
+        a: dict,
+        b: dict,
+        exported_plane: str,
+    ) -> torch.Tensor:
+        return self.base_loss.loss_fn(a, b, exported_plane=exported_plane).log()
+       
 class RayCountMSE(RayLoss):
     def loss_fn(
         self,
