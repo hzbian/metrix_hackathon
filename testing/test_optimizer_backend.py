@@ -39,6 +39,7 @@ class TestOptimizerBackend(unittest.TestCase):
             [self.param_func() for _ in range(5)] for _ in range(4)
         ]
         self.target = Target(Mock(), self.param_func(), target_params=self.param_func())
+        self.target.recalculate_cpu_tensors("ImagePlane")
 
     def mock_objective(
         self, param_container: list[RayParameterContainer], target: Target

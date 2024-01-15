@@ -182,10 +182,6 @@ class RayOptimizer:
         return transforms
 
     @staticmethod
-    def tensor_list_to_cpu(tensor_list: list[torch.Tensor]) -> list[torch.Tensor]:
-        return [element.cpu() for element in tensor_list]
-
-    @staticmethod
     def compensate_parameters_list(
         uncompensated_parameters_list: list[RayParameterContainer],
         compensation: RayParameterContainer,
@@ -387,8 +383,8 @@ class RayOptimizer:
                 "trials": trials,
                 "target": target,
                 "exported_plane": self.exported_plane,
-                "plot_interval_best": self.plot_interval_best,
-                "overall_best": self.overall_best,
+                "plot_interval_best": self.plot_interval_best.to_cpu(),
+                "overall_best": self.overall_best.to_cpu(),
                 "plot_interval": self.plot_interval,
                 "engine": self.engine,
                 "transforms": self.transforms,
@@ -519,15 +515,10 @@ class RayOptimizer:
                 "The rays of overall best should be simulated at this point, if there are no rays, it should be an empty tensor."
             )
 
-        overall_best_rays = RayOptimizer.tensor_list_to_cpu(overall_best.rays)
-        observed_rays = ray_output_to_tensor(
-            target.observed_rays, exported_plane, to_cpu=True
-        )
+        observed_rays = target.observed_rays_cpu_tensor
 
         if isinstance(target, OffsetTarget):
-            uncompensated_rays = ray_output_to_tensor(
-                target.uncompensated_rays, exported_plane, to_cpu=True
-            )
+            uncompensated_rays = target.uncompensated_rays_cpu_tensor
 
             if verbose:
                 print("Plotting overall fixed position plot.")
@@ -537,7 +528,7 @@ class RayOptimizer:
             output_dict[
                 "overall_fixed_position_plot"
             ] = RayOptimizer.overall_fixed_position_plot(
-                overall_best_rays,
+                overall_best.rays,
                 observed_rays,
                 uncompensated_rays,
                 overall_best.epoch,
@@ -545,12 +536,9 @@ class RayOptimizer:
             )
 
             if target.validation_scan is not None:
-                validation_scan = target.validation_scan
-                validation_rays_list = ray_output_to_tensor(
-                    validation_scan.observed_rays, exported_plane=exported_plane
-                )
-                validation_parameters_rays_list = ray_output_to_tensor(
-                    validation_scan.uncompensated_rays, exported_plane
+                validation_rays = target.validation_scan.observed_rays_cpu_tensor
+                validation_parameters_rays_list = (
+                    target.validation_scan.uncompensated_rays_cpu_tensor
                 )
                 validation_parameters = RayOptimizer.compensate_parameters_list(
                     target.validation_scan.uncompensated_parameters, compensation
@@ -568,7 +556,7 @@ class RayOptimizer:
                     compensated_rays_list, exported_plane=exported_plane
                 )
                 xlim, ylim = Plot.switch_lims_if_out_of_lim(
-                    validation_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
+                    validation_rays, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
                 )
                 if verbose:
                     print("Plot validation fixed position plot.")
@@ -576,28 +564,31 @@ class RayOptimizer:
                     raise Exception("Target observed rays must be a list.")
                 validation_fixed_position_plot = Plot.fixed_position_plot(
                     compensated_rays_list,
-                    validation_rays_list,
+                    validation_rays,
                     validation_parameters_rays_list,
                     epoch=overall_best.epoch,
                     training_samples_count=len(target.observed_rays),
                     xlim=xlim,
                     ylim=ylim,
                 )
-                output_dict["validation_fixed_position"] = validation_fixed_position_plot
+                output_dict[
+                    "validation_fixed_position"
+                ] = validation_fixed_position_plot
                 z_index: list[float] = [
                     float(i)
-                    for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
+                    for i in target.observed_rays[0]["ray_output"][
+                        exported_plane
+                    ].keys()
                 ]
                 if verbose:
                     print("Plotting fancy ray plot.")
                 assert uncompensated_rays is not None
                 fancy_ray_plot = Plot.fancy_ray(
-                    [uncompensated_rays, observed_rays, overall_best_rays],
+                    [uncompensated_rays, observed_rays, overall_best.rays],
                     ["Uncompensated", "Observed", "Compensated"],
                     z_index=z_index,
                 )
                 output_dict["fancy_ray"] = fancy_ray_plot
-
 
         return output_dict
 
@@ -629,17 +620,11 @@ class RayOptimizer:
         labels = []
         plot_data_list = []
         if isinstance(target, OffsetTarget):
-            uncompensated_rays = ray_output_to_tensor(
-                target.uncompensated_rays,
-                exported_plane,
-                to_cpu=True,
-            )
+            uncompensated_rays = target.uncompensated_rays_cpu_tensor
             plot_data_list.append(uncompensated_rays)
             labels.append("Uncompensated")
 
-        target_tensor = ray_output_to_tensor(
-            target.observed_rays, exported_plane, to_cpu=True
-        )
+        target_tensor = target.observed_rays_cpu_tensor
         plot_data_list.append(target_tensor)
         labels.append("Observed")
         z_index: list[float] = [
@@ -661,16 +646,10 @@ class RayOptimizer:
     ):
         output_dict = {}
         assert plot_interval_best.rays is not None
-        interval_best_rays = RayOptimizer.tensor_list_to_cpu(plot_interval_best.rays)
+        interval_best_rays = plot_interval_best.rays
         if isinstance(target, OffsetTarget):
-            observed_rays = ray_output_to_tensor(
-                target.observed_rays, exported_plane, to_cpu=True
-            )
-            uncompensated_rays = ray_output_to_tensor(
-                target.uncompensated_rays,
-                exported_plane,
-                to_cpu=True,
-            )
+            observed_rays = target.observed_rays_cpu_tensor
+            uncompensated_rays = target.uncompensated_rays_cpu_tensor
             if verbose:
                 print("Plotting compensation plot.")
             compensation_plot = Plot.compensation_plot(
@@ -692,11 +671,9 @@ class RayOptimizer:
                     )
                 ).item()
             )
-            target_observed_rays_list: list[torch.Tensor] = ray_output_to_tensor(
-                [target.observed_rays[max_ray_index]],
-                exported_plane,
-                to_cpu=True,
-            )
+            target_observed_rays_list: list[torch.Tensor] = [
+                target.observed_rays_cpu_tensor[max_ray_index]
+            ]
 
             xlim, ylim = Plot.switch_lims_if_out_of_lim(
                 target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
@@ -704,13 +681,7 @@ class RayOptimizer:
             fixed_position_plot = Plot.fixed_position_plot(
                 [interval_best_rays[max_ray_index]],
                 target_observed_rays_list,
-                [
-                    ray_output_to_tensor(
-                        [target.uncompensated_rays[max_ray_index]],
-                        exported_plane,
-                        to_cpu=True,
-                    )[0]
-                ],
+                [[target.uncompensated_rays_cpu_tensor[max_ray_index]][0]],
                 epoch=plot_interval_best.epoch,
                 training_samples_count=len(target.observed_rays),
                 xlim=xlim,

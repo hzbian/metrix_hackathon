@@ -175,11 +175,13 @@ class RayOptimization:
                 uncompensated_parameters, target_compensation
             ),
         )
-        return OffsetTarget(
+        offset_target = OffsetTarget(
             training_scan=training_scan,
             offset_search_space=self.create_offset_search_space(),
             target_compensation=target_compensation,
         )
+        offset_target.recalculate_cpu_tensors(self.target_configuration.exported_plane)
+        return offset_target
 
     def import_set(self, validation_set: bool = False):
         if self.real_data_configuration is None:
@@ -227,11 +229,13 @@ class RayOptimization:
             observed_rays=observed_validation_rays,
         )
 
-        return OffsetTarget(
+        offset_target = OffsetTarget(
             training_scan=training_scan,
             offset_search_space=self.create_offset_search_space(),
             validation_scan=validation_scan,
         )
+        offset_target.recalculate_cpu_tensors(self.target_configuration.exported_plane)
+        return offset_target
 
     def setup_target(self):
         if self.real_data_configuration is None:

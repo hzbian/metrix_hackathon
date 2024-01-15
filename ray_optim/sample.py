@@ -46,4 +46,10 @@ class Sample:
     @epoch.setter
     def epoch(self, epoch: int):
         self._epoch = epoch
-
+    
+    def to_cpu(self):
+        if self.rays is not None:
+            rays =  [rays.cpu() for rays in self.rays]
+        else:
+            rays = None
+        return Sample(self.params, rays, self.loss, self.epoch)

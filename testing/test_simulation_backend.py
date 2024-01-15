@@ -24,5 +24,6 @@ class SimulationBackendTest(unittest.TestCase):
                 ray_optimization: RayOptimization = instantiate(cfg)
                 ray_optimization.setup_target()
                 target: OffsetTarget = ray_optimization.target
+                target.recalculate_cpu_tensors("ImagePlane")
                 out_dict = RayOptimizer.plot_initial_plots(target, "ImagePlane")
                 #out_dict['fancy_footprint'].write_html('out.html')
