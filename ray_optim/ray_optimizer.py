@@ -737,7 +737,7 @@ class RayOptimizer:
         for i in range(len(output)):
             new_loss += loss_fn(
                 target_rays[i], output[i], exported_plane=exported_plane
-            )
+            ).item()
         mean_loss = new_loss / len(output)
         new_sample = Sample(
             params=compensation,
