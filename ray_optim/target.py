@@ -1,3 +1,4 @@
+import copy
 import torch
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
@@ -83,7 +84,7 @@ class Target:
         self.is_normalized: bool = False
     
     @staticmethod
-    def normalize_parameters(input_parameter_container: RayParameterContainer):
+    def _normalize_parameters(input_parameter_container: RayParameterContainer):
         normalized = input_parameter_container.clone()
         for v in normalized.values():
             if isinstance(v, MutableParameter):
@@ -103,10 +104,25 @@ class Target:
                 v.value_lims = original_value.value_lims
             v.value = v.value * (original_value.value_lims[1] - original_value.value_lims[0]) + original_value.value_lims[0]
         return input_copy
-
-
+    
+    def normalize_dict(self, input: dict[str, float]) -> dict[str, float]:
+        input_copy: dict[str, float] = copy.deepcopy(input)
+        for k, v in input_copy.items():
+            original_value = self.unscaled_search_space[k]
+            if isinstance(original_value, MutableParameter):
+                input_copy[k] = (v - original_value.value_lims[0]) / (original_value.value_lims[1] - original_value.value_lims[0])
+        return input_copy
+             
+    def denormalize_dict(self, input: dict[str, float]) -> dict[str, float]:
+        input_copy: dict[str, float] = copy.deepcopy(input)
+        for k, v in input_copy.items():
+            original_value = self.unscaled_search_space[k]
+            if isinstance(original_value, MutableParameter):
+                input_copy[k] = v * (original_value.value_lims[1] - original_value.value_lims[0]) + original_value.value_lims[0]
+        return input_copy
+    
     def normalize(self):
-        self.search_space = Target.normalize_parameters(self.search_space)
+        self.search_space = Target._normalize_parameters(self.search_space)
         self.is_normalized = True
 
     def recalculate_cpu_tensors(self, exported_plane: str):
