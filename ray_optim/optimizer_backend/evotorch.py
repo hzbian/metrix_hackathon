@@ -19,7 +19,7 @@ class OptimizerBackendEvoTorch(OptimizerBackend):
         target: Target,
         starting_point: dict[str, float] | None = None,
     ) -> tuple[dict[str, float], dict[str, float]]:
-        optimize_parameters = target.search_space.copy()
+        optimize_parameters = target.search_space.clone()
         lb = []
         ub = []
         for value in optimize_parameters.values():
@@ -49,7 +49,7 @@ class OptimizerBackendEvoTorch(OptimizerBackend):
 
     def evotorch_objective(self, objective, target: Target):
         def output_objective(input: torch.Tensor):
-            optimize_parameters = target.search_space.copy()
+            optimize_parameters = target.search_space.clone()
             mutable_index = 0
             optimize_parameters_list = []
             for entry in input:

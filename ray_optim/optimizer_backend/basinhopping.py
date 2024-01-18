@@ -12,7 +12,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
     @staticmethod
     def basinhopping_objective(objective, target: Target):
         def output_objective(input: np.ndarray):
-            optimize_parameters = target.search_space.copy()
+            optimize_parameters = target.search_space.clone()
             mutable_index: int = 0
             for i, (key, value) in enumerate(optimize_parameters.items()):
                 if isinstance(value, MutableParameter):
@@ -24,7 +24,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
         return output_objective
 
     def optimize(self, objective: Callable, iterations: int, target: Target, starting_point: dict[str, float] | None = None) -> tuple[dict[str, float], dict[str, float]]:
-        optimize_parameters = target.search_space.copy()
+        optimize_parameters = target.search_space.clone()
         x0 = []
         bounds = []
         for key, value in optimize_parameters.items():

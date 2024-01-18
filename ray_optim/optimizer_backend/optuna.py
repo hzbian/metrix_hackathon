@@ -14,7 +14,7 @@ class OptimizerBackendOptuna(OptimizerBackend):
     @staticmethod
     def optuna_objective(objective: Callable[[list[RayParameterContainer], Target], list[float]], target: Target) -> Callable[[Trial], float]:
         def output_objective(trial: Trial) -> float:
-            optimize_parameters = target.search_space.copy()
+            optimize_parameters = target.search_space.clone()
             for key, value in optimize_parameters.items():
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(trial.suggest_float(key, value.value_lims[0],

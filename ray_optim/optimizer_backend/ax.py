@@ -22,7 +22,7 @@ class OptimizerBackendAx(OptimizerBackend):
        trial_index_list: list[int] = []
        param_container_list: list[RayParameterContainer] = []
        for trial_index, param_container in optimizer_parameter.items():
-           all_parameters_copy = search_space.copy()
+           all_parameters_copy = search_space.clone()
            for param_key in param_container.keys():
                all_parameters_copy.__setitem__(param_key, NumericalParameter(param_container[param_key]))
            param_container_list.append(all_parameters_copy)
