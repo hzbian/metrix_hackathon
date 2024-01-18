@@ -465,10 +465,10 @@ class RayOptimizer:
                 log_dict["params_rmse"] = RayOptimizer.parameters_rmse(
                     target.target_params,
                     sample.params,
-                    target.search_space,
+                    target.unscaled_search_space,
                 )
                 single_params_rmse = RayOptimizer.single_parameters_rmse(
-                    target.target_params, sample.params, target.search_space
+                    target.target_params, sample.params, target.unscaled_search_space
                 )
                 log_dict = {**log_dict, **single_params_rmse}
             if sample.epoch % plot_interval == 0 and sample.epoch != 0:
@@ -700,7 +700,7 @@ class RayOptimizer:
             predicted_params=plot_interval_best.params,
             epoch=plot_interval_best.epoch,
             training_samples_count=len(target.observed_rays),
-            search_space=target.search_space,
+            search_space=target.unscaled_search_space,
             real_params=target.target_params,
         )
         output_dict["parameter_comparison"] = parameter_comparison_plot
@@ -787,8 +787,8 @@ class RayOptimizer:
     def optimize(self, target: Target, starting_point: dict[str, float] | None = None):
         if self.normalize_parameters:
             target.normalize()
-            #if starting_point is not None:
-            #    starting_point = target.scale_dict(starting_point)
+        if starting_point is not None and target.is_normalized:
+            starting_point = target.normalize_dict(starting_point)
 
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
@@ -796,4 +796,6 @@ class RayOptimizer:
             target=target,
             starting_point=starting_point,
         )
+        if target.is_normalized:
+            best_parameters = target.denormalize_dict(best_parameters)
         return best_parameters, metrics
