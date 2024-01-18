@@ -1,5 +1,5 @@
 import torch
-from ray_tools.base.parameter import RayParameterContainer
+from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
 
 
@@ -77,14 +77,51 @@ class Target:
     ):
         self.observed_rays = observed_rays
         self.search_space = search_space
-        self.target_params = target_params
+        self.target_params: RayParameterContainer | None = target_params
         self.dicts_have_changed: bool = True
+        self.unscaled_search_space: RayParameterContainer = search_space.clone()
+        self.is_normalized: bool = False
+    
+    @staticmethod
+    def normalize_parameters(input_parameter_container: RayParameterContainer):
+        normalized = input_parameter_container.clone()
+        for v in normalized.values():
+            if isinstance(v, MutableParameter):
+                v.value = (v.value - v.value_lims[0]) / (
+                    v.value_lims[1] - v.value_lims[0]
+                )
+                v.value_lims = (0.0, 1.0)
+        return normalized
+    
+    def denormalize_parameter_container(self, input: RayParameterContainer) -> RayParameterContainer:
+        input_copy = input.clone()
+        for k, v in input_copy.items():
+            original_value = self.unscaled_search_space[k]
+            if not isinstance(original_value, MutableParameter) or not isinstance(v, NumericalParameter):
+                continue
+            if isinstance(v, MutableParameter):
+                v.value_lims = original_value.value_lims
+            v.value = v.value * (original_value.value_lims[1] - original_value.value_lims[0]) + original_value.value_lims[0]
+        return input_copy
+
+
+    def normalize(self):
+        self.search_space = Target.normalize_parameters(self.search_space)
+        self.is_normalized = True
 
     def recalculate_cpu_tensors(self, exported_plane: str):
         self.dicts_have_changed = False
         self.observed_rays_cpu_tensor = ray_output_to_tensor(
             self.observed_rays, exported_plane, to_cpu=True
         )
+    @property
+    def search_space(self) -> RayParameterContainer:
+        return self._search_space
+    
+    @search_space.setter
+    def search_space(self, value: RayParameterContainer):
+        self.is_normalized = False
+        self._search_space = value
     @property
     def observed_rays(self) -> list[dict]:
         return self._observed_rays

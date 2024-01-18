@@ -15,6 +15,7 @@ from ray_optim.target import OffsetTarget, Target
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import (
+    MutableParameter,
     RayParameterContainer,
     NumericalParameter,
     RandomParameter,
@@ -39,6 +40,7 @@ class RayOptimizer:
         exported_plane: str,
         engine: Engine,
         logging_backend: LoggingBackend,
+        normalize_parameters: bool = False,
         transforms: RayTransform | None = None,
         log_times: bool = False,
         plot_interval: int = 10,
@@ -53,6 +55,7 @@ class RayOptimizer:
         self.transforms: RayTransform = (
             transforms if transforms is not None else RayTransformDummy()
         )
+        self.normalize_parameters: bool = normalize_parameters
         self.logging_backend: LoggingBackend = logging_backend
         self.log_times: bool = log_times
         self.evaluation_counter: int = 0
@@ -331,7 +334,8 @@ class RayOptimizer:
         assert isinstance(compensations[0], RayParameterContainer)
 
         begin_total_time: float = time.time() if self.log_times else 0.0
-
+        if target.is_normalized:
+            compensations = [target.denormalize_parameter_container(compensation) for compensation in compensations]
         log_dict: dict[str, Any] = {}
         current_epochs = RayOptimizer.current_epochs(
             self.evaluation_counter, len(compensations)
@@ -592,6 +596,7 @@ class RayOptimizer:
 
         return output_dict
 
+   
     @staticmethod
     def overall_fixed_position_plot(
         best_rays_list,
@@ -780,6 +785,11 @@ class RayOptimizer:
         return losses, num_rays, losses_mean
 
     def optimize(self, target: Target, starting_point: dict[str, float] | None = None):
+        if self.normalize_parameters:
+            target.normalize()
+            #if starting_point is not None:
+            #    starting_point = target.scale_dict(starting_point)
+
         best_parameters, metrics = self.optimizer_backend.optimize(
             objective=self.evaluation_function,
             iterations=self.iterations,

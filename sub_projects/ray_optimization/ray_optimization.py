@@ -70,10 +70,17 @@ class RayOptimization:
                     new_max = max_deviation * (v.value_lims[1] - v.value_lims[0]) / 2
                     if v.enforce_lims and new_max > v.value_lims[1]:
                         new_max = v.value_lims[1]
-                    ray_parameter = (k, type(v)(value_lims=(new_min, new_max), enforce_lims=v.enforce_lims, rg=rg))
+                    ray_parameter = (
+                        k,
+                        type(v)(
+                            value_lims=(new_min, new_max),
+                            enforce_lims=v.enforce_lims,
+                            rg=rg,
+                        ),
+                    )
             ray_parameters.append(ray_parameter)
         return RayParameterContainer(ray_parameters)
-    
+
     @staticmethod
     def get_mean_parameter_container(
         input_parameter_container: RayParameterContainer,
@@ -87,7 +94,6 @@ class RayOptimization:
                 else:
                     ray_parameters[k].value = v.value
         return RayParameterContainer(ray_parameters)
-
 
     def create_target_compensation(self):
         target_compensation = self.limited_search_space(
@@ -109,13 +115,17 @@ class RayOptimization:
             sample_parameter_func()
             for _ in range(self.target_configuration.num_beamline_samples)
         ]
-        mean_parameter_container = RayOptimization.get_mean_parameter_container(self.target_configuration.param_func())
+        mean_parameter_container = RayOptimization.get_mean_parameter_container(
+            self.target_configuration.param_func()
+        )
         for configuration in uncompensated_parameters:
             configuration.perturb_limits(mean_parameter_container)
-    
+
         return uncompensated_parameters
 
-    def create_compensated_parameters(self, uncompensated_parameters, target_compensation):
+    def create_compensated_parameters(
+        self, uncompensated_parameters, target_compensation
+    ):
         compensated_parameters = [v.clone() for v in uncompensated_parameters]
         for configuration in compensated_parameters:
             configuration.perturb(target_compensation)
@@ -186,7 +196,7 @@ class RayOptimization:
     def import_set(self, validation_set: bool = False):
         if self.real_data_configuration is None:
             raise Exception("Real data configuration is not set but trying to import.")
-        
+
         import_set: list[str] | None = (
             self.real_data_configuration.train_set
             if not validation_set
@@ -247,7 +257,9 @@ class RayOptimization:
         try:
             if self.is_output_ray_list_empty(self.target.observed_rays):
                 raise Exception("Refusing to optimize an empty target.")
-            return self.ray_optimizer.optimize(target=self.target, starting_point=self.ray_optimizer.starting_point)
+            return self.ray_optimizer.optimize(
+                target=self.target, starting_point=self.ray_optimizer.starting_point
+            )
         except NameError:
             raise Exception("You need to run setup_target() first.")
 
@@ -265,15 +277,17 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 def optimization(cfg):
     print(OmegaConf.to_yaml(cfg))
     ray_optimization: RayOptimization = instantiate(cfg)
-    omega_conf_container = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
-    assert isinstance(omega_conf_container, dict)
-    ray_optimization.logging_backend.log_config(
-       omega_conf_container 
+    omega_conf_container = OmegaConf.to_container(
+        cfg, resolve=True, throw_on_missing=True
     )
+    assert isinstance(omega_conf_container, dict)
+    ray_optimization.logging_backend.log_config(omega_conf_container)
     ray_optimization.setup_target()
     best_parameters, metrics = ray_optimization.optimize()
     output_best_parameters = "{"
-    output_best_parameters += ", ".join(f"{key}: {value}" for key, value in best_parameters.items())
+    output_best_parameters += ", ".join(
+        f"{key}: {value}" for key, value in best_parameters.items()
+    )
     output_best_parameters += "}"
     print(metrics, output_best_parameters)
 
