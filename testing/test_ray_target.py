@@ -17,10 +17,11 @@ class TargetTest(unittest.TestCase):
         }
         self.param_func = params_to_func(parameters, rg = RandomGenerator(42))
         self.target = Target(observed_rays=Mock(), search_space=self.param_func())
+        self.target.normalize()
         self.target2 = Target(Mock(), self.param_func())
 
     def test_normalize(self):
-        normalized = self.target.normalize_parameters(self.target.search_space)
+        normalized = self.target._normalize_parameters(self.target.search_space)
         for k, v in self.target.search_space.items():
             if isinstance(v, MutableParameter):
                 self.assertAlmostEqual(
@@ -30,10 +31,9 @@ class TargetTest(unittest.TestCase):
                 )
 
     def test_denormalize(self):
-        normalized = self.target.normalize_parameters(self.target.search_space)
-        original = self.target.search_space
+        normalized = self.target._normalize_parameters(self.target.search_space)
+        original = self.target.unscaled_search_space
         self.assertAlmostEqual(self.target.search_space['x_mean'].get_value(), 0.278853596, places=4)
-        self.target.normalize()
         self.assertAlmostEqual(self.target.search_space['x_mean'].get_value(), 0.639426798, places=4)
         denormalized = self.target.denormalize_parameter_container(normalized)
         self.assertAlmostEqual(denormalized['x_mean'].get_value(), 0.278853596, places=4)
@@ -44,5 +44,16 @@ class TargetTest(unittest.TestCase):
             if isinstance(original_value, MutableParameter) and isinstance(denormalized_value, MutableParameter):
                 self.assertEqual(original_value.value_lims, denormalized_value.value_lims)
 
+    def test_normalize_denormalize_dict(self):
+        test_dict = {"number_rays": 1e3, "x_mean": 0.}
+        normalized = self.target.normalize_dict(test_dict)
+        denormalized = self.target.denormalize_dict(normalized)
+        self.assertEqual(normalized['x_mean'], 0.5)
+        for k,v in test_dict.items():
+            self.assertEqual(v, denormalized[k])
+            self.assertAlmostEqual(v, denormalized[k])
+            if isinstance(self.target.search_space[k], MutableParameter):
+                self.assertNotEqual(v, normalized[k])
+            
 if __name__ == "__main__":
     unittest.main()
