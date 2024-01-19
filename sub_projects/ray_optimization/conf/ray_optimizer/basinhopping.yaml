@@ -5,3 +5,4 @@ optimizer_backend:
   basinhopping_function:
     _target_: hydra.utils.get_method
     path: "scipy.optimize.basinhopping"
+normalize_parameters: True
