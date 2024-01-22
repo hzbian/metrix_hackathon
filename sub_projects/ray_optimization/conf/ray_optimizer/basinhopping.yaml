@@ -6,3 +6,4 @@ optimizer_backend:
     _target_: hydra.utils.get_method
     path: "scipy.optimize.basinhopping"
 normalize_parameters: True
+plot_interval: 100

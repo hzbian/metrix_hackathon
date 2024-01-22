@@ -14,7 +14,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
         def output_objective(input: np.ndarray):
             optimize_parameters = target.search_space.clone()
             mutable_index: int = 0
-            for i, (key, value) in enumerate(optimize_parameters.items()):
+            for key, value in optimize_parameters.items():
                 if isinstance(value, MutableParameter):
                     optimize_parameters[key] = NumericalParameter(input[mutable_index].item())
                     mutable_index += 1
@@ -35,7 +35,7 @@ class OptimizerBackendBasinhopping(OptimizerBackend):
                 else:
                     x0.append((value.value_lims[1] - value.value_lims[0]) / 2. + value.value_lims[0])
         ret = self.basinhopping_function(self.basinhopping_objective(objective, target), x0,
-                                         niter=iterations, interval=iterations, stepsize=1, T=0.01,
+                                         niter=iterations, interval=1, stepsize=1, T=0.01,
                                          minimizer_kwargs={"bounds": bounds}, disp=True)
         x_dict = {}
         mutable_index: int = 0
