@@ -64,11 +64,23 @@ class MeanMSELoss(TorchLoss):
         super().__init__(base_fn=base_fn)
 
 class VarMSELoss(TorchLoss):
-    def __init__(self, reduction="none"):
-        mse  = torch.nn.MSELoss(reduction=reduction)
-        def base_fn(a: torch.Tensor, b: torch.Tensor):
-            return mse(a.var(), b.var())
-        super().__init__(base_fn=base_fn)
+        @staticmethod
+        def calc_var(element: torch.Tensor) -> torch.Tensor:
+            if element.numel() == 0:
+                raise Exception("Element a cannot be empty.")
+            if element.numel() == 1:
+                var_a = torch.Tensor(0.0, device=element.device)
+            else:
+                var_a = element.var()
+            return var_a
+
+        def __init__(self, reduction="none"):
+            mse  = torch.nn.MSELoss(reduction=reduction)
+            def base_fn(a: torch.Tensor, b: torch.Tensor):
+                var_a = VarMSELoss.calc_var(a)
+                var_b = VarMSELoss.calc_var(b)
+                return mse(var_a, var_b)
+            super().__init__(base_fn=base_fn)
 
 
 class JSLoss(TorchLoss):
