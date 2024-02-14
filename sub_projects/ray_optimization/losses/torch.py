@@ -69,7 +69,7 @@ class VarMSELoss(TorchLoss):
             if element.numel() == 0:
                 raise Exception("Element a cannot be empty.")
             if element.numel() == 1:
-                var_a = torch.Tensor(0.0, device=element.device)
+                var_a = torch.Tensor([0.0], device=element.device)
             else:
                 var_a = element.var()
             return var_a
