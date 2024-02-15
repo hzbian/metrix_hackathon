@@ -12,8 +12,12 @@ class TorchLoss(RayLoss):
     Implementation of PyTorch losses. This class is meant to be used with a Torch loss function module. If shapes of `a` and `b` are different, the smaller sizes are taken and the excessing rays get discarded.
     """
 
-    def __init__(self, base_fn: Callable):
+    def __init__(self, base_fn: Callable, ray_count_distance_fn: Callable | None = None):
         self.base_fn: Callable = base_fn
+        if ray_count_distance_fn is None:
+            self.ray_count_distance_fn: Callable = self.base_fn
+        else:
+            self.ray_count_distance_fn: Callable = ray_count_distance_fn
         self.ray_count_empty_threshold: int = 1
 
     def loss_fn(
@@ -37,10 +41,12 @@ class TorchLoss(RayLoss):
 
         # if one is empty, the other one is not, let us count the rays and take the difference with base function
         if a_tensor.nelement() <= self.ray_count_empty_threshold or b_tensor.nelement() <= self.ray_count_empty_threshold:
-            return self.base_fn(
+            return self.ray_count_distance_fn(
                 torch.tensor(a_tensor.nelement(), device=a_tensor.device).float(),
                 torch.tensor(b_tensor.nelement(), device=a_tensor.device).float(),
             )
+        
+        assert a_tensor.nelement() > self.ray_count_empty_threshold and b_tensor.nelement() > self.ray_count_empty_threshold
 
         losses = torch.stack(
             [self.base_fn(element, b_tensor[i]) for i, element in enumerate(a_tensor)]
@@ -61,24 +67,19 @@ class MeanMSELoss(TorchLoss):
     def __init__(self, reduction="none"):
         mse  = torch.nn.MSELoss(reduction=reduction)
         def base_fn(a: torch.Tensor, b: torch.Tensor):
+            assert a.numel() > self.ray_count_empty_threshold
+            assert b.numel() > self.ray_count_empty_threshold
             return mse(a.mean(), b.mean())
         super().__init__(base_fn=base_fn)
 
 class VarMSELoss(TorchLoss):
-        def calc_var(self, element: torch.Tensor) -> torch.Tensor:
-            if element.numel() <= self.ray_count_empty_threshold:
-                raise Exception("Element cannot be empty.")
-            else:
-                var = element.var()
-            return var
-
         def __init__(self, reduction="none"):
             mse  = torch.nn.MSELoss(reduction=reduction)
             def base_fn(a: torch.Tensor, b: torch.Tensor):
-                var_a = self.calc_var(a)
-                var_b = self.calc_var(b)
-                return mse(var_a, var_b)
-            super().__init__(base_fn=base_fn)
+                assert a.numel() > self.ray_count_empty_threshold
+                assert b.numel() > self.ray_count_empty_threshold
+                return mse(a.var(), b.var())
+            super().__init__(base_fn=base_fn, ray_count_distance_fn=mse)
 
 
 class JSLoss(TorchLoss):
