@@ -14,6 +14,7 @@ class TorchLoss(RayLoss):
 
     def __init__(self, base_fn: Callable):
         self.base_fn: Callable = base_fn
+        self.ray_count_empty_threshold: int = 1
 
     def loss_fn(
         self,
@@ -25,17 +26,17 @@ class TorchLoss(RayLoss):
         b_tensor: torch.Tensor = ray_dict_to_tensor(b, exported_plane=exported_plane)
 
         # if both are empty, it is a perfect fit
-        if a_tensor.nelement() == 0 and b_tensor.nelement() == 0:
-            return torch.tensor(0.0, device=a_tensor.device)
+        if a_tensor.nelement() <= self.ray_count_empty_threshold and b_tensor.nelement() <= self.ray_count_empty_threshold:
+            return torch.tensor([0.0], device=a_tensor.device)
 
         # if not one of them is empty, cut the larger one
-        if a_tensor.nelement() != 0 and b_tensor.nelement() != 0:
+        if a_tensor.nelement() > self.ray_count_empty_threshold and b_tensor.nelement() > self.ray_count_empty_threshold:
             new_size = torch.min(torch.tensor(a_tensor.shape), torch.tensor(b_tensor.shape))
             a_tensor = a_tensor[[slice(0, new_size[i]) for i in range(len(new_size))]]
             b_tensor = b_tensor[[slice(0, new_size[i]) for i in range(len(new_size))]]
 
         # if one is empty, the other one is not, let us count the rays and take the difference with base function
-        if a_tensor.nelement() == 0 or b_tensor.nelement() == 0:
+        if a_tensor.nelement() <= self.ray_count_empty_threshold or b_tensor.nelement() <= self.ray_count_empty_threshold:
             return self.base_fn(
                 torch.tensor(a_tensor.nelement(), device=a_tensor.device).float(),
                 torch.tensor(b_tensor.nelement(), device=a_tensor.device).float(),
@@ -64,21 +65,18 @@ class MeanMSELoss(TorchLoss):
         super().__init__(base_fn=base_fn)
 
 class VarMSELoss(TorchLoss):
-        @staticmethod
-        def calc_var(element: torch.Tensor) -> torch.Tensor:
-            if element.numel() == 0:
-                raise Exception("Element a cannot be empty.")
-            if element.numel() == 1:
-                var_a = torch.Tensor([0.0], device=element.device)
+        def calc_var(self, element: torch.Tensor) -> torch.Tensor:
+            if element.numel() <= self.ray_count_empty_threshold:
+                raise Exception("Element cannot be empty.")
             else:
-                var_a = element.var()
-            return var_a
+                var = element.var()
+            return var
 
         def __init__(self, reduction="none"):
             mse  = torch.nn.MSELoss(reduction=reduction)
             def base_fn(a: torch.Tensor, b: torch.Tensor):
-                var_a = VarMSELoss.calc_var(a)
-                var_b = VarMSELoss.calc_var(b)
+                var_a = self.calc_var(a)
+                var_b = self.calc_var(b)
                 return mse(var_a, var_b)
             super().__init__(base_fn=base_fn)
 
