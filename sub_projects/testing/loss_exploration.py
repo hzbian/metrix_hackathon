@@ -8,17 +8,15 @@ from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 sys.path.insert(0, '../../')
+from ray_optim.plot import Plot
 from sub_projects.ray_optimization.losses.losses import RayLoss, RayCountMSE, ScheduledLoss
 from sub_projects.ray_optimization.losses.geometric import SinkhornLoss
-from sub_projects.ray_optimization.losses.torch import HistogramMSE, CovMSE, KLDLoss, MSELoss, JSLoss, BoxIoULoss
-from sub_projects.ray_optimization.losses.ignite import SSIMHistogramLoss
+from sub_projects.ray_optimization.losses.torch import HistogramMSE, CovMSE, KLDLoss, MSELoss, JSLoss, BoxIoULoss, MeanMSELoss, VarMSELoss
 
 from ray_tools.base.engine import GaussEngine
 
 from ray_tools.base.parameter import RayParameterContainer, NumericalParameter, RandomParameter, RayParameter
 from ray_tools.base.utils import RandomGenerator
-
-from ray_optim.ray_optimizer import RayOptimizer
 
 from ray_tools.base.transform import MultiLayer
 from sub_projects.ray_optimization.utils import ray_output_to_tensor
@@ -33,9 +31,10 @@ def evaluate_single_var(var_name: str, value: float, ray_loss: RayLoss):
     engine = GaussEngine()
     outputs_list = [engine.run(params_entry, transforms=MultiLayer([0, 10])) for params_entry in params_list]
     distance = ray_loss.loss_fn(outputs_list[0][0], outputs_list[1][0], exported_plane='ImagePlane')
-    RayOptimizer.fixed_position_plot_base([to_tensor(list_entry) for list_entry in outputs_list],
-                                          xlim=[-2, 2], ylim=[-2, 2],
-                                          ylabel=['reference'] + ["{:10.2f}".format(distance.item())])
+    Plot.fixed_position_plot_base([to_tensor(list_entry) for list_entry in outputs_list],
+                                          xlim=(-2., 2.), ylim=(-2., 2.),
+                                          ylabel=['reference'] + ["{:10.4f}".format(distance.item())],  covariance_ellipse=False)
+    Plot.fixed_position_plot_base
     plt.plot()
     return distance.item()
 
@@ -62,7 +61,7 @@ def create_params_offset_list(var_name: str, value_lims, num_samples: int = 1):
     offset_list = []
     params_list = []
     for i in range(num_samples + 1):
-        perturbed_parameters: list[RayParameterContainer[str, RayParameter]] = [v.clone() for v in params]
+        perturbed_parameters: list[RayParameterContainer] = [v.clone() for v in params]
         offset_instance = offset()
         if i != 0:
             for configuration in perturbed_parameters:
@@ -94,8 +93,8 @@ def plot_investigated_var(offsets, distances, loss_string):
 
 def save_plot(var_name: str, output_directory: str='plots/'):
     ax = plt.gca()
-    ax.set_yscale('log')
-    ax.set_xscale('log')
+    #ax.set_yscale('log')
+    #ax.set_xscale('log')
     plt.xlabel('Absolute error')
     plt.ylabel('Loss distance')
     plt.tight_layout()
@@ -132,20 +131,18 @@ if __name__ == '__main__':
     cov_mse = {
         "cov_mse": CovMSE(),
     }
-    ssim_loss = {
-        "ssim_histogram_10": SSIMHistogramLoss(n_bins=10),
-    #    "ssim_histogram_100": SSIMHistogramLoss(n_bins=100),
-    }
     torch_loss = {
     #    "js_loss": JSLoss(),
         "kld_loss": KLDLoss(),
         "mse_loss": MSELoss(),
+        "var_mse_loss": VarMSELoss(),
+        "mean_mse_loss": MeanMSELoss(),
 
     }
-    investigate_loss = torch_loss | ssim_loss | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
+    investigate_loss = torch_loss # | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
     for var_name in ['y_mean', 'y_var']:
         for loss_string, loss in tqdm(investigate_loss.items()):
-            investigate_and_plot_var(var_name=var_name, value_lims=(0.0, 1.0), loss=loss, loss_string=loss_string)
+            investigate_and_plot_var(var_name=var_name, value_lims=(0.0, 2.0), loss=loss, loss_string=loss_string)
             if isinstance(loss, ScheduledLoss):
                 loss.reset_passed_epochs()
         save_plot(var_name)
