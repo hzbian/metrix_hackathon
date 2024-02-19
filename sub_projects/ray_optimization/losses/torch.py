@@ -69,7 +69,7 @@ class MeanMSELoss(TorchLoss):
         def base_fn(a: torch.Tensor, b: torch.Tensor):
             assert a.numel() > self.ray_count_empty_threshold
             assert b.numel() > self.ray_count_empty_threshold
-            return mse(a.mean(), b.mean())
+            return mse(a.mean(dim=0).sum(), b.mean(dim=0).sum())
         super().__init__(base_fn=base_fn, ray_count_distance_fn=mse)
 
 class VarMSELoss(TorchLoss):
@@ -78,7 +78,7 @@ class VarMSELoss(TorchLoss):
         def base_fn(a: torch.Tensor, b: torch.Tensor):
             assert a.numel() > self.ray_count_empty_threshold
             assert b.numel() > self.ray_count_empty_threshold
-            return mse(a.var(), b.var())
+            return mse(a.var(dim=0).sum(), b.var(dim=0).sum())
         super().__init__(base_fn=base_fn, ray_count_distance_fn=mse)
 
 
