@@ -2,6 +2,7 @@
 from collections.abc import Callable
 from typing import Any
 import random
+import math
 from tqdm import tqdm
 from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.target import Target
@@ -32,7 +33,7 @@ class OptimizerBackendStupid(OptimizerBackend):
             perturbation_parameters = current_parameters[perturbation_key]
             assert isinstance(perturbation_parameters, MutableParameter)
             if self.annealing:
-                annealing_factor = 1./(i+1)
+                annealing_factor = math.cos(i/(iterations/(5*math.pi)))+1.
             else:
                 annealing_factor = 1.
             perturbation_value: float = perturbation_sign * (perturbation_parameters.value_lims[1]-perturbation_parameters.value_lims[0]) / 2 * self.step_size * annealing_factor
