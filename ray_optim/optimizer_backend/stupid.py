@@ -32,7 +32,7 @@ class OptimizerBackendStupid(OptimizerBackend):
             perturbation_parameters = current_parameters[perturbation_key]
             assert isinstance(perturbation_parameters, MutableParameter)
             if self.annealing:
-                annealing_factor = 1./i
+                annealing_factor = 1./i+1
             else:
                 annealing_factor = 1.
             perturbation_value: float = perturbation_sign * (perturbation_parameters.value_lims[1]-perturbation_parameters.value_lims[0]) / 2 * self.step_size * annealing_factor
