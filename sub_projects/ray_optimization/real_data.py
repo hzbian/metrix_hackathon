@@ -83,12 +83,16 @@ def import_data(real_data_dir, imported_measurements, included_z_layers: list[fl
     transform = HistToPointCloud()
     transform_weight = SampleRandomWeightedHist()
     output_list = []
-    for subdir, _, files in tqdm(os.walk(real_data_dir)):
-        measurement_name = os.path.basename(os.path.normpath(subdir))[:3]
-        if measurement_name not in imported_measurements:
-            continue
+    for measurement_name in tqdm(imported_measurements):
+        indices = [position for position, phrase in enumerate(os.listdir(real_data_dir)) if measurement_name in phrase]
+        if len(indices) == 0:
+            raise Exception("Your desired measurement "+measurement_name+" could not be found.")
+        if len(indices) > 1:
+            raise Exception("Your desired measurement "+measurement_name+" was found in multiple folders. Please rename one folder with this name.")
+        subdir = os.path.join(real_data_dir, os.listdir(real_data_dir)[indices[0]])
+        files = [f for f in os.listdir(subdir) if os.path.isfile(os.path.join(subdir, f))]
         if measurement_name not in parameters.keys():
-            continue
+            raise Exception("Your desired measurement "+measurement_name+" could not be found.")
         if param_container is not None:
             output_dict = {'param_container_dict': pandas_to_param_container(parameters[measurement_name], param_container,
                                                                           check_value_lims=check_value_lims)}
