@@ -10,6 +10,7 @@ class RayScan:
         uncompensated_parameters: list[RayParameterContainer],
         uncompensated_rays: list[dict],
         observed_rays: list[dict],
+        labels: list[str] | None = None,
     ):
         self.uncompensated_parameters: list[
             RayParameterContainer
@@ -19,6 +20,7 @@ class RayScan:
         self.observed_rays_cpu_tensor = None
         self.uncompensated_rays_cpu_tensor = None
         self.dicts_have_changed: bool = True
+        self.labels: list[str] | None = labels
 
     @property
     def uncompensated_rays(self) -> list[dict]:
@@ -173,6 +175,7 @@ class OffsetTarget(Target):
         ] = training_scan.uncompensated_parameters
         self.uncompensated_rays = training_scan.uncompensated_rays
         self.validation_scan: RayScan | None = validation_scan
+        self.training_scan_labels: list[str] | None = training_scan.labels
 
     @property
     def uncompensated_rays(self) -> list[dict]:

@@ -528,7 +528,7 @@ class RayOptimizer:
                 print("Plotting overall fixed position plot.")
             if not isinstance(target.observed_rays, list):
                 raise Exception("Target observed rays must be a list.")
-
+            
             output_dict[
                 "overall_fixed_position_plot"
             ] = RayOptimizer.overall_fixed_position_plot(
@@ -537,6 +537,7 @@ class RayOptimizer:
                 uncompensated_rays,
                 overall_best.epoch,
                 len(target.observed_rays),
+                scan_labels=target.training_scan_labels
             )
 
             if target.validation_scan is not None:
@@ -574,6 +575,7 @@ class RayOptimizer:
                     training_samples_count=len(target.observed_rays),
                     xlim=xlim,
                     ylim=ylim,
+                    x_label=target.validation_scan.labels
                 )
                 output_dict[
                     "validation_fixed_position"
@@ -604,6 +606,7 @@ class RayOptimizer:
         target_uncompensated_rays_list,
         epoch: int | None = None,
         training_samples_count: int | None = None,
+        scan_labels: list[str] | None = None,
     ):
         xlim, ylim = Plot.switch_lims_if_out_of_lim(
             target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
@@ -616,6 +619,7 @@ class RayOptimizer:
             training_samples_count=training_samples_count,
             xlim=xlim,
             ylim=ylim,
+            x_label=scan_labels,
         )
         return fixed_position_plot
 

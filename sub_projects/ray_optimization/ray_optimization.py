@@ -215,6 +215,7 @@ class RayOptimization:
         return [element["param_container_dict"] for element in container_list]
 
     def create_real_target(self):
+        assert self.real_data_configuration is not None
         observed_rays = self.import_set(validation_set=False)
         uncompensated_parameters = RayOptimization.prune_param_container(observed_rays)
 
@@ -222,6 +223,7 @@ class RayOptimization:
             uncompensated_parameters=uncompensated_parameters,
             uncompensated_rays=self.create_uncompensated_rays(uncompensated_parameters),
             observed_rays=observed_rays,
+            labels=self.real_data_configuration.train_set
         )
 
         observed_validation_rays = self.import_set(validation_set=True)
@@ -237,6 +239,7 @@ class RayOptimization:
             uncompensated_parameters=uncompensated_validation_parameters,
             uncompensated_rays=validation_parameters_rays,
             observed_rays=observed_validation_rays,
+            labels=self.real_data_configuration.validation_set
         )
 
         offset_target = OffsetTarget(

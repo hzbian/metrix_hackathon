@@ -191,6 +191,7 @@ class Plot:
         training_samples_count=None,
         epoch: int | None = None,
         covariance_ellipse: bool = True,
+        x_label: list[str] | None = None
     ) -> Figure:
         y_label = ["Uncompensated", "Observed", "Compensated"]
         suptitle = "Epoch " + str(epoch) if epoch is not None else None
@@ -205,6 +206,7 @@ class Plot:
             xlim,
             ylim,
             y_label,
+            x_label,
             suptitle,
             covariance_ellipse,
         )
@@ -275,6 +277,7 @@ class Plot:
         xlim: tuple[float, float] | tuple[list[float], list[float]],
         ylim: tuple[float, float] | tuple[list[float], list[float]],
         ylabel,
+        xlabel: list[str] | None = None,
         suptitle: str | None = None,
         covariance_ellipse: bool = True,
         draw_all_ellipses_rows: tuple[int] = (1,),
@@ -356,6 +359,8 @@ class Plot:
                     Plot.confidence_ellipse(
                         element[0, :, 0], element[0, :, 1], ax, color=color
                     )
+                if xlabel is not None and idx_list_list == len(tensor_list_list)-1:
+                    axs[idx_list_list, beamline_idx].set_xlabel(xlabel[beamline_idx])
 
             axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list], fontsize=12)
             if covariance_ellipse:
