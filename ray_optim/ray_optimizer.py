@@ -567,6 +567,8 @@ class RayOptimizer:
                     print("Plot validation fixed position plot.")
                 if not isinstance(target.observed_rays, list):
                     raise Exception("Target observed rays must be a list.")
+                if target.validation_scan.labels is not None:
+                    assert len(target.validation_scan.labels) == len(validation_rays)
                 validation_fixed_position_plot = Plot.fixed_position_plot(
                     compensated_rays_list,
                     validation_rays,
