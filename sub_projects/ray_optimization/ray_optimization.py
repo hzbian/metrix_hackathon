@@ -233,7 +233,7 @@ class RayOptimization:
 
         validation_parameters_rays = self.target_configuration.engine.run(
             uncompensated_validation_parameters,
-            transforms=self.create_initial_transforms(uncompensated_parameters),
+            transforms=self.create_initial_transforms(uncompensated_validation_parameters),
         )
         validation_scan = RayScan(
             uncompensated_parameters=uncompensated_validation_parameters,
