@@ -3,9 +3,11 @@ import time
 from typing import cast
 from ax.service.ax_client import AxClient, ObjectiveProperties
 from ax.service.ax_client import AxClient
+import torch
 from tqdm import trange
 from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.ray_optimizer import Target
+from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
 from ray_tools.base.parameter import MutableParameter, NumericalParameter, RayParameterContainer
 from ax.modelbridge.registry import Models
 from ax.modelbridge.generation_strategy import GenerationStep
@@ -13,10 +15,33 @@ from ax.core.types import TParameterization, TModelPredictArm
 
 class OptimizerBackendAx(OptimizerBackend):
    def __init__(self, ax_client: AxClient | None = None):
-       if ax_client is not None:
+        if ax_client is not None:
            self.ax_client = ax_client
-       else:
-           self.ax_client = AxClient()
+        else:
+            gs = GenerationStrategy(
+                steps=[
+                    # 1. Initialization step (does not require pre-existing data and is well-suited for
+                    # initial sampling of the search space)
+                    GenerationStep(
+                        model=Models.SOBOL,
+                        num_trials=5,  # How many trials should be produced from this generation step
+                        min_trials_observed=3,  # How many trials need to be completed to move to next model
+                        max_parallelism=5,  # Max parallelism for this step
+                        model_kwargs={"seed": 999},  # Any kwargs you want passed into the model
+                        model_gen_kwargs={},  # Any kwargs you want passed to `modelbridge.gen`
+                    ),
+                    # 2. Bayesian optimization step (requires data obtained from previous phase and learns
+                    # from all data available at the time of each new candidate generation call)
+                    GenerationStep(
+                        model=Models.SAASBO,
+                        num_trials=-1,  # No limitation on how many trials should be produced from this step
+                        max_parallelism=3,  # Parallelism limit for this step, often lower than for Sobol
+                        # More on parallelism vs. required samples in BayesOpt:
+                        # https://ax.dev/docs/bayesopt.html#tradeoff-between-parallelism-and-total-number-of-trials
+                    ),
+                ]
+            )
+            self.ax_client = AxClient(generation_strategy=gs)
 
    def optimizer_parameter_to_container_list(self, optimizer_parameter, search_space) -> tuple[list[int], list[RayParameterContainer]]:
        trial_index_list: list[int] = []
@@ -58,7 +83,8 @@ class OptimizerBackendAx(OptimizerBackend):
            results = objective(ray_parameter_container_list, target=target)
 
            for i in range(len(results)):
-               self.ax_client.complete_trial(trial_index_list[i], {'mse': results[i].item()})
+               result = results[i].item() if isinstance(results[i], torch.Tensor) else results[i]
+               self.ax_client.complete_trial(trial_index_list[i], {'mse': result})
        best_parameters_metrics = self.ax_client.get_best_parameters()
        assert best_parameters_metrics is not None
        best_parameters, metrics = best_parameters_metrics
