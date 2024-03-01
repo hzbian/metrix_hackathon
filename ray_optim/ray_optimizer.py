@@ -477,12 +477,6 @@ class RayOptimizer:
                 )
             else:
                 plots = {}
-            if sample.epoch == 0:
-                initial_plots = RayOptimizer.plot_initial_plots(
-                    target, exported_plane, verbose
-                )
-            else:
-                initial_plots = {}
             if sample.loss < overall_best.loss:
                 better_plots = RayOptimizer.on_better_solution_found(
                     target,
@@ -495,7 +489,7 @@ class RayOptimizer:
                 )
             else:
                 better_plots = {}
-            log_plots = {**plots, **initial_plots, **better_plots}
+            log_plots = {**plots, **better_plots}
             log_plots = {
                 key: logging_backend.figure_to_image(value)
                 for key, value in log_plots.items()
@@ -624,29 +618,6 @@ class RayOptimizer:
             x_label=scan_labels,
         )
         return fixed_position_plot
-
-    @staticmethod
-    def plot_initial_plots(target: Target, exported_plane: str, verbose: bool = False):
-        output_dict = {}
-        labels = []
-        plot_data_list = []
-        if isinstance(target, OffsetTarget):
-            uncompensated_rays = target.uncompensated_rays_cpu_tensor
-            plot_data_list.append(uncompensated_rays)
-            labels.append("Uncompensated")
-
-        target_tensor = target.observed_rays_cpu_tensor
-        plot_data_list.append(target_tensor)
-        labels.append("Observed")
-        z_index: list[float] = [
-            float(i)
-            for i in target.observed_rays[0]["ray_output"][exported_plane].keys()
-        ]
-        if verbose:
-            print("Plot fancy ray plot.")
-        fancy_plot = Plot.fancy_ray(plot_data_list, labels, z_index=z_index)
-        output_dict["fancy_footprint"] = fancy_plot
-        return output_dict
 
     @staticmethod
     def plot(
