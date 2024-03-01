@@ -642,35 +642,6 @@ class RayOptimizer:
                 training_samples_count=len(target.observed_rays),
             )
             output_dict["compensation"] = compensation_plot
-        if isinstance(target, OffsetTarget):
-            max_ray_index = int(
-                torch.argmax(
-                    torch.Tensor(
-                        [
-                            ray_output_to_tensor([element], exported_plane)[0].shape[1]
-                            for element in target.observed_rays
-                        ]
-                    )
-                ).item()
-            )
-            target_observed_rays_list: list[torch.Tensor] = [
-                target.observed_rays_cpu_tensor[max_ray_index]
-            ]
-
-            xlim, ylim = Plot.switch_lims_if_out_of_lim(
-                target_observed_rays_list, lims_x=(-2.0, 2.0), lims_y=(-2.0, 2.0)
-            )
-            fixed_position_plot = Plot.fixed_position_plot(
-                [interval_best_rays[max_ray_index]],
-                target_observed_rays_list,
-                [[target.uncompensated_rays_cpu_tensor[max_ray_index]][0]],
-                epoch=plot_interval_best.epoch,
-                training_samples_count=len(target.observed_rays),
-                xlim=xlim,
-                ylim=ylim,
-            )
-            output_dict["fixed_position_plot"] = fixed_position_plot
-
         if verbose:
             print("Plot param comparison.")
         parameter_comparison_plot = Plot.plot_param_comparison(
