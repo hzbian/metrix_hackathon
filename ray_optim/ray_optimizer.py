@@ -519,13 +519,13 @@ class RayOptimizer:
             uncompensated_rays = target.uncompensated_rays_cpu_tensor
 
             if verbose:
-                print("Plotting overall fixed position plot.")
+                print("Plotting training fixed position plot.")
             if not isinstance(target.observed_rays, list):
                 raise Exception("Target observed rays must be a list.")
             
             output_dict[
-                "overall_fixed_position_plot"
-            ] = RayOptimizer.overall_fixed_position_plot(
+                "training_fixed_position"
+            ] = RayOptimizer.training_fixed_position_plot(
                 overall_best.rays,
                 observed_rays,
                 uncompensated_rays,
@@ -596,7 +596,7 @@ class RayOptimizer:
 
    
     @staticmethod
-    def overall_fixed_position_plot(
+    def training_fixed_position_plot(
         best_rays_list,
         target_observed_rays_list,
         target_uncompensated_rays_list,
