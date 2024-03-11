@@ -576,21 +576,21 @@ class RayOptimizer:
                 output_dict[
                     "validation_fixed_position"
                 ] = validation_fixed_position_plot
-                z_index: list[float] = [
-                    float(i)
-                    for i in target.observed_rays[0]["ray_output"][
-                        exported_plane
-                    ].keys()
-                ]
-                if verbose:
-                    print("Plotting fancy ray plot.")
-                assert uncompensated_rays is not None
-                fancy_ray_plot = Plot.fancy_ray(
-                    [uncompensated_rays, observed_rays, overall_best.rays],
-                    ["Uncompensated", "Observed", "Compensated"],
-                    z_index=z_index,
+            z_index: list[float] = [
+                float(i)
+                for i in target.observed_rays[0]["ray_output"][
+                    exported_plane
+                ].keys()
+            ]
+            if verbose:
+                print("Plotting fancy ray plot.")
+            assert uncompensated_rays is not None
+            fancy_ray_plot = Plot.fancy_ray(
+                [uncompensated_rays, observed_rays, overall_best.rays],
+                ["Uncompensated", "Observed", "Compensated"],
+                z_index=z_index,
                 )
-                output_dict["fancy_ray"] = fancy_ray_plot
+            output_dict["fancy_ray"] = fancy_ray_plot
 
         return output_dict
 
