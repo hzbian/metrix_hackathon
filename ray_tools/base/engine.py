@@ -170,10 +170,11 @@ class GaussEngine(Engine):
                 correlation_factor = torch.tensor(0., device=self.device)
 
 
-            m = torch.distributions.multivariate_normal.MultivariateNormal(torch.tensor([x_mean, y_mean], device=self.device).float(),
+            m = torch.distributions.multivariate_normal.MultivariateNormal(torch.tensor([0., 0.], device=self.device).float(),
                                                                            torch.diag(torch.tensor([x_var, y_var], device=self.device)).float())
             samples = m.rsample(torch.Size([n_rays]))
             samples @= torch.tensor([[torch.cos(correlation_factor), -torch.sin(correlation_factor)],[torch.sin(correlation_factor), torch.cos(correlation_factor)]], device=self.device)
+            samples += (torch.tensor([x_mean, y_mean], device=self.device).float())
             samples_directions = torch.rand([n_rays, 3], device=self.device) * param_container['direction_spread'].get_value()
             ray_out = RayOutput(samples[:, 0], samples[:, 1], torch.zeros_like(samples[:, 0]),
                                 param_container['x_dir'].get_value() + samples_directions[:, 0],
