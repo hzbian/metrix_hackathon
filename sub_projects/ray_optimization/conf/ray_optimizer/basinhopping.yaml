@@ -2,8 +2,5 @@ defaults:
   - base
 optimizer_backend:
   _target_: "ray_optim.optimizer_backend.basinhopping.OptimizerBackendBasinhopping"
-  basinhopping_function:
-    _target_: hydra.utils.get_method
-    path: "scipy.optimize.basinhopping"
 normalize_parameters: True
 plot_interval: 100
