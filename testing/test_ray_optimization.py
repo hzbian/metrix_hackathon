@@ -1,11 +1,21 @@
+from typing import Callable
 import unittest
 from unittest.mock import Mock
+
+import omegaconf
+from hydra.utils import instantiate
+from tqdm import trange
 from ray_optim.logging import DebugPlotBackend
+from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.ray_optimizer import OffsetTarget, RayOptimizer
+from ray_optim.target import Target
 from ray_tools.base.engine import GaussEngine
+from hydra import initialize, compose
 from ray_tools.base.parameter import (
     MutableParameter,
+    NumericalParameter,
     RandomParameter,
+    RayParameterContainer,
 )
 from ray_tools.base.transform import MultiLayer
 
@@ -15,6 +25,21 @@ from sub_projects.ray_optimization.configuration import (
     params_to_func,
 )
 from sub_projects.ray_optimization.ray_optimization import RayOptimization
+
+class OptimizerBackendTest(OptimizerBackend):
+    def optimize(self, objective: Callable[[list[RayParameterContainer], Target], list[float]], iterations: int, target: Target, starting_point: dict[str, float] | None = None) -> tuple[dict[str, float], dict[str, float]]:
+        optimize_parameters: RayParameterContainer = target.search_space.clone()
+        if starting_point is not None:
+            for key in starting_point.keys():
+                current_parameter = optimize_parameters[key]
+                if isinstance(current_parameter, NumericalParameter):
+                    current_parameter.value = starting_point[key]
+        #mutable_parameters_keys = [key for key, value in optimize_parameters.items() if isinstance(value, MutableParameter)] 
+        current_parameters = optimize_parameters
+        for _ in trange(iterations):
+            distance = objective([current_parameters], target)
+        return current_parameters.to_value_dict(), {"loss": distance[0]}
+
 
 
 class TestRayOptimization(unittest.TestCase):
@@ -129,3 +154,11 @@ class TestRayOptimization(unittest.TestCase):
     def test_setup(self):
         self.ray_optimization.setup_target()
         self.assertTrue(isinstance(self.ray_optimization.target, OffsetTarget))
+
+    def test_with_initialize(self) -> None:
+        with initialize(version_base=None, config_path="../sub_projects/ray_optimization/conf"):
+            # config is relative to a module
+            cfg = compose(config_name="config", overrides=["ray_optimizer=test"])
+            print(omegaconf.OmegaConf.to_yaml(cfg))
+            ray_optimization = instantiate(cfg)
+            ray_optimization.setup_target()
