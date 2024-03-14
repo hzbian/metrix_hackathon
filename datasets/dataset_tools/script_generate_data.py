@@ -21,7 +21,7 @@ param_container_sampler = RandomRayDatasetGenerator.build_param_container_sample
 generator = RandomRayDatasetGenerator(
     ray_engine=RayEngine(rml_basefile=CFG.RML_BASEFILE,
                          exported_planes=CFG.EXPORTED_PLANES,
-                         ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                         ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service', dockerfile_path='ray_docker/rayui',
                                                            ray_workdir=CFG.RAY_WORKDIR,
                                                            verbose=True),
                          num_workers=-1,
