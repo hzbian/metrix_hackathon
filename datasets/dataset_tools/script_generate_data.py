@@ -1,6 +1,8 @@
 import os
 import sys
 
+from sub_projects.ray_optimization.configuration import build_ray_workdir_path
+
 sys.path.insert(0, '../')
 
 from ray_tools.base.engine import RayEngine
@@ -22,7 +24,7 @@ generator = RandomRayDatasetGenerator(
     ray_engine=RayEngine(rml_basefile=CFG.RML_BASEFILE,
                          exported_planes=CFG.EXPORTED_PLANES,
                          ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service', dockerfile_path='ray_docker/rayui',
-                                                           ray_workdir=CFG.RAY_WORKDIR,
+                                                           ray_workdir=build_ray_workdir_path(CFG.RAY_WORKDIR),
                                                            verbose=True),
                          num_workers=-1,
                          as_generator=False),
