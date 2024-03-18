@@ -14,7 +14,7 @@ def bin_xy(input_hist, x_lims, y_lims, num_rays, output_bins):
         x_hist, _ = torch.histogram(scatter[0, :, 0], bins=output_bins, range=(-10., 10.))
         y_hist, _ = torch.histogram(scatter[0, :, 1], bins=output_bins, range=(-3., 3.))
     else:
-        x_hist = torch.empty([0, output_bins])
+        x_hist = torch.empty([output_bins])
         y_hist = x_hist 
     #plt.scatter(scatter[0, :, 0], scatter[0, :, 1])
     #plt.show()
