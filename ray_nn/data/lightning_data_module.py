@@ -1,9 +1,10 @@
 import pytorch_lightning as pl
+import lightning as L
 import torch
 from torch.utils.data import DataLoader, random_split
 
 
-class DefaultDataModule(pl.LightningDataModule):
+class DefaultDataModule(L.LightningDataModule):
 
     def __init__(
             self,
