@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from typing import Any
 from tqdm import tqdm, trange
 
@@ -111,9 +111,10 @@ class MemoryDataset(Dataset):
     def __init__(self, dataset: Dataset, load_len: int | None = None, **kwargs):
         super().__init__()
         if load_len is not None:
-            if load_len > len(dataset):
+            if isinstance(dataset, Sized) and load_len > len(dataset):
                 raise ValueError("Loaded length needs to be smaller or equal to dataset length.")
         else:
+            assert isinstance(dataset, Sized)
             load_len = len(dataset)
 
         self.load_len = load_len
