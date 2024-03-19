@@ -1,23 +1,31 @@
 import torch
 
 from ray_nn.utils.ray_processing import HistSubsampler
+from ray_optim.plot import Plot
+from ray_tools.base.parameter import NumericalParameter, RayParameterContainer
 
 
 class Select(torch.nn.Module):
     """
-     Torch transform for selecting the specified entries in input dict
+     Torch transform for selecting the specified entries in input dict. If you supply a search space, it will normalize the selected entries.
     """
 
-    def __init__(self, keys):
+    def __init__(self, keys, search_space=None):
         super().__init__()
         self.keys = keys
+        self.search_space = search_space
 
     def forward(self, batch):
         outputs = []
         for key in self.keys:
             new_element = batch[key]
             if isinstance(new_element, dict):
-                # TODO: might need to be extended for recursion
+                if self.search_space is not None:
+                    parameters = RayParameterContainer(
+                        {k: NumericalParameter(v) for k, v in new_element.items()}
+                    )
+                    normalized_parameter_container = Plot.normalize_parameters(parameters, search_space=self.search_space)
+                    new_element = normalized_parameter_container.to_value_dict()
                 new_element = torch.hstack([torch.tensor(i) for i in new_element.values()]).float()
             else:
                 new_element = torch.tensor(batch[key]).float().unsqueeze(-1)
