@@ -78,8 +78,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
                 ax[i, 0].plot(y_hat_nonempty[i, 50:])
                 ax[i, 1].plot(y_element[:50])
                 ax[i, 1].plot(y_hat_nonempty[i, :50])
-            ax[y_nonempty.shape[0], 0].set_xlabel('histogram_x')
-            ax[y_nonempty.shape[0], 1].set_xlabel('histogram_y')
+            ax[y_nonempty.shape[0]-1, 0].set_xlabel('histogram_x')
+            ax[y_nonempty.shape[0]-1, 1].set_xlabel('histogram_y')
             plt.tight_layout()
             wandb.log({"xy_hist_plots": plt})
         return 0
