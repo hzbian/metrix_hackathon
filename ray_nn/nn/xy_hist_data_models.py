@@ -2,17 +2,22 @@ import math
 import torch
 from torch import optim, nn, utils
 import lightning as L
+from lightning.pytorch.loggers import WandbLogger
+import matplotlib.pyplot as plt
+import wandb
 
-from ray_tools.simulation.torch_datasets import RayDataset
-
+from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
+from ray_nn.data.lightning_data_module import DefaultDataModule
+from ray_tools.simulation.torch_datasets import MemoryDataset, RayDataset
+from ray_nn.data.transform import Select
 
 # define the LightningModule
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=2, blow:float=100., shrink_factor:str='log', learning_rate:float=0.001, gpus:int=0, optimizer:str='adam', autoencoder_checkpoint:str='../../data/ae_lrelu_epoch=55-step=52527.ckpt'):
+    def __init__(self, layer_size:int=2, blow:int=0, shrink_factor:str='log', learning_rate:float=0.001, gpus:int=0, optimizer:str='adam', autoencoder_checkpoint:str='../../data/ae_lrelu_epoch=55-step=52527.ckpt'):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
-        self.net = self.create_sequential(35, 100, self.hparams.layer_size, blow=self.hparams.blow, shrink_factor=self.hparams.shrink_factor)
+        self.net = self.create_sequential(34, 100, self.hparams.layer_size, blow=self.hparams.blow, shrink_factor=self.hparams.shrink_factor)
         print(self.net)
 
     def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log"):
@@ -23,7 +28,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
         if shrink_factor == "log":
             add_layers = torch.logspace(math.log(layers[-1], 10), math.log(output_length,10), steps=layer_size+2-len(layers), base=10).long()
-            # make sure the last element is correct, even though rounding
+            # make sure the first and last element is correct, even though rounding
+            add_layers[0] = input_length
             add_layers[-1] = output_length
         elif shrink_factor == "lin":
             add_layers = torch.linspace(layers[-1], output_length, steps=layer_size+2-len(layers)).long()
@@ -48,18 +54,33 @@ class MetrixXYHistSurrogate(L.LightningModule):
                 #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
         return nn.Sequential(*nn_layers)
 
-    def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        # it is independent of forward
-        x = torch.cat(list(batch['1e5/params'].values())).float().unsqueeze(0).unsqueeze(0)
-        y = batch['1e5/histogram'].float()
-        if 0 in y.shape:
-            y = torch.zeros(torch.Size([y.size()[0], y.size()[1], 1, y.size()[-1]]))
+    def training_step(self, batch, _):
+        x, y = batch
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
         loss = nn.functional.mse_loss(y_hat, y)
         self.log("train_loss", loss)
         return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y = y.flatten(start_dim=1)
+        y_hat = self.net(x)
+        nonempty_mask = y.mean(dim=1) == 0.
+        y_nonempty = y[nonempty_mask]
+        y_hat_nonempty = y_hat[nonempty_mask]
+        if nonempty_mask.sum() > 0.:
+            _, ax = plt.subplots(len(y_nonempty), 2, squeeze=False)
+            for i, y_element in enumerate(y_nonempty[:5]):
+                ax[i, 0].plot(y_element[50:])
+                ax[i, 0].plot(y_hat_nonempty[i, 50:])
+                ax[i, 1].plot(y_element[:50])
+                ax[i, 1].plot(y_hat_nonempty[i, :50])
+            ax[len(y)-1, 0].set_xlabel('histogram_x')
+            ax[len(y)-1, 1].set_xlabel('histogram_y')
+            plt.tight_layout()
+            wandb.log({"xy_hist_plots": plt})
+        return 0
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
@@ -70,8 +91,10 @@ model = MetrixXYHistSurrogate()
 
 dataset = RayDataset(h5_files=['datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_0.h5'],
                      sub_groups=['1e5/params',
-                                 '1e5/histogram'])
-train_loader = utils.data.DataLoader(dataset)
+                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params()))
 
-trainer = L.Trainer(limit_train_batches=100, max_epochs=1)
-trainer.fit(model=model, train_dataloaders=train_loader)
+memory_dataset = MemoryDataset(dataset=dataset)
+datamodule = DefaultDataModule(dataset=memory_dataset)
+wandb_logger = WandbLogger(project="xy_hist")
+trainer = L.Trainer(limit_train_batches=100, max_epochs=1000, logger=wandb_logger, log_every_n_steps=100)
+trainer.fit(model=model, datamodule=datamodule)
