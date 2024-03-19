@@ -66,6 +66,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         x, y = batch
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
+        y = y.cpu()
+        y_hat = y_hat.cpu()
         nonempty_mask = y.mean(dim=1) == 0.
         y_nonempty = y[nonempty_mask]
         y_hat_nonempty = y_hat[nonempty_mask]
