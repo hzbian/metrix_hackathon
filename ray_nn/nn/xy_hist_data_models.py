@@ -119,5 +119,5 @@ dataset = RayDataset(h5_files=['datasets/metrix_simulation/ray_emergency_surroga
 memory_dataset = MemoryDataset(dataset=dataset)
 datamodule = DefaultDataModule(dataset=memory_dataset)
 wandb_logger = WandbLogger(project="xy_hist")
-trainer = L.Trainer(limit_train_batches=100, max_epochs=1000, logger=wandb_logger, log_every_n_steps=100)
+trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100)
 trainer.fit(model=model, datamodule=datamodule)
