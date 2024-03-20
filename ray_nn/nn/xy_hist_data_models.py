@@ -92,7 +92,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.val_loss.append(val_loss)
         return val_loss
 
-    def on_training_epoch_end(self):
+    def on_train_epoch_end(self):
         train_loss = torch.stack(self.train_loss).mean().item()
         self.log("train_loss", train_loss)
         self.train_loss.clear()
