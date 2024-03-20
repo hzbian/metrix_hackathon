@@ -68,20 +68,25 @@ class MetrixXYHistSurrogate(L.LightningModule):
         y_hat = self.net(x)
         y = y.cpu()
         y_hat = y_hat.cpu()
-        nonempty_mask = y.mean(dim=1) == 0.
+        nonempty_mask = y.mean(dim=1) != 0.
         y_nonempty = y[nonempty_mask]
         y_hat_nonempty = y_hat[nonempty_mask]
         if nonempty_mask.sum() > 0.:
             _, ax = plt.subplots(len(y_nonempty), 2, squeeze=False)
             for i, y_element in enumerate(y_nonempty[:5]):
-                ax[i, 0].plot(y_element[50:])
-                ax[i, 0].plot(y_hat_nonempty[i, 50:])
-                ax[i, 1].plot(y_element[:50])
-                ax[i, 1].plot(y_hat_nonempty[i, :50])
+                ax[i, 0].plot(y_element[50:], label='gt')
+                ax[i, 0].plot(y_hat_nonempty[i, 50:], label='prediction')
+                ax[i, 1].plot(y_element[:50], label='gt')
+                ax[i, 1].plot(y_hat_nonempty[i, :50], label='prediction')
             ax[y_nonempty.shape[0]-1, 0].set_xlabel('histogram_x')
             ax[y_nonempty.shape[0]-1, 1].set_xlabel('histogram_y')
             plt.tight_layout()
-            wandb.log({"xy_hist_plots": plt})
+            plt.legend()
+            wandb.log({"xy_hist_plots": wandb.Image(plt)})
+        loss = nn.functional.mse_loss(y_hat, y)
+        self.log("val_loss", loss)
+        nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
+        self.log("nonempty_val_loss", nonempty_loss)
         return 0
 
     def configure_optimizers(self):
