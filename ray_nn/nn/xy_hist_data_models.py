@@ -20,6 +20,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.net = self.create_sequential(34, 100, self.hparams.layer_size, blow=self.hparams.blow, shrink_factor=self.hparams.shrink_factor)
         self.val_loss = []
         self.val_nonempty_loss = []
+        self.train_loss = []
         print(self.net)
 
     def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log"):
@@ -61,7 +62,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
         loss = nn.functional.mse_loss(y_hat, y)
-        self.log("train_loss", loss)
+        self.train_loss.append(loss)
         return loss
     
     def validation_step(self, batch, batch_idx):
@@ -85,12 +86,17 @@ class MetrixXYHistSurrogate(L.LightningModule):
             plt.tight_layout()
             plt.legend()
             wandb.log({"xy_hist_plots": wandb.Image(plt)})
+            nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
+            self.val_nonempty_loss.append(nonempty_loss)
         val_loss = nn.functional.mse_loss(y_hat, y)
-        nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
         self.val_loss.append(val_loss)
-        self.val_nonempty_loss.append(nonempty_loss)
         return val_loss
-    
+
+    def on_training_epoch_end(self):
+        train_loss = torch.stack(self.train_loss).mean().item()
+        self.log("train_loss", train_loss)
+        self.train_loss.clear()
+
     def on_validation_epoch_end(self):
         val_loss = torch.stack(self.val_loss).mean().item()
         val_nonempty_loss = torch.stack(self.val_nonempty_loss).mean().item()
