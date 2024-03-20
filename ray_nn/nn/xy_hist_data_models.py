@@ -18,6 +18,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.save_hyperparameters()
 
         self.net = self.create_sequential(34, 100, self.hparams.layer_size, blow=self.hparams.blow, shrink_factor=self.hparams.shrink_factor)
+        self.val_loss = []
+        self.val_nonempty_loss = []
         print(self.net)
 
     def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log"):
@@ -71,7 +73,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         nonempty_mask = y.mean(dim=1) != 0.
         y_nonempty = y[nonempty_mask]
         y_hat_nonempty = y_hat[nonempty_mask]
-        if nonempty_mask.sum() > 0.:
+        if nonempty_mask.sum() > 0. and batch_idx == 0:
             _, ax = plt.subplots(len(y_nonempty), 2, squeeze=False)
             for i, y_element in enumerate(y_nonempty[:5]):
                 ax[i, 0].plot(y_element[50:], label='gt')
@@ -83,11 +85,19 @@ class MetrixXYHistSurrogate(L.LightningModule):
             plt.tight_layout()
             plt.legend()
             wandb.log({"xy_hist_plots": wandb.Image(plt)})
-        loss = nn.functional.mse_loss(y_hat, y)
-        self.log("val_loss", loss)
+        val_loss = nn.functional.mse_loss(y_hat, y)
         nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
-        self.log("nonempty_val_loss", nonempty_loss)
-        return 0
+        self.val_loss.append(val_loss)
+        self.val_nonempty_loss.append(nonempty_loss)
+        return val_loss
+    
+    def on_validation_epoch_end(self):
+        val_loss = torch.stack(self.val_loss).mean().item()
+        val_nonempty_loss = torch.stack(self.val_nonempty_loss).mean().item()
+        self.log("val_loss", val_loss)
+        self.log("val_nonempty_loss", val_nonempty_loss)
+        self.val_loss.clear()
+        self.val_nonempty_loss.clear()
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
