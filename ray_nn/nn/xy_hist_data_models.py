@@ -1,3 +1,4 @@
+import glob
 import math
 import torch
 from torch import optim, nn, utils
@@ -99,7 +100,10 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
     def on_validation_epoch_end(self):
         val_loss = torch.stack(self.val_loss).mean().item()
-        val_nonempty_loss = torch.stack(self.val_nonempty_loss).mean().item()
+        if len(self.val_nonempty_loss) != 0:
+            val_nonempty_loss = torch.stack(self.val_nonempty_loss).mean().item()
+        else:
+            val_nonempty_loss = float('nan')
         self.log("val_loss", val_loss)
         self.log("val_nonempty_loss", val_nonempty_loss)
         self.val_loss.clear()
@@ -111,8 +115,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
 
 model = MetrixXYHistSurrogate()
-
-dataset = RayDataset(h5_files=['datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_0.h5'],
+h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
+dataset = RayDataset(h5_files=h5_files,
                      sub_groups=['1e5/params',
                                  '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params()))
 
