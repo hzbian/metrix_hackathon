@@ -14,11 +14,11 @@ from ray_nn.data.transform import Select
 
 # define the LightningModule
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=2, blow:int=0, shrink_factor:str='log', learning_rate:float=0.001, gpus:int=0, optimizer:str='adam', autoencoder_checkpoint:str='../../data/ae_lrelu_epoch=55-step=52527.ckpt'):
+    def __init__(self, layer_size:int=2, blow:int=0, shrink_factor:str='log', learning_rate:float=0.001, gpus:int=0, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
-        self.net = self.create_sequential(34, 100, self.hparams.layer_size, blow=self.hparams.blow, shrink_factor=self.hparams.shrink_factor)
+        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor)
         self.val_loss = []
         self.val_nonempty_loss = []
         self.train_loss = []
@@ -52,7 +52,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
         nn_layers = []
         for i in range(len(layers)-1):
-            nn_layers.append(nn.Linear(layers[i].item(), layers[i+1].item()))
+            nn_layers.append(nn.Linear(int(layers[i].item()), int(layers[i+1].item())))
             if not i == len(layers)-2:
                 nn_layers.append(nn.ReLU())
                 #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
@@ -113,15 +113,30 @@ class MetrixXYHistSurrogate(L.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
+class StandardizeXYHist(torch.nn.Module):
+    def forward(self, element):
+        element_min = element.min(dim=1)[0].unsqueeze(-1)
+        element_max = element.max(dim=1)[0].unsqueeze(-1)
+        # we want to avoid nan if min equals max
+        nonequal_mask = (element_min != element_max).squeeze()
+        element[nonequal_mask] = (element[nonequal_mask] - element_min[nonequal_mask]) / (element_max[nonequal_mask] - element_min[nonequal_mask])
+        return element
 
-model = MetrixXYHistSurrogate()
+load_len: int | None = None
+dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
                      sub_groups=['1e5/params',
-                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params()))
+                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params(), non_dict_transform=StandardizeXYHist()))
 
-memory_dataset = MemoryDataset(dataset=dataset)
+memory_dataset = MemoryDataset(dataset=dataset, load_len=load_len)
 datamodule = DefaultDataModule(dataset=memory_dataset)
-wandb_logger = WandbLogger(project="xy_hist")
+datamodule.prepare_data()
+datamodule.setup(stage="fit")
+model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
+wandb_logger = WandbLogger(project="xy_hist", save_dir='outputs')
 trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100)
 trainer.fit(model=model, datamodule=datamodule)
+
+#datamodule.setup(stage="test")
+#trainer.test(datamodule=datamodule)
