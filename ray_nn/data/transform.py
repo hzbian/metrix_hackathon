@@ -7,13 +7,14 @@ from ray_tools.base.parameter import NumericalParameter, RayParameterContainer
 
 class Select(torch.nn.Module):
     """
-     Torch transform for selecting the specified entries in input dict. If you supply a search space, it will normalize the selected entries.
+     Torch transform for selecting the specified entries in input dict. If you supply a search space, it will normalize the selected entries, that are dicts. If you want to 
     """
 
-    def __init__(self, keys, search_space=None):
+    def __init__(self, keys, search_space=None, normalize_non_dict_per_entry=False):
         super().__init__()
         self.keys = keys
         self.search_space = search_space
+        self.normalize_non_dict_per_entry = normalize_non_dict_per_entry
 
     def forward(self, batch):
         outputs = []
@@ -29,6 +30,8 @@ class Select(torch.nn.Module):
                 new_element = torch.hstack([torch.tensor(i) for i in new_element.values()]).float()
             else:
                 new_element = torch.tensor(batch[key]).float().unsqueeze(-1)
+                if self.normalize_non_dict_per_entry:
+                    new_element = (new_element - new_element.min()) / (new_element.max()-new_element.min())
             outputs.append(new_element)
         return tuple(outputs)
 
