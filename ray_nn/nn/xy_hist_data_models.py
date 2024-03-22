@@ -14,7 +14,7 @@ from ray_nn.data.transform import Select
 
 # define the LightningModule
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=2, blow:int=0, shrink_factor:str='log', learning_rate:float=0.001, gpus:int=0, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False):
+    def __init__(self, layer_size:int=2, blow:int=0, shrink_factor:str='log', learning_rate:float=0.001, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
