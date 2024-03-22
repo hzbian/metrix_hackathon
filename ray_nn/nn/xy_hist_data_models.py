@@ -142,7 +142,7 @@ datamodule.prepare_data()
 datamodule.setup(stage="fit")
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
 wandb_logger = WandbLogger(project="xy_hist", save_dir='outputs')
-trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100)
+trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=25)
 trainer.fit(model=model, datamodule=datamodule)
 
 #datamodule.setup(stage="test")
