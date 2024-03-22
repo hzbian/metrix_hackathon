@@ -22,6 +22,9 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.val_loss = []
         self.val_nonempty_loss = []
         self.train_loss = []
+        self.validation_plot_len = 5
+        self.validation_y_plot_data = torch.tensor([])
+        self.validation_y_hat_plot_data = torch.tensor([])
         print(self.net)
 
     def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log"):
@@ -75,18 +78,10 @@ class MetrixXYHistSurrogate(L.LightningModule):
         nonempty_mask = y.mean(dim=1) != 0.
         y_nonempty = y[nonempty_mask]
         y_hat_nonempty = y_hat[nonempty_mask]
-        if nonempty_mask.sum() > 0. and batch_idx == 0:
-            _, ax = plt.subplots(len(y_nonempty), 2, squeeze=False)
-            for i, y_element in enumerate(y_nonempty[:5]):
-                ax[i, 0].plot(y_element[50:], label='gt')
-                ax[i, 0].plot(y_hat_nonempty[i, 50:], label='prediction')
-                ax[i, 1].plot(y_element[:50], label='gt')
-                ax[i, 1].plot(y_hat_nonempty[i, :50], label='prediction')
-            ax[y_nonempty.shape[0]-1, 0].set_xlabel('histogram_x')
-            ax[y_nonempty.shape[0]-1, 1].set_xlabel('histogram_y')
-            plt.tight_layout()
-            plt.legend()
-            wandb.log({"xy_hist_plots": wandb.Image(plt)})
+        if nonempty_mask.sum() > 0. and self.validation_y_plot_data.shape[0] < self.validation_plot_len:
+            append_len = self.validation_plot_len - self.validation_y_plot_data.shape[0]
+            self.validation_y_plot_data = torch.cat([self.validation_y_plot_data, y_nonempty[:append_len]])
+            self.validation_y_hat_plot_data = torch.cat([self.validation_y_hat_plot_data, y_hat_nonempty[:append_len]])
             nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
             self.val_nonempty_loss.append(nonempty_loss)
         val_loss = nn.functional.mse_loss(y_hat, y)
@@ -108,6 +103,18 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.log("val_nonempty_loss", val_nonempty_loss)
         self.val_loss.clear()
         self.val_nonempty_loss.clear()
+        if len(self.validation_y_plot_data) > 0:
+            _, ax = plt.subplots(len(self.validation_y_plot_data), 2, squeeze=False)
+            for i, y_element in enumerate(self.validation_y_plot_data):
+                ax[i, 0].plot(y_element[50:], label='gt')
+                ax[i, 0].plot(self.validation_y_hat_plot_data[i, 50:], label='prediction')
+                ax[i, 1].plot(y_element[:50], label='gt')
+                ax[i, 1].plot(self.validation_y_hat_plot_data[i, :50], label='prediction')
+            ax[self.validation_y_plot_data.shape[0]-1, 0].set_xlabel('histogram_x')
+            ax[self.validation_y_plot_data.shape[0]-1, 1].set_xlabel('histogram_y')
+            plt.tight_layout()
+            plt.legend()
+            wandb.log({"xy_hist_plots": wandb.Image(plt)})
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
