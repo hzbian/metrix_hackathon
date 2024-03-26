@@ -1,7 +1,7 @@
 import glob
 import math
 import torch
-from torch import optim, nn, utils
+from torch import optim, nn
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 import matplotlib.pyplot as plt
@@ -12,9 +12,8 @@ from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_tools.simulation.torch_datasets import MemoryDataset, RayDataset
 from ray_nn.data.transform import Select
 
-# define the LightningModule
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=2, blow:int=0, shrink_factor:str='log', learning_rate:float=0.001, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False):
+    def __init__(self, layer_size:int=6, blow=4.0, shrink_factor:str='log', learning_rate:float=0.001, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
@@ -82,11 +81,18 @@ class MetrixXYHistSurrogate(L.LightningModule):
             append_len = self.validation_plot_len - self.validation_y_plot_data.shape[0]
             self.validation_y_plot_data = torch.cat([self.validation_y_plot_data, y_nonempty[:append_len]])
             self.validation_y_hat_plot_data = torch.cat([self.validation_y_hat_plot_data, y_hat_nonempty[:append_len]])
+        if nonempty_mask.sum() > 0.:
             nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
             self.val_nonempty_loss.append(nonempty_loss)
         val_loss = nn.functional.mse_loss(y_hat, y)
         self.val_loss.append(val_loss)
         return val_loss
+    
+    def test_step(self, batch, batch_idx):
+        return self.validation_step(batch, batch_idx)
+    
+    def on_test_epoch_end(self):
+        self.on_validation_epoch_end()
 
     def on_train_epoch_end(self):
         train_loss = torch.stack(self.train_loss).mean().item()
@@ -122,14 +128,14 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
 class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
-        element_min = element.min(dim=1)[0].unsqueeze(-1)
-        element_max = element.max(dim=1)[0].unsqueeze(-1)
+        #element_min = element.min(dim=1)[0].unsqueeze(-1)
+        #element_max = element.max(dim=1)[0].unsqueeze(-1)
         # we want to avoid nan if min equals max
-        nonequal_mask = (element_min != element_max).squeeze()
-        element[nonequal_mask] = (element[nonequal_mask] - element_min[nonequal_mask]) / (element_max[nonequal_mask] - element_min[nonequal_mask])
+        #nonequal_mask = (element_min != element_max).squeeze()
+        #element[nonequal_mask] = (element[nonequal_mask] - element_min[nonequal_mask]) / (element_max[nonequal_mask] - element_min[nonequal_mask])
         return element
 
-load_len: int | None = None
+load_len: int | None =  100
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
@@ -137,13 +143,26 @@ dataset = RayDataset(h5_files=h5_files,
                                  '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params(), non_dict_transform=StandardizeXYHist()))
 
 memory_dataset = MemoryDataset(dataset=dataset, load_len=load_len)
+new_min = torch.tensor([float('inf')])
+new_max = torch.tensor([float('-inf')])
+for x,y in memory_dataset:
+    min = y.min(dim=1)[0]
+    max = y.max(dim=1)[0]
+    new_min = torch.min(min, new_min)
+    new_max = torch.max(max, new_max)
+print(new_min, new_max)
 datamodule = DefaultDataModule(dataset=memory_dataset)
 datamodule.prepare_data()
-datamodule.setup(stage="fit")
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
+test = False
 wandb_logger = WandbLogger(project="xy_hist", save_dir='outputs')
-trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=25)
-trainer.fit(model=model, datamodule=datamodule)
+if test:
+    datamodule.setup(stage="test")
+else:
+    datamodule.setup(stage="fit")
 
-#datamodule.setup(stage="test")
-#trainer.test(datamodule=datamodule)
+trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=25)
+if test:
+    trainer.test(datamodule=datamodule, ckpt_path='outputs/xy_hist/on2yv96j/checkpoints/epoch=999-step=25000000.ckpt', model=model)
+else:
+    trainer.fit(model=model, datamodule=datamodule)
