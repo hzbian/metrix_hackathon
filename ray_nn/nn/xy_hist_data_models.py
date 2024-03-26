@@ -60,7 +60,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
                 #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
         return nn.Sequential(*nn_layers)
 
-    def training_step(self, batch, _):
+    def training_step(self, batch):
         x, y = batch
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
@@ -68,7 +68,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.train_loss.append(loss)
         return loss
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         x, y = batch
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
@@ -88,8 +88,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.val_loss.append(val_loss)
         return val_loss
     
-    def test_step(self, batch, batch_idx):
-        return self.validation_step(batch, batch_idx)
+    def test_step(self, batch):
+        return self.validation_step(batch)
     
     def on_test_epoch_end(self):
         self.on_validation_epoch_end()
@@ -128,30 +128,17 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
 class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
-        #element_min = element.min(dim=1)[0].unsqueeze(-1)
-        #element_max = element.max(dim=1)[0].unsqueeze(-1)
-        # we want to avoid nan if min equals max
-        #nonequal_mask = (element_min != element_max).squeeze()
-        #element[nonequal_mask] = (element[nonequal_mask] - element_min[nonequal_mask]) / (element_max[nonequal_mask] - element_min[nonequal_mask])
-        return element
+        return element / 22594.
 
-load_len: int | None =  100
+load_len: int | None =  None
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
                      sub_groups=['1e5/params',
-                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params(), non_dict_transform=StandardizeXYHist()))
+                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params())) #, non_dict_transform=StandardizeXYHist()))
 
 memory_dataset = MemoryDataset(dataset=dataset, load_len=load_len)
-new_min = torch.tensor([float('inf')])
-new_max = torch.tensor([float('-inf')])
-for x,y in memory_dataset:
-    min = y.min(dim=1)[0]
-    max = y.max(dim=1)[0]
-    new_min = torch.min(min, new_min)
-    new_max = torch.max(max, new_max)
-print(new_min, new_max)
-datamodule = DefaultDataModule(dataset=memory_dataset)
+datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
 test = False
