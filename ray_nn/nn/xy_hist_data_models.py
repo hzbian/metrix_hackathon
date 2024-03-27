@@ -14,11 +14,11 @@ from ray_tools.simulation.torch_datasets import MemoryDataset, RayDataset
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=6, blow=4.0, shrink_factor:str='log', learning_rate:float=0.001, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False):
+    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=0.001, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid()):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
-        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Sigmoid())
+        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.ReLU(), last_activation=last_activation)
         self.val_loss = []
         self.val_nonempty_loss = []
         self.train_loss = []
@@ -27,7 +27,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_hat_plot_data = torch.tensor([])
         print(self.net)
 
-    def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log", activation_function: Module=nn.ReLU()):
+    def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None):
         layers = [input_length]
         blow_disabled = blow == 1 or blow == 0
         if not blow_disabled:
@@ -59,6 +59,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
             if not i == len(layers)-2:
                 nn_layers.append(activation_function)
                 #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
+            if i == len(layers)-2:
+                nn_layers.append(last_activation)
         return nn.Sequential(*nn_layers)
 
     def training_step(self, batch):
@@ -131,7 +133,7 @@ class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
         return element / 22594.
 
-load_len: int | None =  None
+load_len: int | None = None
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
