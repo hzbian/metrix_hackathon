@@ -10,7 +10,7 @@ from ray_tools.simulation.data_tools import RandomRayDatasetGenerator
 from ray_tools.base.parameter import build_parameter_grid
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-import datasets.metrix_simulation.config_ray_enhance_final as CFG
+import datasets.metrix_simulation.config_ray_emergency_surrogate as CFG
 
 os.makedirs(CFG.H5_DATADIR, exist_ok=True)
 
