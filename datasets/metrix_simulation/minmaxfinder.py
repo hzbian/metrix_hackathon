@@ -3,7 +3,7 @@ import glob
 from tqdm import tqdm
 
 if __name__ == '__main__':
-    file_list = list(glob.iglob('data_raw_*.h5'))
+    file_list = list(glob.iglob('ray_emergency_surrogate/data_raw_*.h5'))
     x_min = float('inf')
     y_min = float('inf')
     x_max = -float('inf')
