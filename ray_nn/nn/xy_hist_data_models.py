@@ -135,7 +135,7 @@ dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
                      sub_groups=['1e5/params',
-                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params())) #, non_dict_transform=StandardizeXYHist()))
+                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params(), non_dict_transform=StandardizeXYHist()))
 
 memory_dataset = MemoryDataset(dataset=dataset, load_len=load_len)
 datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
