@@ -5,6 +5,7 @@ from torch import optim, nn
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 import matplotlib.pyplot as plt
+from torch.nn import Module
 import wandb
 
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
@@ -17,7 +18,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
-        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor)
+        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Sigmoid())
         self.val_loss = []
         self.val_nonempty_loss = []
         self.train_loss = []
@@ -26,7 +27,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_hat_plot_data = torch.tensor([])
         print(self.net)
 
-    def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log"):
+    def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log", activation_function: Module=nn.ReLU()):
         layers = [input_length]
         blow_disabled = blow == 1 or blow == 0
         if not blow_disabled:
@@ -56,7 +57,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         for i in range(len(layers)-1):
             nn_layers.append(nn.Linear(int(layers[i].item()), int(layers[i+1].item())))
             if not i == len(layers)-2:
-                nn_layers.append(nn.ReLU())
+                nn_layers.append(activation_function)
                 #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
         return nn.Sequential(*nn_layers)
 
