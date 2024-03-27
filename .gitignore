@@ -1,5 +1,6 @@
 datasets/metrix_real_world
 datasets/metrix_simulation/ray_enhance
+datasets/metrix_simulation/ray_emergency_surrogate
 /ray_docker/rayui/RAY-UI-development/
 sub_projects/testing/plots
 .idea
