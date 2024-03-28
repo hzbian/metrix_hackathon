@@ -101,7 +101,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
             append_len = self.validation_plot_len - self.validation_y_empty_plot_data.shape[0]
             self.validation_y_empty_plot_data = torch.cat([self.validation_y_empty_plot_data,  y[empty_mask][:append_len]])
             self.validation_y_hat_empty_plot_data = torch.cat([self.validation_y_hat_empty_plot_data,  y_hat[empty_mask][:append_len]])
-        if empty_mask.sum() > 0.:
+        if (~empty_mask.sum()) > 0.:
             nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
             self.val_nonempty_loss.append(nonempty_loss)
         val_loss = nn.functional.mse_loss(y_hat, y)
