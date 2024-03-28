@@ -101,7 +101,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
             append_len = self.validation_plot_len - self.validation_y_empty_plot_data.shape[0]
             self.validation_y_empty_plot_data = torch.cat([self.validation_y_empty_plot_data,  y[empty_mask][:append_len]])
             self.validation_y_hat_empty_plot_data = torch.cat([self.validation_y_hat_empty_plot_data,  y_hat[empty_mask][:append_len]])
-        if (~empty_mask.sum()) > 0.:
+        if (~empty_mask).sum() > 0.:
             nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
             self.val_nonempty_loss.append(nonempty_loss)
         val_loss = nn.functional.mse_loss(y_hat, y)
@@ -172,7 +172,7 @@ class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
         return element / 2500.
 
-load_len: int | None = 100
+load_len: int | None = 1000
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
@@ -184,7 +184,7 @@ datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
 test = False
-wandb_logger = WandbLogger(name="reference", project="xy_hist", save_dir='outputs')
+wandb_logger = WandbLogger(name="1k_reference", project="xy_hist", save_dir='outputs')
 #wandb_logger = None
 if test:
     datamodule.setup(stage="test")
