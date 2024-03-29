@@ -14,7 +14,7 @@ from ray_tools.simulation.torch_datasets import MemoryDataset, RayDataset
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=0.001, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid()):
+    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid()):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
@@ -23,6 +23,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.val_nonempty_loss = []
         self.train_loss = []
         self.validation_plot_len = 5
+        self.learning_rate = learning_rate
         self.register_buffer("validation_y_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_hat_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_empty_plot_data", torch.tensor([]))
@@ -33,7 +34,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.register_buffer("train_y_hat_plot_data", torch.tensor([]))
         print(self.net)
 
-    def create_sequential(self, input_length, output_length, layer_size, blow=0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None):
+    def create_sequential(self, input_length, output_length, layer_size, blow: int | float =0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None):
         layers = [input_length]
         blow_disabled = blow == 1 or blow == 0
         if not blow_disabled:
@@ -165,7 +166,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_hat_empty_plot_data = torch.tensor([]).to(self.validation_y_empty_plot_data)
         self.validation_y_empty_plot_data = torch.tensor([]).to(self.validation_y_hat_empty_plot_data)
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
 
 class StandardizeXYHist(torch.nn.Module):
@@ -184,14 +185,14 @@ datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
 test = False
-wandb_logger = WandbLogger(name="1k_reference", project="xy_hist", save_dir='outputs')
+wandb_logger = WandbLogger(name="ref", project="xy_hist", save_dir='outputs')
 #wandb_logger = None
 if test:
     datamodule.setup(stage="test")
 else:
     datamodule.setup(stage="fit")
 
-trainer = L.Trainer(max_epochs=1000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=30)
+trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=30)
 trainer.init_module()
 
 if test:
