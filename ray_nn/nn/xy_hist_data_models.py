@@ -4,6 +4,7 @@ import torch
 from torch import optim, nn
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import LearningRateMonitor
 import matplotlib.pyplot as plt
 from torch.nn import Module
 import wandb
@@ -192,7 +193,8 @@ if test:
 else:
     datamodule.setup(stage="fit")
 
-trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=30)
+lr_monitor = LearningRateMonitor(logging_interval='step')
+trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=30, callbacks=[lr_monitor])
 trainer.init_module()
 
 if test:
