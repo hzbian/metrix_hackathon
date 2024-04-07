@@ -4,6 +4,7 @@ import torch
 from torch import optim, nn
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
+from torch.optim.lr_scheduler import ExponentialLR
 from lightning.pytorch.callbacks import LearningRateMonitor
 import matplotlib.pyplot as plt
 from torch.nn import Module
@@ -15,7 +16,7 @@ from ray_tools.simulation.torch_datasets import MemoryDataset, RayDataset
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid()):
+    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler:bool=True):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters()
 
@@ -25,6 +26,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.train_loss = []
         self.validation_plot_len = 5
         self.learning_rate = learning_rate
+        self.lr_scheduler = lr_scheduler
         self.register_buffer("validation_y_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_hat_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_empty_plot_data", torch.tensor([]))
@@ -168,13 +170,23 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_empty_plot_data = torch.tensor([]).to(self.validation_y_hat_empty_plot_data)
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+        if self.lr_scheduler:
+                return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": ExponentialLR(optimizer, gamma=0.99),
+                    "frequency": 1,
+            # If "monitor" references validation metrics, then "frequency" should be set to a
+            # multiple of "trainer.check_val_every_n_epoch".
+                },
+            }
         return optimizer
 
 class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
         return element / 2500.
 
-load_len: int | None = 1000
+load_len: int | None = None
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
