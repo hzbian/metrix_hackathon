@@ -56,4 +56,4 @@ transforms:
   _target_: "ray_tools.base.transform.MultiLayer"
   dist_layers: ${target_configuration.z_layers}
   copy_directions: False
-logging_project: "metrix"
+logging_project: "metrix_u_asbl"
