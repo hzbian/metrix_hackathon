@@ -27,7 +27,8 @@ class TargetConfiguration:
                  logging_project: str | None = None,
                  z_layers: list[float] = [0.,],
                  transforms: RayTransform | None = None,
-                 real_data_configuration: RealDataConfiguration | None = None):
+                 real_data_configuration: RealDataConfiguration | None = None,
+                 load_target_path: str | None = None):
         self.max_offset_search_deviation: float = max_offset_search_deviation
         self.z_layers = z_layers
         self.transforms: RayTransform | None = transforms
@@ -39,6 +40,7 @@ class TargetConfiguration:
         self.param_func: Callable = param_func
         self.real_data_configuration = real_data_configuration
         self.logging_project = logging_project
+        self.load_target_path = load_target_path
 
 def params_to_func(parameters, rg: RandomGenerator | None = None, enforce_lims_keys: list[str] = [],
                    output_parameters: list[str] = [], fixed_parameters: list[str] = [], mutable_only: bool = False) -> Callable[[], RayParameterContainer]:

@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import hydra
 from hydra.utils import instantiate
@@ -174,6 +175,31 @@ class RayOptimization:
             transforms=self.create_initial_transforms(uncompensated_parameters),
         )
         return uncompensated_rays
+    
+    def load_offset_target(self):
+        import torch
+        assert self.target_configuration.load_target_path is not None
+        with open(self.target_configuration.load_target_path, "rb") as input_file:
+            offset_target = pickle.load(input_file)
+            #acceptable_indices = torch.arange(400)[(torch.tensor([i.shape[1] for i in offset_target.uncompensated_rays_cpu_tensor])>1000)]
+
+            #for shrink_list in [offset_target.uncompensated_rays, offset_target.observed_rays, offset_target.uncompensated_parameters]:
+            #    shrink_list = [j for i, j in enumerate(shrink_list) if i in acceptable_indices]
+            
+            #offset_target.recalculate_cpu_tensors('ImagePlane')
+        return offset_target
+    
+    def save_offset_target(self, offset_target):
+        for space in [offset_target.search_space, offset_target._search_space, offset_target.unscaled_search_space, offset_target.target_params]:
+            for i in space.values():
+                if isinstance(i, RandomParameter):
+                    i.rg = None
+        for parameter_lists in [offset_target.uncompensated_parameters]:
+            for element in parameter_lists:
+                for i in element.values():
+                    if isinstance(i, RandomParameter):
+                        i.rg = None
+        return offset_target
 
     def create_simulated_target(self):
         target_compensation = self.create_target_compensation()
@@ -252,7 +278,10 @@ class RayOptimization:
 
     def setup_target(self):
         if self.real_data_configuration is None:
-            self.target = self.create_simulated_target()
+            if self.target_configuration.load_target_path is None: 
+                self.target = self.create_simulated_target()
+            else:
+                self.target = self.load_offset_target()
         else:
             self.target = self.create_real_target()
 
