@@ -75,7 +75,7 @@ class RandomParameter(MutableParameter):
     """
 
     def __init__(self, value_lims: tuple[float, float], rg: RandomGenerator | None = None, enforce_lims: bool = False):
-        self.rg = rg if rg is not None else RandomGenerator()
+        self.rg: RandomGenerator | None = rg if rg is not None else RandomGenerator()
         assert self.rg.rg_random is not None
         value = self.rg.rg_random.uniform(*value_lims)
         super().__init__(value, value_lims, enforce_lims=enforce_lims)
@@ -84,6 +84,7 @@ class RandomParameter(MutableParameter):
         """
         Resample value from value_lims.
         """
+        assert self.rg is not None
         assert self.rg.rg_random is not None
         self.value = self.rg.rg_random.uniform(*self.value_lims)
 
