@@ -30,7 +30,7 @@ generator = RandomRayDatasetGenerator(
                          as_generator=False),
     param_container_sampler=param_container_sampler,
     h5_datadir=CFG.H5_DATADIR,
-    h5_basename='data_raw_'+str(CFG.SEED)+'_',
+    h5_basename='data_raw_'+str(CFG.SEED),
     h5_max_size=CFG.H5_MAX_SIZE)
 
 h5_failed = []
