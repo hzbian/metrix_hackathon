@@ -26,7 +26,6 @@ class RayBackendTest():
         self.n_rays = 100
         n_examples = 2
         load_target_path = 'datasets/metrix_simulation/shrinked_offset_target.pkl'
-        load_target_path = 'shrinked_offset_target.pkl'
 
         self.rg = RandomGenerator(seed=42)
         self.dist_layers = [-25., -20., -15., -10., -5., 0., 5., 10., 15., 20., 25., 30.]
