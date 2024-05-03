@@ -181,12 +181,12 @@ class RayOptimization:
         assert self.target_configuration.load_target_path is not None
         with open(self.target_configuration.load_target_path, "rb") as input_file:
             offset_target = pickle.load(input_file)
-            #acceptable_indices = torch.arange(400)[(torch.tensor([i.shape[1] for i in offset_target.uncompensated_rays_cpu_tensor])>1000)]
+            #acceptable_indices = torch.arange(400)[(torch.tensor([i.shape[1] for i in offset_target.observed_rays_cpu_tensor])>500)]
 
             #for shrink_list in [offset_target.uncompensated_rays, offset_target.observed_rays, offset_target.uncompensated_parameters]:
             #    shrink_list = [j for i, j in enumerate(shrink_list) if i in acceptable_indices]
             
-            #offset_target.recalculate_cpu_tensors('ImagePlane')
+            offset_target.recalculate_cpu_tensors('ImagePlane')
         return offset_target
     
     def save_offset_target(self, offset_target):
