@@ -31,7 +31,8 @@ class Select(torch.nn.Module):
             else:
                 new_element = torch.tensor(batch[key]).float().unsqueeze(-1)
                 if self.non_dict_transform is not None:
-                    new_element = self.non_dict_transform(new_element)
+                    if key in self.non_dict_transform:
+                        new_element = self.non_dict_transform[key](new_element)
 
             outputs.append(new_element)
         return tuple(outputs)
