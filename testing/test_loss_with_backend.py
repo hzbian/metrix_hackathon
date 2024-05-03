@@ -84,6 +84,7 @@ class RayBackendTest():
                 plt.hist(mse_loss_tensor[i])
                 plt.hist(mse_self_loss_tensor[i])
                 plt.savefig('outputs/loss_dist_hist_mse_'+str(i)+'.png')
+                plt.clf()
                 plt.hist(sinkhorn_loss_tensor[i])
                 plt.hist(sinkhorn_self_loss_tensor[i])
                 plt.savefig('outputs/loss_dist_hist_sinkhorn_'+str(i)+'.png')
