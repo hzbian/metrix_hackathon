@@ -174,7 +174,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
                 return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
-                    "scheduler": ExponentialLR(optimizer, gamma=0.99),
+                    "scheduler": ExponentialLR(optimizer, gamma=0.999),
                     "frequency": 1,
             # If "monitor" references validation metrics, then "frequency" should be set to a
             # multiple of "trainer.check_val_every_n_epoch".
@@ -186,7 +186,7 @@ class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
         return element / 2500.
 
-load_len: int | None = 1000
+load_len: int | None = None
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
@@ -198,7 +198,7 @@ datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
 test = False
-wandb_logger = WandbLogger(name="ref", project="xy_hist", save_dir='outputs')
+wandb_logger = WandbLogger(name="ref_bal_500_sch_.999", project="xy_hist", save_dir='outputs')
 #wandb_logger = None
 if test:
     datamodule.setup(stage="test")
