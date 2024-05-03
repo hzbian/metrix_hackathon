@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sized
+import math
 from typing import Any
 from tqdm import tqdm, trange
 
@@ -126,6 +127,37 @@ class MemoryDataset(Dataset):
     def __len__(self) -> int:
         return self.load_len
 
+class BalancedMemoryDataset(Dataset):
+    def __init__(self, dataset: Dataset, load_len: int | None = None, min_n_rays: int = 1000, good_samples_per_bad: int = 3, **kwargs):
+        super().__init__()
+        self.min_n_rays = min_n_rays
+        if load_len is not None:
+            if isinstance(dataset, Sized) and load_len > len(dataset):
+                raise ValueError("Loaded length needs to be smaller or equal to dataset length.")
+        else:
+            assert isinstance(dataset, Sized)
+            load_len = len(dataset)
+
+        self.load_len = load_len
+        self.good = []
+        self.bad = []
+        for idx in trange(load_len):
+            new_item = dataset.__getitem__(idx, **kwargs)
+            if new_item[2] >= min_n_rays:
+                self.good.append(new_item[:2])
+            else:
+                self.bad.append(new_item[:2])
+        if not len(self.good) > 0 or not len(self.bad) > 0:
+            raise Exception("Make sure that there are good and bad samples in your dataset.")
+
+    def __getitem__(self, idx: int) -> Any:
+        if idx%(self.min_n_rays+1) == 0:
+            return self.bad[(idx//(self.min_n_rays+1)) % len(self.bad)]
+        else:
+            return self.good[(idx - 1 - idx//(self.min_n_rays+1)) % len(self.good)]
+
+    def __len__(self) -> int:
+        return max(len(self.bad)*(self.min_n_rays+1), math.ceil(len(self.good) / self.min_n_rays * (self.min_n_rays+1)))
 
 def extract_field(dataset: RayDataset, field: str) -> list[Any]:
     data = len(dataset) * [None]

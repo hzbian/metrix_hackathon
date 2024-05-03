@@ -12,7 +12,7 @@ import wandb
 
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
 from ray_nn.data.lightning_data_module import DefaultDataModule
-from ray_tools.simulation.torch_datasets import MemoryDataset, RayDataset
+from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
@@ -186,14 +186,14 @@ class StandardizeXYHist(torch.nn.Module):
     def forward(self, element):
         return element / 2500.
 
-load_len: int | None = None
+load_len: int | None = 1000
 dataset_normalize_outputs = True
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
 dataset = RayDataset(h5_files=h5_files,
                      sub_groups=['1e5/params',
-                                 '1e5/histogram'], transform=Select(keys=['1e5/params', '1e5/histogram'], search_space=params(), non_dict_transform=StandardizeXYHist()))
+                                 '1e5/histogram', '1e5/n_rays'], transform=Select(keys=['1e5/params', '1e5/histogram', '1e5/n_rays'], search_space=params(), non_dict_transform={'1e5/histogram': StandardizeXYHist()}))
 
-memory_dataset = MemoryDataset(dataset=dataset, load_len=load_len)
+memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=500)
 datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
 model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
