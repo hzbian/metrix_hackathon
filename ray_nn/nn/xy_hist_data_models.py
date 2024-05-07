@@ -21,9 +21,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.save_hyperparameters()
 
         self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.ReLU(), last_activation=last_activation)
-        self.val_loss = []
-        self.val_nonempty_loss = []
-        self.train_loss = []
         self.validation_plot_len = 5
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
@@ -78,7 +75,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
         loss = nn.functional.mse_loss(y_hat, y)
-        self.train_loss.append(loss)
+        self.log("train_loss", loss, prog_bar=True, logger=True)
         empty_mask = y.mean(dim=1) == 0.
         if (~empty_mask).sum() > 0. and self.train_y_plot_data.shape[0] < self.validation_plot_len:
             append_len = self.validation_plot_len - self.train_y_plot_data.shape[0]
@@ -107,9 +104,9 @@ class MetrixXYHistSurrogate(L.LightningModule):
             self.validation_y_hat_empty_plot_data = torch.cat([self.validation_y_hat_empty_plot_data,  y_hat[empty_mask][:append_len]])
         if (~empty_mask).sum() > 0.:
             nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
-            self.val_nonempty_loss.append(nonempty_loss)
+            self.log("val_nonempty_loss", nonempty_loss, prog_bar=True, logger=True)
         val_loss = nn.functional.mse_loss(y_hat, y)
-        self.val_loss.append(val_loss)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True)
         return val_loss
     
     def test_step(self, batch):
@@ -118,12 +115,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
     def on_test_epoch_end(self):
         self.on_validation_epoch_end()
 
-    def on_train_epoch_end(self):
-        train_loss = torch.stack(self.train_loss).mean().item()
-        self.log("train_loss", train_loss)
-        self.train_loss.clear()
-
-    
     @staticmethod
     def plot_data(prediction, ground_truth):
         fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False)
@@ -147,15 +138,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
             plt.close(fig)
 
     def on_validation_epoch_end(self):
-        val_loss = torch.stack(self.val_loss).mean().item()
-        if len(self.val_nonempty_loss) != 0:
-            val_nonempty_loss = torch.stack(self.val_nonempty_loss).mean().item()
-        else:
-            val_nonempty_loss = float('nan')
-        self.log("val_loss", val_loss)
-        self.log("val_nonempty_loss", val_nonempty_loss)
-        self.val_loss.clear()
-        self.val_nonempty_loss.clear()
         MetrixXYHistSurrogate.create_plot('validation', self.validation_y_hat_plot_data, self.validation_y_plot_data)
         MetrixXYHistSurrogate.create_plot('train', self.train_y_hat_plot_data, self.train_y_plot_data)
         MetrixXYHistSurrogate.create_plot('validation_empty', self.validation_y_hat_empty_plot_data, self.validation_y_empty_plot_data)
@@ -206,7 +188,7 @@ else:
     datamodule.setup(stage="fit")
 
 lr_monitor = LearningRateMonitor(logging_interval='step')
-trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=30, callbacks=[lr_monitor])
+trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=1, callbacks=[lr_monitor])
 trainer.init_module()
 
 if test:
