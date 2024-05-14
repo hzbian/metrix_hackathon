@@ -164,6 +164,18 @@ class RayParameterContainer(OrderedDict[str, RayParameter]):
         for key, param in self.items():
             dict_copy[key] = param.clone()
         return dict_copy
+    
+    def clone_mutable(self) -> RayParameterContainer:
+        """
+        :return: Deep copy mutable elements of container.
+        """
+        dict_copy = self.copy()
+        for key, param in self.items():
+            if isinstance(param, MutableParameter):
+                dict_copy[key] = param.clone()
+            else:
+                del dict_copy[key] 
+        return dict_copy
 
     def perturb(self, perturbation_dict: RayParameterContainer):
         for k, v in perturbation_dict.items():
