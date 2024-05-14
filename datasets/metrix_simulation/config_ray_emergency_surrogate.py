@@ -1,7 +1,7 @@
 import os
 
 from definitions import ROOT_DIR
-from ray_tools.base.parameter import RandomParameter, GridParameter, RayParameterContainer
+from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
 from ray_tools.base.transform import Histogram, RayTransformConcat
 from ray_tools.base.utils import RandomGenerator
 
@@ -28,7 +28,7 @@ TRANSFORMS = [
 ]
 
 PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
-    ('U41_318eV.numberRays', GridParameter(value=[[float(n) for n in N_RAYS]])),
+    ('U41_318eV.numberRays', NumericalParameter(value=float(N_RAYS[0]))),
     ('U41_318eV.translationXerror', RandomParameter(value_lims=(-0.25, 0.25), rg=RG)),
     ('U41_318eV.translationYerror', RandomParameter(value_lims=(-0.25, 0.25))),
     ('U41_318eV.rotationXerror', RandomParameter(value_lims=(-0.05, 0.05), rg=RG)),
