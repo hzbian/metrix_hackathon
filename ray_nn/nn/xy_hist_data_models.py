@@ -13,6 +13,7 @@ import wandb
 
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
 from ray_nn.data.lightning_data_module import DefaultDataModule
+from ray_tools.base.backend import RayOutput
 from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import RayParameterContainer
 from ray_tools.base.transform import RayTransform
@@ -205,7 +206,7 @@ if __name__ == '__main__':
         trainer.fit(model=model, datamodule=datamodule)
 
 class HistSurrogateEngine(Engine):
-    def __init__(self, module, checkpoint_path: str="outputs/xy_hist/muqyzwbp/epoch=8739-step=106732880.ckpt"):
+    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/muqyzwbp/epoch=8739-step=106732880.ckpt"):
         super().__init__()
         self.model = module.load_from_checkpoint(checkpoint_path)
         self.model.eval()
@@ -216,5 +217,5 @@ class HistSurrogateEngine(Engine):
         with torch.no_grad():
             output = self.model(param_containers_tensor)
             hist_len = int(output.shape[-1] / 2)
-
-            return [{'x_hist': output_element[:hist_len], 'y_hist': output_element[output.shape[-1]-hist_len:]} for output_element in output]
+            ray_dict_list = [{'x_hist': output_element[:hist_len], 'y_hist': output_element[output.shape[-1]-hist_len:]} for output_element in output]
+            return [{'ray_output': {'ImagePlane': {'xy_hist': RayOutput(x_loc=ray_dict['x_hist'], y_loc=ray_dict['y_hist'], z_loc=torch.Tensor(), x_dir=torch.Tensor(), y_dir=torch.Tensor(), z_dir=torch.Tensor(), energy=torch.Tensor())}}} for ray_dict in ray_dict_list]
