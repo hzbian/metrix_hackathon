@@ -209,8 +209,9 @@ class HistSurrogateEngine(Engine):
     def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/muqyzwbp/epoch=8739-step=106732880.ckpt"):
         super().__init__()
         self.model = module.load_from_checkpoint(checkpoint_path)
+        self.model.compile()
         self.model.eval()
-        self.select = Select(keys=['1e5/params'], mutable_only=True, non_dict_transform={'1e5/histogram': StandardizeXYHist()})
+        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], non_dict_transform={'1e5/histogram': StandardizeXYHist()})
 
     def run(self, param_containers: list[RayParameterContainer], transforms: RayTransform | dict[str, RayTransform] | Iterable[RayTransform | dict[str, RayTransform]] | None = None) -> list[dict]:
         param_containers_tensor = torch.vstack([self.select({"1e5/params":param_container})[0] for param_container in param_containers])
