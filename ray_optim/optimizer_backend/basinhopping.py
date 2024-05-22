@@ -64,8 +64,7 @@ class OptimizerBackendSciPy(OptimizerBackend):
 
 
 class OptimizerBackendBasinhopping(OptimizerBackendSciPy):
-    def __init__(self, basinhopping_function, interval=1, stepsize=1, T=0.01):
-        self.basinhopping_function = basinhopping_function
+    def __init__(self, interval=1, stepsize=1, T=0.01):
         self.interval = interval
         self.stepsize = stepsize
         self.T = T
