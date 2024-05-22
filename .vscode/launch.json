@@ -12,9 +12,9 @@
             "justMyCode": true,
             "args": [
                 "logging_backend=",
-                "ray_optimizer=optuna",
+                "ray_optimizer=basinhopping",
                 "+logging_backend._target_=ray_optim.logging.DebugPlotBackend",
-                "target_configuration=metrixs",
+                "target_configuration=metrixs_xy_surrogate",
                 "target_configuration.max_offset_search_deviation=1.0",
                 "ray_optimizer.criterion._target_=sub_projects.ray_optimization.losses.torch.MSELoss",
                 //"+ray_optimizer.starting_point={correlation_factor:0.025, x_mean: 0.5, y_mean: 0.0, x_var: 0.00, y_var: 0.00}"
