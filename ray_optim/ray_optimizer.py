@@ -6,6 +6,7 @@ from typing import Any
 from torch.multiprocessing import JoinableQueue, Process
 
 import torch
+from ray_nn.nn.xy_hist_data_models import HistSurrogateEngine
 from ray_optim.logging import LoggingBackend
 from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.plot import Plot
@@ -371,7 +372,8 @@ class RayOptimizer:
 
         if self.log_times:
             log_dict["System/total_time"] = time.time() - begin_total_time
-
+        if isinstance(self.engine, HistSurrogateEngine):
+            return [sample.loss for sample in trials]
         if self.logger_consumer_process is None:
             self.logger_consumer_process = Process(
                 target=RayOptimizer.log_consumer,
