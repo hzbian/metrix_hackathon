@@ -206,7 +206,7 @@ if __name__ == '__main__':
         trainer.fit(model=model, datamodule=datamodule)
 
 class HistSurrogateEngine(Engine):
-    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/muqyzwbp/epoch=8739-step=106732880.ckpt"):
+    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/muqyzwbp/checkpoints/epoch=8739-step=106732880.ckpt"):
         super().__init__()
         self.model = module.load_from_checkpoint(checkpoint_path)
         self.model.compile()
