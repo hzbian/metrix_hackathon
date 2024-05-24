@@ -23,9 +23,12 @@ class Select(torch.nn.Module):
             new_element = batch[key]
             if isinstance(new_element, dict):
                 if self.search_space is not None:
-                    parameters = RayParameterContainer(
-                        {k: NumericalParameter(v) for k, v in new_element.items()}
-                    )
+                    if not isinstance(new_element, RayParameterContainer):
+                        parameters = RayParameterContainer(
+                            {k: NumericalParameter(v) for k, v in new_element.items()}
+                        )
+                    else:
+                        parameters = new_element
                     normalized_parameter_container = Plot.normalize_parameters(parameters, search_space=self.search_space)
                     new_element = normalized_parameter_container
                 if isinstance(new_element, RayParameterContainer):
