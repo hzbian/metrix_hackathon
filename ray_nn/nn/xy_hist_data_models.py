@@ -211,7 +211,7 @@ class HistSurrogateEngine(Engine):
         self.model = module.load_from_checkpoint(checkpoint_path)
         self.model.compile()
         self.model.eval()
-        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], non_dict_transform={'1e5/histogram': StandardizeXYHist()})
+        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/histogram': StandardizeXYHist()})
 
     def run(self, param_containers: list[RayParameterContainer], transforms: RayTransform | dict[str, RayTransform] | Iterable[RayTransform | dict[str, RayTransform]] | None = None) -> list[dict]:
         param_containers_tensor = torch.vstack([self.select({"1e5/params":param_container})[0] for param_container in param_containers])
