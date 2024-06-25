@@ -5,7 +5,7 @@ import torch
 from torch import optim, nn
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
-from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import ExponentialLR, ReduceLROnPlateau
 from lightning.pytorch.callbacks import LearningRateMonitor
 import matplotlib.pyplot as plt
 from torch.nn import Module
@@ -21,7 +21,7 @@ from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDatase
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler:bool=True):
+    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "plateau"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
@@ -158,18 +158,32 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_plot_data = torch.tensor([]).to(self.validation_y_hat_plot_data)
         self.validation_y_hat_empty_plot_data = torch.tensor([]).to(self.validation_y_empty_plot_data)
         self.validation_y_empty_plot_data = torch.tensor([]).to(self.validation_y_hat_empty_plot_data)
+
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
-        if self.lr_scheduler:
-                return {
+        if self.optimizer == "adam_w":
+            optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
+        else:
+            optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+        if self.lr_scheduler == "exp":
+            return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": ExponentialLR(optimizer, gamma=0.99),
                     "frequency": 1,
-            # If "monitor" references validation metrics, then "frequency" should be set to a
-            # multiple of "trainer.check_val_every_n_epoch".
                 },
             }
+        if self.lr_scheduler == "plateau":
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": ReduceLROnPlateau(optimizer, patience=5),
+                    "monitor": "val_loss",
+                    "frequency": 1,
+                },
+            }
+        if self.lr_scheduler is not None:
+            raise Exception("Defined LR scheduler not found.")
+
         return optimizer
 
 class StandardizeXYHist(torch.nn.Module):
