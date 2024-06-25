@@ -23,7 +23,7 @@ from ray_nn.data.transform import Select
 class MetrixXYHistSurrogate(L.LightningModule):
     def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler:bool=True):
         super(MetrixXYHistSurrogate, self).__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['last_activation'])
 
         self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.ReLU(), last_activation=last_activation)
         self.validation_plot_len = 5
@@ -209,6 +209,7 @@ class HistSurrogateEngine(Engine):
     def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/muqyzwbp/checkpoints/epoch=8739-step=106732880.ckpt"):
         super().__init__()
         self.model = module.load_from_checkpoint(checkpoint_path)
+        self.model.to(torch.device('cpu'))
         self.model.compile()
         self.model.eval()
         self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/histogram': StandardizeXYHist()})
