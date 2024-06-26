@@ -29,6 +29,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_plot_len = 5
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
+        self.optimizer = optimizer
         self.register_buffer("validation_y_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_hat_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_empty_plot_data", torch.tensor([]))
