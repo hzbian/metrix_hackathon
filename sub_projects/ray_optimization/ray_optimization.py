@@ -180,13 +180,14 @@ class RayOptimization:
         import torch
         assert self.target_configuration.load_target_path is not None
         with open(self.target_configuration.load_target_path, "rb") as input_file:
-            offset_target = pickle.load(input_file)
+            offset_target: OffsetTarget = pickle.load(input_file)
+            offset_target = self.calculate_simulated_target(offset_target.target_params, offset_target.uncompensated_parameters)
             #acceptable_indices = torch.arange(400)[(torch.tensor([i.shape[1] for i in offset_target.observed_rays_cpu_tensor])>500)]
 
             #for shrink_list in [offset_target.uncompensated_rays, offset_target.observed_rays, offset_target.uncompensated_parameters]:
             #    shrink_list = [j for i, j in enumerate(shrink_list) if i in acceptable_indices]
             
-            offset_target.recalculate_cpu_tensors('ImagePlane')
+            #offset_target.recalculate_cpu_tensors('ImagePlane')
         return offset_target
     
     def save_offset_target(self, offset_target):
@@ -200,10 +201,8 @@ class RayOptimization:
                     if isinstance(i, RandomParameter):
                         i.rg = None
         return offset_target
-
-    def create_simulated_target(self):
-        target_compensation = self.create_target_compensation()
-        uncompensated_parameters = self.create_uncompensated_parameters()
+    
+    def calculate_simulated_target(self, target_compensation, uncompensated_parameters):
         training_scan = RayScan(
             uncompensated_rays=self.create_uncompensated_rays(uncompensated_parameters),
             uncompensated_parameters=uncompensated_parameters,
@@ -218,6 +217,11 @@ class RayOptimization:
         )
         offset_target.recalculate_cpu_tensors(self.target_configuration.exported_plane)
         return offset_target
+
+    def create_simulated_target(self):
+        target_compensation = self.create_target_compensation()
+        uncompensated_parameters = self.create_uncompensated_parameters()
+        return self.calculate_simulated_target(target_compensation, uncompensated_parameters)
 
     def import_set(self, validation_set: bool = False):
         if self.real_data_configuration is None:

@@ -12,6 +12,7 @@ from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.plot import Plot
 from ray_optim.sample import Sample
 from ray_optim.target import OffsetTarget, Target
+import matplotlib.pyplot as plt
 
 from ray_tools.base import RayTransform
 from ray_tools.base.engine import Engine
@@ -93,7 +94,7 @@ class RayOptimizer:
                 ) ** 2
                 counter += 1
         if counter != 0:
-            return sqrt(mse / counter)
+            return sqrt(mse / float(counter))
         else:
             return 0
 
@@ -327,6 +328,54 @@ class RayOptimizer:
             if not p.is_alive():
                 return True, i
         return False, -1
+    
+    def fast_evaluation_function(
+        self, compensations: list[RayParameterContainer], target: Target
+    ) -> list[Any]:
+        if target.is_normalized:
+            compensations = [target.denormalize_parameter_container(compensation) for compensation in compensations]
+        current_epochs = RayOptimizer.current_epochs(
+            self.evaluation_counter, len(compensations)
+        )
+
+        evaluation_parameters = RayOptimizer.evaluation_parameters(
+            target, compensations
+        )
+
+        output, execution_time = RayOptimizer.run_engine(
+            self.engine,
+            evaluation_parameters,
+            self.exported_plane,
+            self.transforms,
+            self.log_times,
+        )
+
+
+        self.evaluation_counter += len(output)
+        trials = self.calculate_loss_from_output(
+            output,
+            target.observed_rays,
+            current_epochs,
+            self.criterion,
+            self.exported_plane,
+            compensations,
+        )
+        if self.evaluation_counter % 100: #> 1000 and (self.evaluation_counter - len(output)) >= 1000:
+            plt.clf()
+            fig, axs = plt.subplots(len(target.observed_rays), 2, squeeze=False, sharex=True, figsize=(15,15))
+            for sample_nr in range(len(target.observed_rays)):
+                target_output = target.observed_rays[sample_nr]['ray_output']['ImagePlane']['xy_hist']
+                trial_output = output[0][sample_nr]['ray_output']['ImagePlane']['xy_hist']
+                axs[sample_nr, 0].plot(target_output.x_loc, label='target_x')
+                #axs[sample_nr, 0].plot(trial_output.x_loc, label='trial_x')
+                axs[sample_nr, 1].plot(target_output.y_loc, label='target_y')
+                #axs[sample_nr, 1].plot(trial_output.y_loc, label='trial_y')
+            axs[0, 0].legend()
+            axs[0, 1].legend()
+            plt.savefig("outputs/xy_hist.png")
+
+
+        return [sample.loss for sample in trials]
 
     def evaluation_function(
         self, compensations: list[RayParameterContainer], target: Target
@@ -740,8 +789,10 @@ class RayOptimizer:
         if starting_point is not None and target.is_normalized:
             starting_point = target.normalize_dict(starting_point)
 
+        objective = self.fast_evaluation_function if isinstance(self.engine, HistSurrogateEngine) else self.evaluation_function
+
         best_parameters, metrics = self.optimizer_backend.optimize(
-            objective=self.evaluation_function,
+            objective=objective,
             iterations=self.iterations,
             target=target,
             starting_point=starting_point,
