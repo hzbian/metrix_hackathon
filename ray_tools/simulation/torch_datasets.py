@@ -131,6 +131,7 @@ class BalancedMemoryDataset(Dataset):
     def __init__(self, dataset: Dataset, load_len: int | None = None, min_n_rays: int = 1000, good_samples_per_bad: int = 3, **kwargs):
         super().__init__()
         self.min_n_rays = min_n_rays
+        self.good_samples_per_bad = good_samples_per_bad
         if load_len is not None:
             if isinstance(dataset, Sized) and load_len > len(dataset):
                 raise ValueError("Loaded length needs to be smaller or equal to dataset length.")
@@ -151,13 +152,13 @@ class BalancedMemoryDataset(Dataset):
             raise Exception("Make sure that there are good and bad samples in your dataset.")
 
     def __getitem__(self, idx: int) -> Any:
-        if idx%(self.min_n_rays+1) == 0:
-            return self.bad[(idx//(self.min_n_rays+1)) % len(self.bad)]
+        if idx%(self.good_samples_per_bad+1) == 0:
+            return self.bad[(idx//(self.good_samples_per_bad+1)) % len(self.bad)]
         else:
-            return self.good[(idx - 1 - idx//(self.min_n_rays+1)) % len(self.good)]
+            return self.good[(idx - 1 - idx//(self.good_samples_per_bad+1)) % len(self.good)]
 
     def __len__(self) -> int:
-        return max(len(self.bad)*(self.min_n_rays+1), math.ceil(len(self.good) / self.min_n_rays * (self.min_n_rays+1)))
+        return max(len(self.bad)*(self.good_samples_per_bad+1), math.ceil(len(self.good) / self.good_samples_per_bad * (self.good_samples_per_bad+1)))
 
 def extract_field(dataset: RayDataset, field: str) -> list[Any]:
     data = len(dataset) * [None]
