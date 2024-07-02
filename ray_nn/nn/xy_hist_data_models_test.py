@@ -57,6 +57,6 @@ trainer.init_module()
 
 trainer.test(
     datamodule=datamodule,
-    ckpt_path="outputs/xy_hist/pd387nv8/checkpoints/epoch=755-step=147239316.ckpt",
+    ckpt_path="outputs/xy_hist/ecflgqgq/checkpoints/epoch=215-step=42068376.ckpt",
     model=model,
 )
