@@ -32,22 +32,22 @@ dataset = RayDataset(
 )
 
 memory_dataset = BalancedMemoryDataset(
-    dataset=dataset, load_len=load_len, min_n_rays=499
+    dataset=dataset, load_len=load_len, min_n_rays=500
 )
-datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=3)
+datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
 model = MetrixXYHistSurrogate(
     dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs
 )
 wandb_logger = WandbLogger(
-    name="ref_bal_499_sch_.999_test", project="xy_hist", save_dir="outputs"
+    name="ref_bal_500_test", project="xy_hist", save_dir="outputs"
 )
 # wandb_logger = None
 datamodule.setup(stage="test")
 
 lr_monitor = LearningRateMonitor(logging_interval="step")
 trainer = L.Trainer(
-    max_epochs=9999,
+    max_epochs=10000,
     logger=wandb_logger,
     log_every_n_steps=100,
     check_val_every_n_epoch=1,
