@@ -11,7 +11,7 @@ from ray_optim.logging import LoggingBackend
 from ray_optim.optimizer_backend.base import OptimizerBackend
 from ray_optim.plot import Plot
 from ray_optim.sample import Sample
-from ray_optim.target import OffsetTarget, Target
+from ray_optim.target import OffsetTarget, RayScan, Target
 import matplotlib.pyplot as plt
 
 from ray_tools.base import RayTransform
@@ -31,7 +31,7 @@ from ray_tools.base.transform import (
     Translation,
 )
 from sub_projects.ray_optimization.losses.losses import RayLoss
-from sub_projects.ray_optimization.utils import ray_output_to_tensor
+from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
 
 
 class RayOptimizer:
@@ -42,6 +42,7 @@ class RayOptimizer:
         exported_plane: str,
         engine: Engine,
         logging_backend: LoggingBackend,
+        secondary_engine: Engine | None = None,
         normalize_parameters: bool = False,
         transforms: RayTransform | None = None,
         log_times: bool = False,
@@ -58,6 +59,7 @@ class RayOptimizer:
             transforms if transforms is not None else RayTransformDummy()
         )
         self.normalize_parameters: bool = normalize_parameters
+        self.secondary_engine: Engine | None = secondary_engine
         self.logging_backend: LoggingBackend = logging_backend
         self.log_times: bool = log_times
         self.evaluation_counter: int = 0
@@ -360,7 +362,7 @@ class RayOptimizer:
             self.exported_plane,
             compensations,
         )
-        if self.evaluation_counter % 100: #> 1000 and (self.evaluation_counter - len(output)) >= 1000:
+        if self.evaluation_counter % 1 == 0: #> 1000 and (self.evaluation_counter - len(output)) >= 1000:
             plt.clf()
             fig, axs = plt.subplots(len(target.observed_rays), 2, squeeze=False, sharex=True, figsize=(15,15))
             for sample_nr in range(len(target.observed_rays)):
@@ -373,8 +375,54 @@ class RayOptimizer:
             axs[0, 0].legend()
             axs[0, 1].legend()
             plt.savefig("outputs/xy_hist.png")
+        
+        if self.evaluation_counter % 1 == 0:
+            min_trial = min(trials, key=lambda x: x.loss)
+            assert isinstance(self.secondary_engine, Engine)
+            assert target.target_params is not None
+            #RayOptimizer.plot(secondary_engine_target, 'ImagePlane', min_trial, True)
+            param_comparison_plot = Plot.plot_param_comparison(
+            predicted_params=min_trial.params,
+            epoch=min_trial.epoch,
+            training_samples_count=len(target.observed_rays),
+            search_space=target.unscaled_search_space,
+            real_params=target.target_params,
+            )
+            plt.savefig("out1.png")
+            transforms = MultiLayer([0.])
+            best_rays, execution_time = RayOptimizer.run_engine(
+                        self.secondary_engine,
+                        evaluation_parameters,
+                        self.exported_plane,
+                        transforms,
+                        self.log_times,
+                    )
+            observed_evaluation_parameters = RayOptimizer.evaluation_parameters(target, [target.target_params])
 
+            observed_rays, execution_time = RayOptimizer.run_engine(
+                        self.secondary_engine,
+                        observed_evaluation_parameters,
+                        self.exported_plane,
+                        transforms,
+                        self.log_times,
+                    )
+            assert isinstance(target, OffsetTarget)
+            uncompensated_rays = self.secondary_engine.run(target.uncompensated_parameters, MultiLayer([0.]))
 
+            best_rays = [ray_output_to_tensor(best_rays_element, self.exported_plane, to_cpu=True) for best_rays_element in best_rays][0]
+            observed_rays = [ray_output_to_tensor(observed_rays_element, self.exported_plane, to_cpu=True) for observed_rays_element in observed_rays][0]
+            uncompensated_rays = ray_output_to_tensor(uncompensated_rays, self.exported_plane, to_cpu=True)
+
+            RayOptimizer.training_fixed_position_plot(
+                best_rays,
+                observed_rays,
+                uncompensated_rays,
+                min_trial.epoch,
+                len(target.observed_rays),
+                scan_labels=None
+            )
+            plt.savefig("out2.png")
+            print("done")
         return [sample.loss for sample in trials]
 
     def evaluation_function(
