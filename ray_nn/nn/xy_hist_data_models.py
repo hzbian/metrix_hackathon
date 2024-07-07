@@ -216,12 +216,12 @@ if __name__ == '__main__':
     trainer.init_module()
 
     if test:
-        trainer.test(datamodule=datamodule, ckpt_path='outputs/xy_hist/on2yv96j/checkpoints/epoch=999-step=25000000.ckpt', model=model)
+        trainer.test(datamodule=datamodule, ckpt_path='outputs/xy_hist/50f8si6i/checkpoints/epoch=29-step=5842830.ckpt', model=model)
     else:
         trainer.fit(model=model, datamodule=datamodule)
 
 class HistSurrogateEngine(Engine):
-    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/muqyzwbp/checkpoints/epoch=8739-step=106732880.ckpt"):
+    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/50f8si6i/checkpoints/epoch=29-step=5842830.ckpt"):
         super().__init__()
         self.model = module.load_from_checkpoint(checkpoint_path)
         self.model.to(torch.device('cpu'))
