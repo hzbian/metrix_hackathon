@@ -48,6 +48,20 @@ param_func:
     #  - "ImagePlane.translationZerror"
 engine:
   _target_: "ray_nn.nn.xy_hist_data_models.HistSurrogateEngine"
+secondary_engine:
+  _target_: "ray_tools.base.engine.RayEngine"
+  rml_basefile: "rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml"
+  exported_planes:
+    - ${target_configuration.exported_plane}
+  ray_backend:
+    _target_: 'ray_tools.base.backend.RayBackendDockerRAYUI'
+    docker_image: 'ray-ui-service'
+    dockerfile_path: 'ray_docker/rayui'
+    ray_workdir:
+      _target_: 'sub_projects.ray_optimization.configuration.build_ray_workdir_path'
+      parent_path: '/dev/shm/ray_workdir'
+    verbose: False
+  num_workers: -1
 num_beamline_samples: 22
 exported_plane: "ImagePlane"
 max_sample_generation_deviation: 0.01
