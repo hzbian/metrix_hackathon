@@ -22,7 +22,7 @@ from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDatase
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "plateau"):
+    def __init__(self, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
