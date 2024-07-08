@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 import glob
 import math
+import psutil
 import torch
 from torch import optim, nn
 import lightning as L
@@ -169,7 +170,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
-                    "scheduler": ExponentialLR(optimizer, gamma=0.99),
+                    "scheduler": ExponentialLR(optimizer, gamma=0.999),
                     "frequency": 1,
                 },
             }
@@ -199,12 +200,15 @@ if __name__ == '__main__':
                         sub_groups=['1e5/params',
                                     '1e5/histogram', '1e5/n_rays'], transform=Select(keys=['1e5/params', '1e5/histogram', '1e5/n_rays'], search_space=params(), non_dict_transform={'1e5/histogram': StandardizeXYHist()}))
 
-    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=500)
-    datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
+    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=100)
+    split_swap_epochs = 1000
+    workers = psutil.Process().cpu_affinity()
+    num_workers = len(workers) if workers is not None else 0
+    datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers, split_training=0, split_swap_epochs=split_swap_epochs)
     datamodule.prepare_data()
     model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
     test = False
-    wandb_logger = WandbLogger(name="ref_bal_500_sch_.99_std_22594_mish", project="xy_hist", save_dir='outputs')
+    wandb_logger = WandbLogger(name="ref_bal_100_sch_.999_std_22594_mish", project="xy_hist", save_dir='outputs')
     #wandb_logger = None
     if test:
         datamodule.setup(stage="test")
@@ -212,7 +216,7 @@ if __name__ == '__main__':
         datamodule.setup(stage="fit")
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=1, callbacks=[lr_monitor])
+    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=1, callbacks=[lr_monitor], reload_dataloaders_every_n_epochs=split_swap_epochs)
     trainer.init_module()
 
     if test:
