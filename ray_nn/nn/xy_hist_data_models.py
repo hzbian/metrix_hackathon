@@ -216,7 +216,7 @@ if __name__ == '__main__':
         datamodule.setup(stage="fit")
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100, check_val_every_n_epoch=1, callbacks=[lr_monitor], reload_dataloaders_every_n_epochs=split_swap_epochs)
+    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100000, check_val_every_n_epoch=1, callbacks=[lr_monitor], reload_dataloaders_every_n_epochs=split_swap_epochs)
     trainer.init_module()
 
     if test:
