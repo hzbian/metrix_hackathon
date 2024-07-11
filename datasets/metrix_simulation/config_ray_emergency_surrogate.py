@@ -13,7 +13,7 @@ H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAM
 
 RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml')
 RAY_WORKDIR = '/dev/shm/ray_workdir'
-task_id = os.environ['$SLURM_ARRAY_TASK_ID']
+task_id = os.environ['SLURM_ARRAY_TASK_ID']
 if task_id != '':
     task_id = int(task_id)
 else:
