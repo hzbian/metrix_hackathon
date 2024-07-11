@@ -2,18 +2,23 @@ import os
 
 from definitions import ROOT_DIR
 from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
-from ray_tools.base.transform import Histogram, RayTransformConcat
+from ray_tools.base.transform import Histogram, RayTransformConcat, XYHistogram
 from ray_tools.base.utils import RandomGenerator
 
 DATASET_NAME = 'ray_emergency_surrogate'
 H5_MAX_SIZE = 10000
 BATCH_SIZE = 1000
-H5_IDX_RANGE = range(100)
+H5_IDX_RANGE = range(10)
 H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAME)
 
-RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
-RAY_WORKDIR = '/dev/shm/ray_workdir' 
-SEED = 42
+RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml')
+RAY_WORKDIR = '/dev/shm/ray_workdir'
+task_id = os.environ['$SLURM_ARRAY_TASK_ID']
+if task_id != '':
+    task_id = int(task_id)
+else:
+    task_id = 0
+SEED = 42 + task_id
 RG = RandomGenerator(SEED)
 
 N_RAYS = ['1e5']
@@ -21,10 +26,7 @@ N_RAYS = ['1e5']
 EXPORTED_PLANES = ["ImagePlane"]
 
 TRANSFORMS = [
-    RayTransformConcat({
-        'hist': Histogram(n_bins=1024),
-        'hist_small': Histogram(n_bins=256),
-    })
+        XYHistogram(50, (-10., 10.), (-3., 3.))
 ]
 
 PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([

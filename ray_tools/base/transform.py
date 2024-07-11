@@ -188,7 +188,30 @@ class Histogram(RayTransform):
         # flip coordinates in y direction so center of coordinate system is bottom left
         out['histogram'] = out['histogram'].flip([1])
         return out
-
+    
+class XYHistogram(RayTransform):
+        def __init__(self,
+                 n_bins: int,
+                 x_lims: tuple[float, float] | None = None,
+                 y_lims: tuple[float, float] | None = None):
+            self.x_lims = x_lims
+            self.y_lims = y_lims
+            self.n_bins = n_bins
+        def __call__(self, ray_output: RayOutput | dict) -> dict:
+            if isinstance(ray_output, dict):
+                return_dict = {}
+                for key, entry in ray_output.items():
+                    return_dict[key] = self.compute_histogram(entry.x_loc, entry.y_loc)
+                    
+                return return_dict
+            return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
+        def compute_histogram(self, x_loc: torch.Tensor, y_loc: torch.Tensor):
+            out: dict[str, int | torch.Tensor] = {'n_rays': x_loc.shape[0]}
+            x_hist, _ = torch.histogram(x_loc, bins=50, range=self.x_lims)
+            y_hist, _ = torch.histogram(y_loc, bins=50, range=self.y_lims)
+            out['histogram'] = torch.vstack([x_hist, y_hist])
+            return out
+                                          
 
 class MultiLayer(RayTransform):
     """
