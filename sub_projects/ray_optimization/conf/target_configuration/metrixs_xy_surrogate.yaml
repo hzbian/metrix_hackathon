@@ -50,7 +50,7 @@ engine:
   _target_: "ray_nn.nn.xy_hist_data_models.HistSurrogateEngine"
 secondary_engine:
   _target_: "ray_tools.base.engine.RayEngine"
-  rml_basefile: "rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml"
+  rml_basefile: "rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml"
   exported_planes:
     - ${target_configuration.exported_plane}
   ray_backend:

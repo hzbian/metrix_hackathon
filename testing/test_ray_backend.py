@@ -31,7 +31,7 @@ class RayBackendTest(unittest.TestCase):
         #})
         self.transform = MultiLayer([0.], copy_directions=False)
 
-        self.engine = RayEngine(rml_basefile='rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+        self.engine = RayEngine(rml_basefile='rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml',
                                 exported_planes=self.exported_planes,
                                 ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                                   docker_container_name='ray-ui-service-test',

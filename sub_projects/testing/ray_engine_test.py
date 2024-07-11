@@ -15,7 +15,7 @@ n_rays = 1e5
 
 exported_planes = ["ImagePlane"]
 
-engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml',
+engine = RayEngine(rml_basefile='../../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml',
                    exported_planes=exported_planes,
                    ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                      docker_container_name='ray-ui-service-test',

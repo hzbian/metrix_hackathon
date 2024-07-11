@@ -15,7 +15,7 @@ class RayOptimizerTest(unittest.TestCase):
     def test_optimizer_backend(self):
         optuna_study = optuna.create_study(study_name="test")
         ROOT_DIR = '../../'
-        RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
+        RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml')
         engine = RayEngine(rml_basefile=RML_BASEFILE,
                            exported_planes=['ImagePlane'],
                            ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',

@@ -61,7 +61,7 @@ def key_to_element(key: str, template: XmlElement) -> XmlElement:
     return template.__getattr__(component).__getattr__(param)
 
 
-rml_basefile = '../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn.rml'
+rml_basefile = '../rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml'
 
 raypyng_rml_work = RMLFile(rml_basefile)
 for key, val in params.items():
