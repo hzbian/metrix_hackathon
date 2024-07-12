@@ -209,7 +209,7 @@ if __name__ == '__main__':
     datamodule.prepare_data()
     model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs)
     test = False
-    wandb_logger = WandbLogger(name="ref_bal_100_sch_.999_std_22594_mish", project="xy_hist", save_dir='outputs')
+    wandb_logger = WandbLogger(name="ref2_bal_100_sch_.999_std_22594_mish", project="xy_hist", save_dir='outputs')
     #wandb_logger = None
     if test:
         datamodule.setup(stage="test")
