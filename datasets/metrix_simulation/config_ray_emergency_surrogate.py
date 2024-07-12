@@ -13,11 +13,12 @@ H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAM
 
 RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml')
 RAY_WORKDIR = '/dev/shm/ray_workdir'
-task_id = os.environ['SLURM_ARRAY_TASK_ID']
-if task_id != '':
+try:
+    task_id = os.environ['SLURM_ARRAY_TASK_ID']
     task_id = int(task_id)
-else:
-    task_id = 0
+except KeyError:
+      task_id = 0
+
 SEED = 42 + task_id
 RG = RandomGenerator(SEED)
 
