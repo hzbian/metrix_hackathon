@@ -195,10 +195,10 @@ class StandardizeXYHist(torch.nn.Module):
 if __name__ == '__main__':
     load_len: int | None = None
     dataset_normalize_outputs = True
-    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5')) # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
+    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
     dataset = RayDataset(h5_files=h5_files,
                         sub_groups=['1e5/params',
-                                    '1e5/histogram', '1e5/n_rays'], transform=Select(keys=['1e5/params', '1e5/histogram', '1e5/n_rays'], search_space=params(), non_dict_transform={'1e5/histogram': StandardizeXYHist()}))
+                                    '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': StandardizeXYHist()}))
 
     memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=100)
     split_swap_epochs = 1000
@@ -231,7 +231,7 @@ class HistSurrogateEngine(Engine):
         self.model.to(torch.device('cpu'))
         self.model.compile()
         self.model.eval()
-        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/histogram': StandardizeXYHist()})
+        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': StandardizeXYHist()})
 
     def run(self, param_containers: list[RayParameterContainer], transforms: RayTransform | dict[str, RayTransform] | Iterable[RayTransform | dict[str, RayTransform]] | None = None) -> list[dict]:
         param_containers_tensor = torch.vstack([self.select({"1e5/params":param_container})[0] for param_container in param_containers])
