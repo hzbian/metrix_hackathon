@@ -53,7 +53,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         if shrink_factor == "log":
             add_layers = torch.logspace(math.log(layers[-1], 10), math.log(output_length,10), steps=layer_size+2-len(layers), base=10).long()
             # make sure the first and last element is correct, even though rounding
-            add_layers[0] = input_length
+            if blow_disabled:
+                add_layers[0] = input_length
             add_layers[-1] = output_length
         elif shrink_factor == "lin":
             add_layers = torch.linspace(layers[-1], output_length, steps=layer_size+2-len(layers)).long()
