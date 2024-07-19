@@ -161,6 +161,24 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_plot_data = torch.tensor([]).to(self.validation_y_hat_plot_data)
         self.validation_y_hat_empty_plot_data = torch.tensor([]).to(self.validation_y_empty_plot_data)
         self.validation_y_empty_plot_data = torch.tensor([]).to(self.validation_y_hat_empty_plot_data)
+        special_sample_input = torch.tensor([[0.6176527143, 0.2370701432, 0.5204789042, 0.3861027360, 0.6581171155,
+         0.6619033217, 0.6320477128, 0.2780615389, 0.5915879607, 0.2885326445,
+         0.4318543971, 0.5335806012, 0.4898788631, 0.5250989199, 0.5505525470,
+         0.5152570605, 0.4368085861, 0.4815735817, 0.5060048699, 0.4239439666,
+         0.6532316208, 0.5210996866, 0.4563755095, 0.3020407259, 0.6783920527,
+         0.4192821085, 0.2460880578, 0.4803712368, 0.6794303656, 0.6803815365,
+         0.6727091074, 0.4795180857, 0.4443074763, 0.5825657845]])
+        special_sample_simulation_output = torch.tensor([[   0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,  156.,
+         918.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,   13., 1048.,   13.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.]])
+        MetrixXYHistSurrogate.create_plot('special_sample', self(special_sample_input)*22594., special_sample_simulation_output)
 
     def configure_optimizers(self):
         if self.optimizer == "adam_w":
