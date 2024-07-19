@@ -196,7 +196,12 @@ class StandardizeXYHist(torch.nn.Module):
 if __name__ == '__main__':
     load_len: int | None = None
     dataset_normalize_outputs = True
-    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
+    h5_files_original = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
+    h5_files_selected = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/selected/data_raw_*.h5'))
+    assert len(h5_files_original) == len(h5_files_selected)
+    original_ratio = 0.2
+    amount_original = int(len(h5_files_original) * original_ratio)
+    h5_files = h5_files_original[:amount_original]+h5_files_selected[amount_original:]
     dataset = RayDataset(h5_files=h5_files,
                         sub_groups=['1e5/params',
                                     '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': StandardizeXYHist()}))
@@ -226,7 +231,7 @@ if __name__ == '__main__':
         trainer.fit(model=model, datamodule=datamodule)
 
 class HistSurrogateEngine(Engine):
-    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/50f8si6i/checkpoints/epoch=29-step=5842830.ckpt"):
+    def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/14mxibq2/checkpoints/epoch=102-step=19603784.ckpt"):
         super().__init__()
         self.model = module.load_from_checkpoint(checkpoint_path)
         self.model.to(torch.device('cpu'))
