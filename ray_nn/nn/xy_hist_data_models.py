@@ -224,7 +224,7 @@ class StandardizeXYHist():
 
     
 if __name__ == '__main__':
-    load_len: int | None = 10
+    load_len: int | None = None
     dataset_normalize_outputs = True
     h5_files_original = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
     h5_files_selected = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/selected/data_raw_*.h5'))
@@ -237,7 +237,7 @@ if __name__ == '__main__':
                         sub_groups=['1e5/params',
                                     '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
 
-    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=100)
+    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10)
     split_swap_epochs = 1000
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
@@ -245,7 +245,7 @@ if __name__ == '__main__':
     datamodule.prepare_data()
     model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer)
     test = False
-    wandb_logger = WandbLogger(name="ref2_bal_100_sch_.999_std_22594_mish", project="xy_hist", save_dir='outputs')
+    wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
     #wandb_logger = None
     if test:
         datamodule.setup(stage="test")
