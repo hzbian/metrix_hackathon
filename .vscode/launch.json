@@ -29,6 +29,13 @@
             "request": "launch",
             "module": "ray_nn.nn.xy_hist_data_models",
             "justMyCode": true,
+        },
+        {
+            "name": "Dataset Generation",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "datasets.dataset_tools.script_generate_data",
+            "justMyCode": true,
         }
     ]
 }
