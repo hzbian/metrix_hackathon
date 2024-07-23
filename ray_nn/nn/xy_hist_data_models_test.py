@@ -18,6 +18,8 @@ from lightning.pytorch.loggers import WandbLogger
 
 load_len: int | None = None
 dataset_normalize_outputs = True
+ckpt_path="outputs/xy_hist/ecflgqgq/checkpoints/epoch=215-step=42068376.ckpt"
+model = MetrixXYHistSurrogate.load_from_checkpoint(ckpt_path)
 h5_files = list(
     glob.iglob("datasets/metrix_simulation/ray_emergency_surrogate/50+50_data_raw_*.h5")
 )  # ['datasets/metrix_simulation/ray_emergency_surrogate/49+50_data_raw_0.h5']
@@ -27,7 +29,7 @@ dataset = RayDataset(
     transform=Select(
         keys=["1e5/params", "1e5/histogram", "1e5/n_rays"],
         search_space=params(),
-        non_dict_transform={"1e5/histogram": StandardizeXYHist()},
+        non_dict_transform={"1e5/histogram": model.standardizer},
     ),
 )
 
@@ -36,9 +38,6 @@ memory_dataset = BalancedMemoryDataset(
 )
 datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=4)
 datamodule.prepare_data()
-model = MetrixXYHistSurrogate(
-    dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs
-)
 wandb_logger = WandbLogger(
     name="ref_bal_500_test", project="xy_hist", save_dir="outputs"
 )
@@ -57,6 +56,6 @@ trainer.init_module()
 
 trainer.test(
     datamodule=datamodule,
-    ckpt_path="outputs/xy_hist/ecflgqgq/checkpoints/epoch=215-step=42068376.ckpt",
+    ckpt_path=ckpt_path,
     model=model,
 )
