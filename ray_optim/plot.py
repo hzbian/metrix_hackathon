@@ -580,7 +580,7 @@ class Plot:
 
         out = engine.run(param_container_list, transforms)
         out_surrogate = surrogate_engine.run(param_container_list, transforms)
-        std_backward = surrogate_engine.stadardizer.backward
+        std_backward = surrogate_engine.model.standardizer.destandardize
 
         fig, ax = plt.subplots(len(param_container_list),2, sharey=True, squeeze=False)
         for i in range(len(out_surrogate)):
@@ -593,7 +593,7 @@ class Plot:
                 ax[i, 0].plot(torch.linspace(-10, 10, 50), dataset_label[0])
             y_simulation_hist, _ = torch.histogram(out_simulation.y_loc,bins=50, range=[-3, 3])
             ax[i, 1].plot(torch.linspace(-3, 3, 50), y_simulation_hist)
-            ax[i, 1].plot(torch.linspace(-3, 3, 50), std_backward(surrogate_hist.y_loc*))
+            ax[i, 1].plot(torch.linspace(-3, 3, 50), std_backward(surrogate_hist.y_loc))
             if dataset_label is not None:
                 ax[i, 1].plot(torch.linspace(-3, 3, 50), dataset_label[1])
             ax[0, 0].legend(handles=[line1, line2])

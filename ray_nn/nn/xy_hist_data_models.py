@@ -22,9 +22,9 @@ from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDatase
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer: torch.nn.Module, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
-        self.save_hyperparameters(ignore=['last_activation', 'standardizer'])
+        self.save_hyperparameters(ignore=['last_activation'])
 
         self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
         self.validation_plot_len = 5
@@ -145,7 +145,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
         if len(y) > 0:
             plt.clf()
             fig = MetrixXYHistSurrogate.plot_data(y_hat.cpu().detach().numpy(), y.cpu().detach().numpy())
-            #fig.savefig('outputs/'+label+'.png')
             wandb.log({label: wandb.Image(fig)})
             plt.close(fig)
 
@@ -179,7 +178,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
            0.,    0.,    0.,    0.,    0.,   13., 1048.,   13.,    0.,    0.,
            0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
            0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.]])
-        MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.backward(self(special_sample_input)), special_sample_simulation_output)
+        MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(special_sample_input)), special_sample_simulation_output)
 
     def configure_optimizers(self):
         if self.optimizer == "adam_w":
@@ -208,24 +207,24 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
         return optimizer
 
-class StandardizeXYHist(torch.nn.Module):
+class StandardizeXYHist():
     def __init__(self, divisor=22594., log=False):
         self.divisor = divisor
         self.log = log
-    def forward(self, element):
+    def __call__(self, element):
         if self.log:
-            return torch.log(element/self.divisor)
+            return torch.log((element+1)/self.divisor)
         else:
             return element / self.divisor
-    def backward(self, element):
+    def destandardize(self, element):
         if self.log:
-            return torch.exp(element*self.divisor)
+            return (torch.exp(element) * self.divisor) - 1
         else:
             return element * self.divisor
 
     
 if __name__ == '__main__':
-    load_len: int | None = None
+    load_len: int | None = 10
     dataset_normalize_outputs = True
     h5_files_original = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
     h5_files_selected = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/selected/data_raw_*.h5'))
@@ -233,7 +232,7 @@ if __name__ == '__main__':
     original_ratio = 0.2
     amount_original = int(len(h5_files_original) * original_ratio)
     h5_files = h5_files_original[:amount_original]+h5_files_selected[amount_original:]
-    standardizer = StandardizeXYHist(log=True)
+    standardizer = StandardizeXYHist(divisor=1., log=True)
     dataset = RayDataset(h5_files=h5_files,
                         sub_groups=['1e5/params',
                                     '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
