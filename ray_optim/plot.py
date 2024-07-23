@@ -13,6 +13,7 @@ import torch
 from ray_tools.base.parameter import (
     MutableParameter,
     NumericalParameter,
+    OutputParameter,
     RayParameterContainer,
 )
 
@@ -568,3 +569,33 @@ class Plot:
         lims_x = tuple(lim if not math.isnan(lim) else lims_if_empty[i] for i, lim in enumerate(lims_x))
         lims_y = tuple(lim if not math.isnan(lim) else lims_if_empty[i] for i, lim in enumerate(lims_y))
         return lims_x, lims_y
+
+    @staticmethod
+    def plot_engines_comparison(engine, surrogate_engine, param_container_list: list[RayParameterContainer], transforms, dataset_label=None):
+        for param_container in param_container_list:
+            for label, param in param_container.items():
+                if isinstance(param, OutputParameter):
+                    if isinstance(param_container[label], NumericalParameter):
+                        param_container[label].value = 0.
+
+        out = engine.run(param_container_list, transforms)
+        out_surrogate = surrogate_engine.run(param_container_list, transforms)
+        std_backward = surrogate_engine.stadardizer.backward
+
+        fig, ax = plt.subplots(len(param_container_list),2, sharey=True, squeeze=False)
+        for i in range(len(out_surrogate)):
+            surrogate_hist = out_surrogate[i]['ray_output']['ImagePlane']['xy_hist']
+            out_simulation = out[i]['ray_output']['ImagePlane']['0.0']
+            x_simulation_hist, _ = torch.histogram(out_simulation.x_loc,bins=50, range=[-10, 10])
+            line1, = ax[i, 0].plot(torch.linspace(-10, 10, 50), x_simulation_hist, label="simulation")
+            line2, = ax[i, 0].plot(torch.linspace(-10, 10, 50), std_backward(surrogate_hist.x_loc), label="surrogate")
+            if dataset_label is not None:
+                ax[i, 0].plot(torch.linspace(-10, 10, 50), dataset_label[0])
+            y_simulation_hist, _ = torch.histogram(out_simulation.y_loc,bins=50, range=[-3, 3])
+            ax[i, 1].plot(torch.linspace(-3, 3, 50), y_simulation_hist)
+            ax[i, 1].plot(torch.linspace(-3, 3, 50), std_backward(surrogate_hist.y_loc*))
+            if dataset_label is not None:
+                ax[i, 1].plot(torch.linspace(-3, 3, 50), dataset_label[1])
+            ax[0, 0].legend(handles=[line1, line2])
+            
+        return fig
