@@ -26,7 +26,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
-        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
+        self.net = self.create_sequential(34, 1, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
         self.validation_plot_len = 5
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
@@ -178,7 +178,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
            0.,    0.,    0.,    0.,    0.,   13., 1048.,   13.,    0.,    0.,
            0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
            0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.]])
-        MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(special_sample_input)), special_sample_simulation_output)
+        #MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(special_sample_input)), special_sample_simulation_output)
 
     def configure_optimizers(self):
         if self.optimizer == "adam_w":
@@ -221,7 +221,9 @@ class StandardizeXYHist():
             return (torch.exp(element) * self.divisor) - 1
         else:
             return element * self.divisor
-
+class Maximator():
+    def __call__(self, element):
+        return element.max().unsqueeze(0)
     
 if __name__ == '__main__':
     load_len: int | None = None
@@ -232,7 +234,8 @@ if __name__ == '__main__':
     original_ratio = 0.2
     amount_original = int(len(h5_files_original) * original_ratio)
     h5_files = h5_files_original[:amount_original]+h5_files_selected[amount_original:]
-    standardizer = StandardizeXYHist(divisor=1., log=True)
+    #standardizer = StandardizeXYHist(divisor=1., log=True)
+    standardizer = Maximator()
     dataset = RayDataset(h5_files=h5_files,
                         sub_groups=['1e5/params',
                                     '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
@@ -245,7 +248,7 @@ if __name__ == '__main__':
     datamodule.prepare_data()
     model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer)
     test = False
-    wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
+    wandb_logger = WandbLogger(name="ref", project="xy_hist_maximator", save_dir='outputs')
     #wandb_logger = None
     if test:
         datamodule.setup(stage="test")
