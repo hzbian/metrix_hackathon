@@ -3,7 +3,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task 15
-#SBATCH --mem-per-cpu=5GB
+#SBATCH --mem=200GB
 #SBATCH --partition=main
 #SBATCH --spread-job
 

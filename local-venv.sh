@@ -1,5 +1,5 @@
 #!/bin/bash
-
+ulimit -n 4096
 export MAMBA_ROOT_PREFIX="/scratch/$USER/micromamba"
 micromamba="/mnt/work/xfel/env/micromamba-1.4.4-0/bin/micromamba"
 eval "$($micromamba shell hook --shell bash)"
