@@ -22,7 +22,7 @@ from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDatase
 from ray_nn.data.transform import Select
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-3, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=None, lr_scheduler: str | None = "plateau"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
@@ -78,7 +78,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
             if not i == len(layers)-2:
                 nn_layers.append(activation_function)
                 #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
-            if i == len(layers)-2:
+            if i == len(layers)-2 and last_activation is not None:
                 nn_layers.append(last_activation)
         return nn.Sequential(*nn_layers)
 
@@ -131,10 +131,15 @@ class MetrixXYHistSurrogate(L.LightningModule):
     def plot_data(prediction, ground_truth):
         fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False)
         for i, y_element in enumerate(ground_truth):
-            ax[i, 0].plot(y_element[50:], label='gt')
-            ax[i, 0].plot(prediction[i, 50:], label='prediction')
-            ax[i, 1].plot(y_element[:50], label='gt')
-            ax[i, 1].plot(prediction[i, :50], label='prediction')
+            if len(y_element) == 1:
+                marker = 'o'
+            else:
+                marker = ''
+
+            ax[i, 0].plot(y_element[50:], label='gt', marker=marker)
+            ax[i, 0].plot(prediction[i, 50:], label='prediction', marker=marker)
+            ax[i, 1].plot(y_element[:50], label='gt', marker=marker)
+            ax[i, 1].plot(prediction[i, :50], label='prediction', marker=marker)
         ax[ground_truth.shape[0]-1, 0].set_xlabel('histogram_x')
         ax[ground_truth.shape[0]-1, 1].set_xlabel('histogram_y')
         plt.tight_layout()
