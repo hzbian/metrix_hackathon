@@ -45,7 +45,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
     def forward(self, input):
         return self.net(input)
 
-    def create_sequential(self, input_length, output_length, layer_size, blow: int | float =0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None):
+    def create_sequential(self, input_length, output_length, layer_size, blow: int | float =0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None, batch_norm=False, layer_norm=False):
         layers = [input_length]
         blow_disabled = blow == 1 or blow == 0
         if not blow_disabled:
@@ -76,8 +76,11 @@ class MetrixXYHistSurrogate(L.LightningModule):
         for i in range(len(layers)-1):
             nn_layers.append(nn.Linear(int(layers[i].item()), int(layers[i+1].item())))
             if not i == len(layers)-2:
+                if layer_norm:
+                    nn_layers.append(nn.LayerNorm(int(layers[i+1].item())))
                 nn_layers.append(activation_function)
-                #nn_layers.append(nn.BatchNorm1d(layers[i+1].item()))
+                if batch_norm:
+                    nn_layers.append(nn.BatchNorm1d(int(layers[i+1].item())))
             if i == len(layers)-2:
                 nn_layers.append(last_activation)
         return nn.Sequential(*nn_layers)
