@@ -38,9 +38,9 @@ engine = RayEngine(rml_basefile='rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.r
                                                                   verbose=False),
                                 num_workers=-1,
                                 as_generator=False)
-surrogate_engine = HistSurrogateEngine(checkpoint_path="outputs/xy_hist/i7sryekx/checkpoints/epoch=174-step=42782950.ckpt")
+surrogate_engine = HistSurrogateEngine(checkpoint_path="outputs/xy_hist/i7sryekx_copy/checkpoints/epoch=186-step=45716638.ckpt")
 
-load_len: int | None = 1000
+load_len: int | None = None
 h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
 dataset = RayDataset(h5_files=h5_files,
                         sub_groups=['1e5/params',
