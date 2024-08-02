@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from ray_nn.data.transform import Select
 
 
-model = MetrixXYHistSurrogate.load_from_checkpoint("outputs/xy_hist/i7sryekx/checkpoints/epoch=174-step=42782950.ckpt")
+model = MetrixXYHistSurrogate.load_from_checkpoint("outputs/xy_hist/i7sryekx_copy/checkpoints/epoch=186-step=45716638.ckpt")
 model.to(torch.device('cpu'))
 model.compile()
 model.eval()
