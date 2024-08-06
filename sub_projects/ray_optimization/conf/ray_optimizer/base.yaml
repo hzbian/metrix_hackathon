@@ -3,7 +3,7 @@ criterion:
   _target_: "sub_projects.ray_optimization.losses.geometric.SinkhornLoss"
 exported_plane: ${target_configuration.exported_plane}
 engine: ${target_configuration.engine}
-secondary_engine: ${target_configuration.secondary_engine}
+secondary_engine: ${oc.select:target_configuration.secondary_engine,null}
 log_times: True
 plot_interval: 10
 iterations: 1000
