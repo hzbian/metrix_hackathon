@@ -207,8 +207,8 @@ class XYHistogram(RayTransform):
             return self.compute_histogram(ray_output.x_loc, ray_output.y_loc)
         def compute_histogram(self, x_loc: torch.Tensor, y_loc: torch.Tensor):
             out: dict[str, int | torch.Tensor] = {'n_rays': x_loc.shape[0]}
-            x_hist, _ = torch.histogram(x_loc, bins=50, range=self.x_lims)
-            y_hist, _ = torch.histogram(y_loc, bins=50, range=self.y_lims)
+            x_hist, _ = torch.histogram(x_loc, bins=self.n_bins, range=self.x_lims)
+            y_hist, _ = torch.histogram(y_loc, bins=self.n_bins, range=self.y_lims)
             out['histogram'] = torch.vstack([x_hist, y_hist])
             return out
                                           
