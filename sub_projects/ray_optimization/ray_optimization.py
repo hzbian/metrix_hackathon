@@ -284,6 +284,18 @@ class RayOptimization:
         if self.real_data_configuration is None:
             if self.target_configuration.load_target_path is None: 
                 self.target = self.create_simulated_target()
+                save_target = self.save_offset_target(self.target)
+                import torch
+                with open('outputs/special_sample_3_0.8_0.2.pkl', 'wb') as handle:
+                    pickle.dump(save_target, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                acceptable_indices = torch.arange(len(self.target.uncompensated_parameters))[(torch.tensor([i.shape[1] for i in self.target.observed_rays_cpu_tensor])>500)]
+                self.target.uncompensated_rays = [j for i, j in enumerate(self.target.uncompensated_rays) if i in acceptable_indices]
+                self.target.observed_rays = [j for i, j in enumerate(self.target.observed_rays) if i in acceptable_indices]
+                self.target.uncompensated_parameters = [j for i, j in enumerate(self.target.uncompensated_parameters) if i in acceptable_indices]
+                self.target.recalculate_cpu_tensors('ImagePlane')
+                with open('outputs/special_sample_2_0.8_0.2selected.pkl', 'wb') as handle:
+                    pickle.dump(save_target, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                print("Saved pickled target.")
             else:
                 self.target = self.load_offset_target()
         else:
