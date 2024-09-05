@@ -74,8 +74,8 @@ def pandas_to_param_container(input_pd, param_container: RayParameterContainer, 
 
     return output_param_container
 
-
-def import_data(real_data_dir, imported_measurements, included_z_layers: list[float], param_container=None, check_value_lims=True, mm_per_pixel: float = 1.6 / 1000.):
+@staticmethod
+def import_data(real_data_dir, imported_measurements, included_z_layers: list[float], param_container=None, check_value_lims=True, mm_per_pixel: float = 1.6 / 1000., device='cpu'):
     parameters = pd.read_csv(os.path.join(real_data_dir, 'parameters.csv'), index_col=0)
     x_dilation = parameters.T['ImagePlane.translationXerror']  # TODO check if this is added twice now
     y_dilation = parameters.T['ImagePlane.translationYerror']
@@ -104,9 +104,9 @@ def import_data(real_data_dir, imported_measurements, included_z_layers: list[fl
                 path: str = os.path.join(subdir, file)
                 sample_image: Image.Image = get_image(path)
                 sample_image: Image.Image = subtract_black(sample_image, black)
-                sample: torch.Tensor = to_tensor(sample_image)
-                x_lims: torch.Tensor = get_lims(x_dilation[measurement_name], sample.shape[2], mm_per_pixel)
-                y_lims: torch.Tensor = get_lims(y_dilation[measurement_name], sample.shape[1], mm_per_pixel)
+                sample: torch.Tensor = to_tensor(sample_image).to(device)
+                x_lims: torch.Tensor = get_lims(x_dilation[measurement_name], sample.shape[2], mm_per_pixel).to(device)
+                y_lims: torch.Tensor = get_lims(y_dilation[measurement_name], sample.shape[1], mm_per_pixel).to(device)
                 grid, intensity = transform(sample, x_lims, y_lims)
                 cleaned_intensity, cleaned_indices = clean_intensity(intensity[0], threshold=0.02)
                 scatter = transform_weight(hist=grid[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
