@@ -252,7 +252,7 @@ if __name__ == '__main__':
     original_ratio = 0.2
     amount_original = int(len(h5_files_original) * original_ratio)
     h5_files = h5_files_original[:amount_original]+h5_files_selected[amount_original:]
-    standardizer = StandardizeXYHist(divisor=1., log=True)
+    standardizer = StandardizeXYHist()
     dataset = RayDataset(h5_files=h5_files,
                         sub_groups=['1e5/params',
                                     '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
