@@ -9,6 +9,7 @@ from lightning.pytorch.loggers import WandbLogger
 from torch.optim.lr_scheduler import ExponentialLR, ReduceLROnPlateau
 from lightning.pytorch.callbacks import LearningRateMonitor
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 from torch.nn import Module
 import wandb
 
@@ -21,13 +22,25 @@ from ray_tools.base.transform import RayTransform
 from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset
 from ray_nn.data.transform import Select
 
+SMALL_SIZE = 10
+MEDIUM_SIZE = 16
+BIGGER_SIZE = 25
+
+plt.rc('font', size=MEDIUM_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
+
 class MetrixXYHistSurrogate(L.LightningModule):
     def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
         self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
-        self.validation_plot_len = 5
+        self.validation_plot_len = 4
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
         self.optimizer = optimizer
@@ -132,22 +145,26 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
     @staticmethod
     def plot_data(prediction, ground_truth):
-        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False)
+        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, layout='constrained', figsize=(4.905, 4.434))
+        colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for i, y_element in enumerate(ground_truth):
-            ax[i, 0].plot(y_element[50:], label='gt')
-            ax[i, 0].plot(prediction[i, 50:], label='prediction')
-            ax[i, 1].plot(y_element[:50], label='gt')
-            ax[i, 1].plot(prediction[i, :50], label='prediction')
-        ax[ground_truth.shape[0]-1, 0].set_xlabel('histogram_x')
-        ax[ground_truth.shape[0]-1, 1].set_xlabel('histogram_y')
-        plt.tight_layout()
+            ax[i, 0].plot(y_element[50:], label='simulation', c=colors[3])
+            ax[i, 0].plot(prediction[i, 50:], label='surrogate', c=colors[4])
+            ax[i, 1].plot(y_element[:50], label='simulation', c=colors[3])
+            ax[i, 1].plot(prediction[i, :50], label='surrogate', c=colors[4])
+            ax[i, 1].xaxis.set_major_locator(MultipleLocator(25))
+        ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$ histogram')
+        ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$ histogram')
         plt.legend()
+        fig.supylabel('Normalized ray counts')
+        
         return fig
     @staticmethod
     def create_plot(label: str, y_hat, y):
         if len(y) > 0:
             plt.clf()
             fig = MetrixXYHistSurrogate.plot_data(y_hat.cpu().detach().numpy(), y.cpu().detach().numpy())
+            plt.savefig("outputs/"+label+".pdf")
             wandb.log({label: wandb.Image(fig)})
             plt.close(fig)
 
@@ -247,9 +264,11 @@ if __name__ == '__main__':
     datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers, split_training=0, split_swap_epochs=split_swap_epochs)
     datamodule.prepare_data()
     model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer)
-    test = False
-    wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
-    #wandb_logger = None
+    test = True
+    if not test:
+        wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
+    else:
+        wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
         datamodule.setup(stage="test")
     else:
@@ -260,7 +279,12 @@ if __name__ == '__main__':
     trainer.init_module()
 
     if test:
-        trainer.test(datamodule=datamodule, ckpt_path='outputs/xy_hist/50f8si6i/checkpoints/epoch=29-step=5842830.ckpt', model=model)
+        model = MetrixXYHistSurrogate.load_from_checkpoint(
+        checkpoint_path="outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt",
+        #hparams_file="/path/to/experiment/version/hparams.yaml",
+        map_location=None,
+        )
+        trainer.test(datamodule=datamodule, ckpt_path='outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt', model=model)
     else:
         trainer.fit(model=model, datamodule=datamodule)
 

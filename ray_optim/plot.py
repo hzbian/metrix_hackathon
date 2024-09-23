@@ -194,7 +194,7 @@ class Plot:
         covariance_ellipse: bool = True,
         x_label: list[str] | None = None
     ) -> Figure:
-        y_label = ["Uncompensated", "Observed", "Compensated"]
+        y_label = ["Uncompensated", "Experiment", "Compensated"]
         suptitle = "Epoch " + str(epoch) if epoch is not None else None
         if training_samples_count is not None:
             if suptitle is not None:
@@ -283,15 +283,16 @@ class Plot:
         covariance_ellipse: bool = True,
         draw_all_ellipses_rows: tuple[int] = (1,),
     ) -> Figure:
-        share_xy = isinstance(xlim[0], float)
+        share_x = isinstance(xlim[0], float)
+        share_y = isinstance(ylim[0], float)
         fig, axs = plt.subplots(
             len(tensor_list_list),
             len(tensor_list_list[0]),
             squeeze=False,
             gridspec_kw={"wspace": 0, "hspace": 0},
             figsize=(len(tensor_list_list[0]) * 2, len(tensor_list_list) * 2),
-            sharex=share_xy,
-            sharey=share_xy,
+            sharex=share_x,
+            sharey=share_x,
             layout="compressed",
         )
         xlim_min, xlim_max, ylim_min, ylim_max = Plot.get_lims_per_row(
@@ -321,17 +322,20 @@ class Plot:
                 ax.yaxis.set_major_locator(NullLocator())
                 ax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-                if share_xy:
+                ax.tick_params(axis='both', which='major', labelsize=12)
+                if share_x:
                     ax.set_xticks(xlim)
-                    ax.set_yticks(ylim)
                 else:
                     ax.set_xticks((xlim_min[beamline_idx], xlim_max[beamline_idx]))
+                    if idx_list_list != len(tensor_list_list) - 1:
+                        ax.set_xticklabels([])
+                if share_y:
+                    ax.set_yticks(ylim)
+                else:
                     ax.set_yticks((ylim_min[beamline_idx], ylim_max[beamline_idx]))
                     ax.tick_params(
                         axis="y", direction="in", pad=-22, labelcolor="#69696980"
                     )
-                    if idx_list_list != len(tensor_list_list) - 1:
-                        ax.set_xticklabels([])
                 ax.set_aspect("equal")
                 ax.tick_params(axis="both", length=0.0)
                 ax.grid(linestyle="dashed", alpha=0.5)
@@ -363,7 +367,7 @@ class Plot:
                 if xlabel is not None and idx_list_list == len(tensor_list_list)-1:
                     axs[idx_list_list, beamline_idx].set_xlabel(xlabel[beamline_idx])
 
-            axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list], fontsize=12)
+            axs[idx_list_list, 0].set_ylabel(ylabel[idx_list_list], fontsize=15)
             if covariance_ellipse:
                 axs[idx_list_list, 0].yaxis.label.set_color(color)
         if len(tensor_list_list[0]) > 1:
@@ -466,7 +470,7 @@ class Plot:
     def plot_param_comparison(
         predicted_params: RayParameterContainer,
         search_space: RayParameterContainer,
-        epoch: int,
+        epoch: int | None = None,
         training_samples_count: int | None = None,
         real_params: RayParameterContainer | None = None,
         omit_labels: list[str] | None = None,
@@ -524,10 +528,14 @@ class Plot:
         plt.subplots_adjust(bottom=0.3)
         ax.set_xlabel("Parameter")
         ax.set_ylabel("Normalized Compensation")
-        suptitle = "Epoch " + str(epoch)
+        if epoch is not None:
+            suptitle = "Epoch " + str(epoch)
+        else:
+            suptitle = ""
         if training_samples_count is not None:
             suptitle += ", " + str(training_samples_count) + " Training Samples"
-        fig.suptitle(suptitle)
+        if suptitle != "":
+            fig.suptitle(suptitle)
         return fig
 
     @staticmethod
