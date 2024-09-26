@@ -57,10 +57,11 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
     return torch.stack(mse_list), x_simulation_hist_list, y_simulation_hist_list
 
 class Model:
-    def __init__(self):
-        model_orig = MetrixXYHistSurrogate.load_from_checkpoint("outputs/xy_hist/i7sryekx/checkpoints/epoch=174-step=42782950.ckpt")
-        model_orig = model_orig.to('cuda')
-        model_orig.compile()
+    def __init__(self, path = "outputs/xy_hist/i7sryekx/checkpoints/epoch=174-step=42782950.ckpt"):
+        model_orig = MetrixXYHistSurrogate.load_from_checkpoint(path)
+        if torch.cuda.is_available():
+            model_orig = model_orig.to('cuda')
+        #model_orig.compile()
         model_orig.eval()
         self.x_factor = 0./20.
         self.y_factor = 0./4.
@@ -162,10 +163,11 @@ class Model:
 #torch.index_select(input, dim, indices,
 
 
-def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_offset=0.2, beamline_trials=1000):    
+def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_offset=0.2, beamline_trials=1000, fixed_parameters=[8, 14, 20, 21, 27, 28]):    
     for i in tqdm.tqdm(range(iterations)):
         offsets = (torch.rand(1, offset_trials, 34, device=model.device) * max_offset * 2) - max_offset
         uncompensated_parameters = torch.rand(beamline_trials, 1, offsets.shape[-1], device=model.device)
+        uncompensated_parameters[:,:,fixed_parameters] = uncompensated_parameters[0,0,fixed_parameters].unsqueeze(0).unsqueeze(1)
         tensor_sum = offsets + uncompensated_parameters
         tensor_sum = torch.clamp(tensor_sum, 0, 1)
         uncompensated_parameters = tensor_sum - offsets

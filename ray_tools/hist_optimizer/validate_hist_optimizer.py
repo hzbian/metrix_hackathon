@@ -58,7 +58,7 @@ plt.xlabel('Iteration', fontsize=16)
 plt.ylabel('MSE (log)', fontsize=16)
 ax.set_yscale('log')
 plt.tight_layout()
-plt.savefig('outputs/bl_optimizer_iterations.pdf')
+plt.savefig('outputs/bl_optimizer_iterations.pdf', bbox_inches='tight')
 plt.show()
 
 repetitions=10
