@@ -19,7 +19,7 @@ engine = RayEngine(rml_basefile='rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.r
                                 as_generator=False)
 surrogate_engine = HistSurrogateEngine(checkpoint_path="outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt")
 
-model = Model()
+model = Model(path="outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt")
 
 offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model)
 

@@ -57,7 +57,7 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
     return torch.stack(mse_list), x_simulation_hist_list, y_simulation_hist_list
 
 class Model:
-    def __init__(self, path = "outputs/xy_hist/i7sryekx/checkpoints/epoch=174-step=42782950.ckpt"):
+    def __init__(self, path):
         model_orig = MetrixXYHistSurrogate.load_from_checkpoint(path)
         if torch.cuda.is_available():
             model_orig = model_orig.to('cuda')
