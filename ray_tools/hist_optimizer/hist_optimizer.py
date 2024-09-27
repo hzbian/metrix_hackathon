@@ -187,7 +187,7 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_off
     compensated_parameters_selected = uncompensated_parameters_selected+offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
-def optimize_brute(model, observed_rays, uncompensated_parameters, offset_trials=100000, max_offset=0.2, iterations=1000):
+def optimize_brute(model, observed_rays, uncompensated_parameters, offset_trials=1000000, max_offset=0.2, iterations=1000):
     observed_rays = observed_rays.to(model.device)
     loss_min = float('inf')
     pbar = tqdm.trange(iterations)
@@ -209,7 +209,7 @@ def optimize_brute(model, observed_rays, uncompensated_parameters, offset_trials
             loss_min_list.append(loss_min)
     return loss_min_params, loss_min, loss_min_list
 
-def optimize_smart_walker(model, observed_rays, uncompensated_parameters, num_candidates=100000, max_offset=0.2, step_width=0.02, iterations=1000):
+def optimize_smart_walker(model, observed_rays, uncompensated_parameters, num_candidates=1000000, max_offset=0.2, step_width=0.02, iterations=1000):
     loss_min = float('inf')
     loss_min_list = []
     offsets = (torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device) * max_offset * 2) - max_offset
