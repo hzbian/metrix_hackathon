@@ -38,7 +38,7 @@ method_dict = {"smart walker": optimize_smart_walker, "brute force": optimize_br
 method_evaluation_list = []
 
 for key, entry in method_dict.items():
-    mean_best, std_best, mean_progress, std_progress = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, repetitions=10, iterations=1000)
+    mean_best, std_best, mean_progress, std_progress = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, repetitions=10, iterations=200)
     method_evaluation_list.append((key, mean_best, std_best, mean_progress, std_progress))
     print(key, ":", mean_best, "±", std_best)
 
