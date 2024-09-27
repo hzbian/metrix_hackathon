@@ -26,7 +26,7 @@ offsets_selected, uncompensated_parameters_selected, compensated_parameters_sele
 with torch.no_grad():
     observed_rays = model(compensated_parameters_selected)
     
-loss_min_params, loss, loss_min_list = optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, iterations=1000)
+loss_min_params, loss, loss_min_list = optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, iterations=200)
 
 fig = plot_param_tensors(loss_min_params[[1,2,4,8]], uncompensated_parameters_selected[[1,2,4,8]], engine = engine, compensated_parameters=compensated_parameters_selected[[1,2,4,8]])
 fig.savefig('outputs/offset_compensation.png', bbox_inches='tight')

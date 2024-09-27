@@ -209,7 +209,7 @@ def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, o
             loss_min_list.append(loss_min)
     return loss_min_params, loss_min, loss_min_list
 
-def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterations, num_candidates=1000000, max_offset=0.2, step_width=0.02):
+def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, max_offset=0.2, step_width=0.02):
     loss_min = float('inf')
     loss_min_list = []
     offsets = (torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device) * max_offset * 2) - max_offset
