@@ -116,7 +116,7 @@ class Model:
         #print("translation_bins.unsqueeze_1", translation_bins.unsqueeze(1).shape)
         # Calculate the valid indices after translation for each histogram
         valid_indices = bin_indices - translation_bins.unsqueeze(-1)  # Shape: [batch_size, num_bins]
-        
+        l
         
         valid_mask = (valid_indices >= 0) & (valid_indices < num_bins)  # Mask for valid positions
         valid_indices = torch.where(valid_mask, valid_indices, 0)
@@ -187,7 +187,7 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_off
     compensated_parameters_selected = uncompensated_parameters_selected+offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
-def optimize_brute(model, observed_rays, uncompensated_parameters, offset_trials=1000000, max_offset=0.2, iterations=1000):
+def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, offset_trials=1000000, max_offset=0.2):
     observed_rays = observed_rays.to(model.device)
     loss_min = float('inf')
     pbar = tqdm.trange(iterations)
@@ -209,7 +209,7 @@ def optimize_brute(model, observed_rays, uncompensated_parameters, offset_trials
             loss_min_list.append(loss_min)
     return loss_min_params, loss_min, loss_min_list
 
-def optimize_smart_walker(model, observed_rays, uncompensated_parameters, num_candidates=1000000, max_offset=0.2, step_width=0.02, iterations=1000):
+def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterations, num_candidates=1000000, max_offset=0.2, step_width=0.02):
     loss_min = float('inf')
     loss_min_list = []
     offsets = (torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device) * max_offset * 2) - max_offset
@@ -235,7 +235,7 @@ def optimize_smart_walker(model, observed_rays, uncompensated_parameters, num_ca
     return loss_min_params, loss_min, loss_min_list
 
 # get mean of best solutions, std of best solutions, tensor of means of progress, tensor of std of progress
-def evaluate_evaluation_method(method, model, observed_rays, uncompensated_parameters, repetitions=10, iterations=1000):
+def evaluate_evaluation_method(method, model, observed_rays, uncompensated_parameters, iterations=1000, repetitions=10):
     loss_list = []
     loss_min_tens_list = []
     for i in range(repetitions):
