@@ -63,7 +63,7 @@ plt.show()
 
 repetitions=10
 t0 = benchmark.Timer(
-    stmt='optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected)',
+    stmt='optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, 200)',
     setup='from __main__ import optimize_smart_walker',
     globals={'model': model, 'observed_rays': observed_rays, 'uncompensated_parameters_selected': uncompensated_parameters_selected},
     num_threads=1,
