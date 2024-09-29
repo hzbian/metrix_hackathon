@@ -187,8 +187,7 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_off
     compensated_parameters_selected = uncompensated_parameters_selected+offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
-def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, offset_trials=1000000, max_offset=0.2):
-    observed_rays = observed_rays.to(model.device)
+def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, num_candidates=1000000, max_offset=0.2):
     loss_min = float('inf')
     pbar = tqdm.trange(iterations)
     loss_min_params = None
@@ -196,7 +195,7 @@ def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, o
     with torch.no_grad():
         loss_min_list = []
         for i in pbar:
-            offsets = (torch.rand((1, offset_trials, uncompensated_parameters.shape[-1]), device=model.device) * max_offset * 2) - max_offset
+            offsets = (torch.rand((1, num_candidates, uncompensated_parameters.shape[-1]), device=model.device) * max_offset * 2) - max_offset
             tensor_sum = offsets + uncompensated_parameters
             
             compensated_rays = model(tensor_sum)
