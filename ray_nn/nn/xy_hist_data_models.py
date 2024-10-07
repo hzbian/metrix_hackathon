@@ -11,6 +11,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from torch.nn import Module
+from torch.utils.data import Dataset
 import wandb
 
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
@@ -33,6 +34,8 @@ plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
 plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
 plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
+
+
 
 class MetrixXYHistSurrogate(L.LightningModule):
     def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
