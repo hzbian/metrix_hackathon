@@ -49,7 +49,7 @@ def create_histogram_file(engine, seed, path="outputs/", total_size=10, batch_si
             z_translations = random_params[i:end, 34] * (z_lims[1]-z_lims[0]) + z_lims[0]
             out = engine.run(tensor_list_to_param_container_list(random_params[i:end, :34]), [RayTransformCompose(XYHistogram(50, x_lims, y_lims), MultiLayer([i])) for i in z_translations])
             arr, n_rays, histogram = engine_output_to_np_array(out)
-            arr = np.concatenate((arr, z_translations.unsqueeze(0).numpy()), axis=1)
+            arr = np.concatenate((arr, z_translations.unsqueeze(1).numpy()), axis=1)
             dset_arr[i:end] = arr
             dset_n_rays[i:end] = n_rays
             dset_hist[i:end] = histogram
