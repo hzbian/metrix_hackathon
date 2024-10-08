@@ -1,6 +1,7 @@
 from collections.abc import Callable, Sized
 import math
 from typing import Any
+import torch
 from tqdm import tqdm, trange
 
 import h5py
@@ -165,3 +166,44 @@ def extract_field(dataset: RayDataset, field: str) -> list[Any]:
     for idx in tqdm(range(len(dataset))):
         data[idx] = list(dataset.__getitem__(idx, sub_groups=[field], nested_groups=False).values())[0]
     return data
+
+class HistDataset(Dataset):
+    def __init__(self,
+                 h5_files: list[str],
+                 sub_groups: list[str],
+                 transforms: list[Callable] | None = None,
+                normalize_sub_groups: list[str]| None = None,
+                load_max = 1000):
+        self.h5_files = np.array(h5_files, dtype=str)
+        self.h5_files_obj = [h5py.File(f, "r", swmr=True, libver='latest') for f in self.h5_files]
+        
+        self.sub_groups = sub_groups
+        self.transforms = transforms
+        self.data_dict = dict([(key,[]) for key in sub_groups])
+        
+        
+        for f in self.h5_files_obj:
+            for key, value in self.data_dict.items():
+                value.append(f[key][:load_max])
+        for key in self.sub_groups:
+            data = np.concatenate(self.data_dict[key])
+            if normalize_sub_groups is not None and key in normalize_sub_groups:
+                min_list = []
+                max_list = []
+                for value in f[key].attrs.values():
+                    if isinstance(value, np.ndarray):
+                        min_list.append(value[0])
+                        max_list.append(value[1])
+                    else:
+                        min_list.append(0.)
+                        max_list.append(1.)
+                min_vec = np.array(min_list)
+                max_vec = np.array(max_list)
+                print(min_vec, max_vec)
+                data = (data - min_vec) / (max_vec - min_vec)
+            self.data_dict[key] = torch.from_numpy(data)
+    def __getitem__(self, idx: int):
+        assert self.transforms is None or len(self.transforms) == len(self.data_dict)
+        return tuple([self.transforms[i](value[idx]) if self.transforms is not None else value[idx] for i, value in enumerate(self.data_dict.values())])
+    def __len__(self) -> int:
+        return self.data_dict[self.sub_groups[0]].shape[0]
