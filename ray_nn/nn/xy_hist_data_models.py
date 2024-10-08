@@ -11,7 +11,6 @@ from lightning.pytorch.callbacks import LearningRateMonitor
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from torch.nn import Module
-from torch.utils.data import Dataset
 import wandb
 
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
@@ -20,7 +19,7 @@ from ray_tools.base.backend import RayOutput
 from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import RayParameterContainer
 from ray_tools.base.transform import RayTransform
-from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset
+from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset, HistDataset
 from ray_nn.data.transform import Select
 
 SMALL_SIZE = 10
@@ -38,12 +37,13 @@ plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
 
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', input_parameter_count=34, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
-        self.net = self.create_sequential(34, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
+        self.net = self.create_sequential(input_parameter_count, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
         self.validation_plot_len = 4
+        self.input_parameter_count = input_parameter_count
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
         self.optimizer = optimizer
@@ -191,6 +191,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
          0.6532316208, 0.5210996866, 0.4563755095, 0.3020407259, 0.6783920527,
          0.4192821085, 0.2460880578, 0.4803712368, 0.6794303656, 0.6803815365,
          0.6727091074, 0.4795180857, 0.4443074763, 0.5825657845]], device=self.device)
+        shape_diff = self.input_parameter_count - special_sample_input.shape[1]
+        special_sample_input = torch.nn.functional.pad(special_sample_input, (shape_diff,0), "constant", 0.)
         special_sample_simulation_output = torch.tensor([[   0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
            0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,  156.,
          918.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
@@ -251,23 +253,26 @@ if __name__ == '__main__':
     dataset_normalize_outputs = True
     h5_files_original = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
     h5_files_selected = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/selected/data_raw_*.h5'))
-    assert len(h5_files_original) == len(h5_files_selected)
+    #assert len(h5_files_original) == len(h5_files_selected)
     original_ratio = 0.2
     amount_original = int(len(h5_files_original) * original_ratio)
     h5_files = h5_files_original[:amount_original]+h5_files_selected[amount_original:]
     standardizer = StandardizeXYHist()
-    dataset = RayDataset(h5_files=h5_files,
-                        sub_groups=['1e5/params',
-                                    '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
-
+    #dataset = RayDataset(h5_files=h5_files,
+    #                    sub_groups=['1e5/params',
+    #                                '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
+    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate_50+50+z/histogram_*.h5'))
+    sub_groups = ['parameters', 'histogram', 'n_rays']
+    transforms=[lambda x: x[1:].float(), lambda x: standardizer(x.flatten().float()), lambda x: x.int()]
+    dataset = HistDataset(h5_files, sub_groups, transforms, normalize_sub_groups=['parameters'])
     memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10)
     split_swap_epochs = 1000
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers, split_training=0, split_swap_epochs=split_swap_epochs)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer)
-    test = True
+    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer, input_parameter_count=35)
+    test = False
     if not test:
         wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
     else:
