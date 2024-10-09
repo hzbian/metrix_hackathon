@@ -173,7 +173,7 @@ class HistDataset(Dataset):
                  sub_groups: list[str],
                  transforms: list[Callable] | None = None,
                 normalize_sub_groups: list[str]| None = None,
-                load_max = 1000):
+                load_max: int | None = None):
         self.h5_files = np.array(h5_files, dtype=str)
         self.h5_files_obj = [h5py.File(f, "r", swmr=True, libver='latest') for f in self.h5_files]
         
@@ -199,7 +199,6 @@ class HistDataset(Dataset):
                         max_list.append(1.)
                 min_vec = np.array(min_list)
                 max_vec = np.array(max_list)
-                print(min_vec, max_vec)
                 data = (data - min_vec) / (max_vec - min_vec)
             self.data_dict[key] = torch.from_numpy(data)
     def __getitem__(self, idx: int):
