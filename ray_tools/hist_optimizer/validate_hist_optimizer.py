@@ -38,9 +38,15 @@ method_dict = {"smart walker": optimize_smart_walker, "brute force": optimize_br
 method_evaluation_list = []
 
 for key, entry in method_dict.items():
-    mean_best, std_best, mean_progress, std_progress = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, repetitions=10, iterations=200)
+    mean_best, std_best, mean_progress, std_progress, loss_min_params_tens = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, offsets_selected, repetitions=2, iterations=100)
     method_evaluation_list.append((key, mean_best, std_best, mean_progress, std_progress))
-    print(key, ":", mean_best, "±", std_best)
+
+    # calculate deviations from target offset
+    normalized_offsets = (offsets_selected + max_offset) / (max_offset + max_offset)
+    predicted_offsets = (loss_min_params_tens[:,0] - uncompensated_parameters_selected[0].squeeze())
+    normalized_predicted_offsets = (predicted_offsets + max_offset) / (max_offset + max_offset)
+    rmse = ((normalized_offsets-predicted_offsets)**2).mean().sqrt().item()
+    print(key, ":", mean_best, "±", std_best, "RMSE from target offset:", rmse)
 
 plt.figure(figsize = (4.905, 4.434))
 ax = plt.gca()
