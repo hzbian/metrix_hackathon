@@ -39,7 +39,7 @@ method_dict = {"smart walker": optimize_smart_walker, "brute force": optimize_br
 method_evaluation_list = []
 
 for key, entry in method_dict.items():
-    mean_best, std_best, mean_progress, std_progress, loss_min_params_tens = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, offsets_selected, max_offset=max_offset, repetitions=10, iterations=200)
+    mean_best, std_best, mean_progress, std_progress, loss_min_params_tens = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, offsets_selected, max_offset=max_offset, repetitions=10, num_candidates=1000000, iterations=200)
     method_evaluation_list.append((key, mean_best, std_best, mean_progress, std_progress))
 
     # calculate deviations from target offset
