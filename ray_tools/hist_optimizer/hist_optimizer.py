@@ -309,3 +309,30 @@ def plot_param_tensors(best_parameters, uncompensated_parameters, engine, observ
 
 def tensor_list_to_param_container_list(input_param_tensor):
     return [tensor_to_param_container(input_param_tensor[i].squeeze()) for i in range(input_param_tensor.shape[0])]
+
+
+''' input shape
+iterations x samples x parameters
+output shape
+ray output list of iterations of lists of samples
+'''
+def param_tensor_to_ray_outputs(input_tens):
+    out_list = []
+    for entry in input_tens:
+        param_container_list = tensor_list_to_param_container_list(entry)
+        out = engine.run(param_container_list, MultiLayer([0.]))
+        out_list.append(out)
+    return out_list
+
+def compare_with_reference(reference_ray_outputs, compensated_parameters_selected_ray_outputs, output_plane='ImagePlane'):
+    loss_fn = SamplesLoss("sinkhorn", blur=0.1)
+    distances_list = []
+    for repetition in tqdm.tqdm(compensated_parameters_selected_ray_outputs):
+        distances_rep_list = []
+        for i in len(reference_ray_outputs[0]):
+            sinkhorn_distance = loss_fn(ray_dict_to_tensor(repetition[i], output_plane).contiguous(), ray_dict_to_tensor(reference_ray_outputs[0][i], output_plane).contiguous())
+            distances_rep_list.append(sinkhorn_distance)
+        distances_rep = torch.concat(distances_rep_list)
+        distances_list.append(distances_rep)
+    distances = torch.stack(distances_list)
+    return distances.mean().item(), distances.std().item()

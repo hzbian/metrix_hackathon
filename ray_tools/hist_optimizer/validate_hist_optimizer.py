@@ -1,5 +1,5 @@
 import torch
-from ray_tools.hist_optimizer.hist_optimizer import tensor_to_param_container, mse_engines_comparison, Model, find_good_offset_problem, optimize_smart_walker, optimize_brute, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list
+from hist_optimizer import tensor_to_param_container, mse_engines_comparison, Model, find_good_offset_problem, optimize_smart_walker, optimize_brute, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, param_tensor_to_ray_outputs, compare_with_reference
 import matplotlib.pyplot as plt
 from ray_nn.nn.xy_hist_data_models import MetrixXYHistSurrogate, StandardizeXYHist, HistSurrogateEngine
 from ray_tools.base.engine import RayEngine
@@ -44,10 +44,18 @@ for key, entry in method_dict.items():
 
     # calculate deviations from target offset
     normalized_offsets = (offsets_selected + max_offset) / (max_offset + max_offset)
-    predicted_offsets = (loss_min_params_tens[:,0] - uncompensated_parameters_selected[0].squeeze())
+    predicted_offsets = (loss_min_params_tens - uncompensated_parameters_selected[0].squeeze())
     normalized_predicted_offsets = (predicted_offsets + max_offset) / (max_offset + max_offset)
     rmse = ((normalized_offsets-predicted_offsets)**2).mean().sqrt().item()
     print(key, ":", mean_best, "±", std_best, "RMSE from target offset:", rmse)
+    loss_min_params_tens = (uncompensated_parameters_selected + predicted_offsets).swapaxes(0,1)
+    loss_min_ray_outputs = param_tensor_to_ray_outputs(loss_min_params_tens)
+    reference_ray_outputs = param_tensor_to_ray_outputs(compensated_parameters_selected.swapaxes(0,1))
+    compensated_parameters_selected_ray_outputs = param_tensor_to_ray_outputs(compensated_parameters_selected.swapaxes(0,1).repeat_interleave(10, dim=0))
+    out = compare_with_reference(reference_ray_outputs, loss_min_ray_outputs)
+    print("deviation best to ref", out[0], "±", out[1])
+    out = compare_with_reference(reference_ray_outputs, compensated_parameters_selected_ray_outputs)
+    print("deviation ref to ref", out[0], "±", out[1])
 
 plt.figure(figsize = (4.905, 4.434))
 ax = plt.gca()
