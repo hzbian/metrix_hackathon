@@ -9,10 +9,11 @@ from ray_tools.base.transform import MultiLayer
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.nn.xy_hist_data_models import MetrixXYHistSurrogate
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
+from geomloss import SamplesLoss
 from datasets.metrix_simulation.config_ray_emergency_surrogate import TRANSFORMS as cfg_transforms
 from ray_tools.base.parameter import NumericalParameter, NumericalOutputParameter, RayParameterContainer
 from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, MemoryDataset, RayDataset
-from sub_projects.ray_optimization.utils import ray_output_to_tensor
+from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
 from sub_projects.ray_optimization.ray_optimization import RayOptimization
 from ray_optim.ray_optimizer import RayOptimizer
 
@@ -316,7 +317,7 @@ iterations x samples x parameters
 output shape
 ray output list of iterations of lists of samples
 '''
-def param_tensor_to_ray_outputs(input_tens):
+def param_tensor_to_ray_outputs(input_tens, engine):
     out_list = []
     for entry in input_tens:
         param_container_list = tensor_list_to_param_container_list(entry)
@@ -329,7 +330,7 @@ def compare_with_reference(reference_ray_outputs, compensated_parameters_selecte
     distances_list = []
     for repetition in tqdm.tqdm(compensated_parameters_selected_ray_outputs):
         distances_rep_list = []
-        for i in len(reference_ray_outputs[0]):
+        for i in range(len(reference_ray_outputs[0])):
             sinkhorn_distance = loss_fn(ray_dict_to_tensor(repetition[i], output_plane).contiguous(), ray_dict_to_tensor(reference_ray_outputs[0][i], output_plane).contiguous())
             distances_rep_list.append(sinkhorn_distance)
         distances_rep = torch.concat(distances_rep_list)
