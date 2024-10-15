@@ -1,7 +1,7 @@
 import os
 
 from definitions import ROOT_DIR
-from ray_tools.base.parameter import NumericalParameter, RandomParameter, RayParameterContainer
+from ray_tools.base.parameter import NumericalParameter, RandomOutputParameter, RandomParameter, RayParameterContainer
 from ray_tools.base.transform import Histogram, RayTransformConcat, XYHistogram
 from ray_tools.base.utils import RandomGenerator
 
@@ -66,4 +66,8 @@ PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
     ('E2.rotationZerror', RandomParameter(value_lims=(22.0, 32.0), rg=RG)),
     ('E2.translationYerror', RandomParameter(value_lims=(-1, 1), rg=RG)),
     ('E2.translationZerror', RandomParameter(value_lims=(-1, 1), rg=RG)),
+    ('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
+    ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
+    ('ImagePlane.translationZerror', RandomOutputParameter(value_lims=(-3, 3), rg=RG)),
+    
 ])
