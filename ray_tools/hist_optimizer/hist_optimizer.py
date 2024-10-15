@@ -248,15 +248,15 @@ def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterat
 def evaluate_evaluation_method(method, model, observed_rays, uncompensated_parameters, offsets, max_offset=0.2, num_candidates=1000000, iterations=1000, repetitions=10):
     loss_list = []
     loss_min_tens_list = []
-    loss_min_params_list = []
     for i in range(repetitions):
         loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, max_offset=max_offset, )
         loss_min_tens_list.append(torch.tensor(loss_min_list, device=model.device))
-        loss_min_params_list.append(loss_min_params[0])
+        if i == 0:
+           loss_min_params_tens = torch.empty((0, loss_min_params[0].shape[-1]), device=model.device)
+        loss_min_params_tens = torch.vstack((loss_min_params_tens, loss_min_params[0]))
         loss_list.append(loss)
     losses = torch.tensor(loss_list)
     loss_min_tens_tens = torch.vstack(loss_min_tens_list)
-    loss_min_params_tens = torch.stack(loss_min_params_list)
     return losses.mean().item(), losses.std().item(), loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens
 
 def simulate_param_tensor(input_param_tensor, engine):
