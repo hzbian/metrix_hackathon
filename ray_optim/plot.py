@@ -580,12 +580,6 @@ class Plot:
 
     @staticmethod
     def plot_engines_comparison(engine, surrogate_engine, param_container_list: list[RayParameterContainer], transforms, dataset_label=None):
-        for param_container in param_container_list:
-            for label, param in param_container.items():
-                if isinstance(param, OutputParameter):
-                    if isinstance(param_container[label], NumericalParameter):
-                        param_container[label].value = 0.
-
         out = engine.run(param_container_list, transforms)
         out_surrogate = surrogate_engine.run(param_container_list, transforms)
         std_backward = surrogate_engine.model.standardizer.destandardize

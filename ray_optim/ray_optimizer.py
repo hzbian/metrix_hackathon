@@ -15,7 +15,7 @@ from ray_optim.target import OffsetTarget, RayScan, Target
 import matplotlib.pyplot as plt
 
 from ray_tools.base import RayTransform
-from ray_tools.base.engine import Engine
+from ray_tools.base.engine import Engine, get_exported_plane_translation
 from ray_tools.base.parameter import (
     MutableParameter,
     RayParameterContainer,
@@ -150,34 +150,13 @@ class RayOptimizer:
         return RayTransformCompose(transforms_copy, translation_transform)
 
     @staticmethod
-    def get_exported_plane_translation(
-        exported_plane: str, param_container: RayParameterContainer
-    ):
-        x_translation: float = 0.0
-        y_translation: float = 0.0
-        z_translation: float = 0.0
-        for key, param in param_container.items():
-            if isinstance(param, OutputParameter) and isinstance(
-                param, NumericalParameter
-            ):
-                if key.split(".")[0] == exported_plane:
-                    param_entry = key.split(".")[-1]
-                    if param_entry == "translationXerror":
-                        x_translation = param.value
-                    if param_entry == "translationYerror":
-                        y_translation = param.value
-                    if param_entry == "translationZerror":
-                        z_translation = param.value
-        return x_translation, y_translation, z_translation
-
-    @staticmethod
     def translate_exported_plain_transforms(
         exported_plane: str,
         param_container_list: list[RayParameterContainer],
         transform: RayTransform,
     ) -> list[RayTransform]:
         exported_plane_translations = [
-            RayOptimizer.get_exported_plane_translation(
+            get_exported_plane_translation(
                 exported_plane, param_container_entry
             )
             for param_container_entry in param_container_list

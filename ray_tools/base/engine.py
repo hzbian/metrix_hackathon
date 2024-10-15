@@ -11,8 +11,28 @@ from raypyng.xmltools import XmlElement
 
 from . import RayTransformType
 from .backend import RayBackend, RayOutput
-from .parameter import RandomParameter, RayParameterContainer, OutputParameter
+from .parameter import NumericalParameter, RandomParameter, RayParameterContainer, OutputParameter
 from .transform import RayTransform
+
+def get_exported_plane_translation(
+    exported_plane: str, param_container: RayParameterContainer
+):
+    x_translation: float = 0.0
+    y_translation: float = 0.0
+    z_translation: float = 0.0
+    for key, param in param_container.items():
+        if isinstance(param, OutputParameter) and isinstance(
+            param, NumericalParameter
+        ):
+            if key.split(".")[0] == exported_plane:
+                param_entry = key.split(".")[-1]
+                if param_entry == "translationXerror":
+                    x_translation = param.value
+                if param_entry == "translationYerror":
+                    y_translation = param.value
+                if param_entry == "translationZerror":
+                    z_translation = param.value
+    return x_translation, y_translation, z_translation
 
 
 class Engine(abc.ABC):
@@ -113,9 +133,23 @@ class RayEngine(Engine):
             result['param_container_dict'][key] = value
 
         # call the backend to perform the run
-        result['ray_output'] = self.ray_backend.run(raypyng_rml=raypyng_rml_work,
+        ray_output_all_planes = self.ray_backend.run(raypyng_rml=raypyng_rml_work,
                                                     exported_planes=self.exported_planes)
+        for key, ray_output in ray_output_all_planes.items():
+            # compute x and y direction for normalized z direction (zz_dir would be 1)
+            xz_dir = ray_output.x_dir / ray_output.z_dir
+            yz_dir = ray_output.y_dir / ray_output.z_dir
+            trans_x, trans_y, trans_z = get_exported_plane_translation(key, param_container=param_container)
 
+            x_cur = ray_output.x_loc + xz_dir * trans_z + trans_x
+            y_cur = ray_output.y_loc + yz_dir * trans_z + trans_y
+            z_cur = ray_output.z_loc + trans_z
+
+            ray_output_all_planes[key].x_loc = x_cur
+            ray_output_all_planes[key].y_loc = y_cur
+            ray_output_all_planes[key].z_loc = z_cur
+
+        result['ray_output'] = ray_output_all_planes
         # apply transform (to each exported plane)
         if transform is not None:
             for plane in self.exported_planes:

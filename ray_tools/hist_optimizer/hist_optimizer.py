@@ -8,8 +8,8 @@ from ray_optim.plot import Plot
 from ray_tools.base.transform import MultiLayer
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_nn.nn.xy_hist_data_models import MetrixXYHistSurrogate
-from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
 from geomloss import SamplesLoss
+from ray_tools.base.parameter import NumericalParameter, OutputParameter, NumericalOutputParameter, MutableParameter
 from datasets.metrix_simulation.config_ray_emergency_surrogate import TRANSFORMS as cfg_transforms
 from ray_tools.base.parameter import NumericalParameter, NumericalOutputParameter, RayParameterContainer
 from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, MemoryDataset, RayDataset
@@ -23,21 +23,29 @@ from ray_tools.base.transform import XYHistogram
 from ray_nn.data.transform import Select
 
 
-def tensor_to_param_container(ten):
-    param_dict = {}
-    for i, (label, entry) in enumerate(params().items()):
-        if label == 'U41_318eV.numberRays':
-            param_dict[label] = entry
+def tensor_to_param_container(ten, ray_parameter_container: RayParameterContainer):
+    assert sum([1 if isinstance(value, MutableParameter) else 0 for key, value in ray_parameter_container.items()]) == ten.shape[0]
+    assert ten.min() >= 0. and ten.max() <= 1.
+    param_dict_list = []
+    i=0
+    for label, entry in ray_parameter_container.items():
+        if not isinstance(entry, MutableParameter):
+            param_dict_list.append((label, entry))
         else:
-            value = ten[i-1]*(entry.value_lims[1]-entry.value_lims[0])+entry.value_lims[0]
-            param_dict[label] = NumericalParameter(value.item())
-            if value.item() < entry.value_lims[0] or value.item() > entry.value_lims[1]:
-                if value.item() < entry.value_lims[0]:
-                    value = torch.ones_like(value) * entry.value_lims[0]
-                elif value.item() > entry.value_lims[1]:
-                    value = torch.ones_like(value) * entry.value_lims[1]
+            value = ten[i]*(entry.value_lims[1]-entry.value_lims[0])+entry.value_lims[0]
+            if not isinstance(entry, OutputParameter):
+                param_dict_list.append((label, NumericalParameter(value.item())))
+            else:
+                param_dict_list.append((label, NumericalOutputParameter(value.item())))
+            #if value.item() < entry.value_lims[0] or value.item() > entry.value_lims[1]:
+            #    if value.item() < entry.value_lims[0]:
+            #        value = torch.ones_like(value) * entry.value_lims[0]
+            #    elif value.item() > entry.value_lims[1]:
+            #        value = torch.ones_like(value) * entry.value_lims[1]
                 #raise Exception("Out of range. Minimum was {}, maximum {} but value {}. Tensor value was {}.".format(entry.value_lims[0], entry.value_lims[1], value.item(), ten[i-1].item()))
-    return RayParameterContainer(param_dict)
+            i = i+1
+
+    return RayParameterContainer(param_dict_list)
 
 def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[RayParameterContainer], transforms):
     out = engine.run(param_container_list, transforms)
@@ -69,14 +77,16 @@ class Model:
         self.model_orig = model_orig
         self.device = model_orig.device
     def __call__(self, x, clone_output=False):
-        output = self.model_orig(x[..., :34])
+        assert x.shape[-1] == 37
+        inp = torch.cat((x[..., :-3],x[..., -1:]), dim=-1)
+        output = self.model_orig(inp)
         #print("Original Histogram Batch:")
         #print(output.shape)
         #output = output.view(*(output.size()[:-1]), 2, -1)
         if clone_output:
             output = output.clone()
-        translation_x = x[..., -2]
-        translation_y = x[..., -1]
+        translation_x = x[..., -3]
+        translation_y = x[..., -2]
         #print("output", output.shape)
         #print("tx", translation_x.shape)
         ##output[..., 0, :] = Model.batch_translate_histograms(output[..., 0, :], translation_x*self.x_factor*0.5+0.5)
@@ -308,8 +318,8 @@ def plot_param_tensors(best_parameters, uncompensated_parameters, engine, observ
     )
     return compensation_plot
 
-def tensor_list_to_param_container_list(input_param_tensor):
-    return [tensor_to_param_container(input_param_tensor[i].squeeze()) for i in range(input_param_tensor.shape[0])]
+def tensor_list_to_param_container_list(input_param_tensor, ray_parameter_container):
+    return [tensor_to_param_container(input_param_tensor[i].squeeze(), ray_parameter_container) for i in range(input_param_tensor.shape[0])]
 
 
 ''' input shape

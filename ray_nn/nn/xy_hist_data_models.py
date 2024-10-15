@@ -307,6 +307,7 @@ class HistSurrogateEngine(Engine):
 
     def run(self, param_containers: list[RayParameterContainer], transforms: RayTransform | dict[str, RayTransform] | Iterable[RayTransform | dict[str, RayTransform]] | None = None) -> list[dict]:
         param_containers_tensor = torch.vstack([self.select({"1e5/params":param_container})[0] for param_container in param_containers])
+        param_containers_tensor = torch.cat((param_containers_tensor[..., :-3],param_containers_tensor[..., -1:]), dim=-1)
         with torch.no_grad():
             output = self.model(param_containers_tensor)
             hist_len = int(output.shape[-1] / 2)

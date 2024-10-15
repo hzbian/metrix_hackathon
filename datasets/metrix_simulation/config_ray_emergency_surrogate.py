@@ -68,6 +68,6 @@ PARAM_CONTAINER_FUNC = lambda: RayParameterContainer([
     ('E2.translationZerror', RandomParameter(value_lims=(-1, 1), rg=RG)),
     ('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
     ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-1, 1), rg=RG)),
-    ('ImagePlane.translationZerror', RandomOutputParameter(value_lims=(-3, 3), rg=RG)),
+    ('ImagePlane.translationZerror', RandomOutputParameter(value_lims=(-33, 33), rg=RG)),
     
 ])
