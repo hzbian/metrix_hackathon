@@ -10,12 +10,13 @@ class Select(torch.nn.Module):
      Torch transform for selecting the specified entries in input dict. If you supply a search space, it will normalize the selected entries, that are dicts. If you want to 
     """
 
-    def __init__(self, keys, search_space=None, non_dict_transform=None, omit_ray_params=[]):
+    def __init__(self, keys, search_space=None, non_dict_transform=None, omit_ray_params=[], device=None):
         super().__init__()
         self.keys = keys
         self.search_space = search_space
         self.non_dict_transform = non_dict_transform
         self.omit_ray_params = omit_ray_params
+        self.device = device
 
     def forward(self, batch):
         outputs = []
@@ -33,9 +34,9 @@ class Select(torch.nn.Module):
                     new_element = normalized_parameter_container
                 if isinstance(new_element, RayParameterContainer):
                     new_element = new_element.to_value_dict()
-                new_element = torch.hstack([torch.tensor(i) for k, i in new_element.items() if k not in self.omit_ray_params]).float()
+                new_element = torch.hstack([torch.tensor(i, device=self.device) for k, i in new_element.items() if k not in self.omit_ray_params]).float()
             else:
-                new_element = torch.tensor(batch[key]).float().unsqueeze(-1)
+                new_element = torch.tensor(batch[key], device=self.device).float().unsqueeze(-1)
                 if self.non_dict_transform is not None:
                     if key in self.non_dict_transform:
                         new_element = self.non_dict_transform[key](new_element)
