@@ -7,9 +7,9 @@ from tqdm import trange
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.parameter import MutableParameter
 from ray_tools.base.backend import RayBackendDockerRAYUI
-from ray_tools.base.transform import Histogram, RayTransformConcat, XYHistogram, MultiLayer, RayTransformCompose
+from ray_tools.base.transform import XYHistogram
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
-from ray_tools.hist_optimizer.hist_optimizer import tensor_to_param_container, mse_engines_comparison, Model, find_good_offset_problem, optimize_smart_walker, optimize_brute, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list
+from ray_tools.hist_optimizer.hist_optimizer import tensor_list_to_param_container_list
 from ray_tools.base.parameter import RayParameterContainer
 
 def engine_output_to_np_array(out):
@@ -30,8 +30,8 @@ def create_histogram_file(engine, seed, path="outputs/", total_size=10, batch_si
     with h5py.File(os.path.join(path, 'histogram_'+str(seed)+'.h5'), 'w') as f:
         torch.manual_seed(seed)
         dset_arr = f.create_dataset("parameters", (total_size,36), dtype='float64', track_order=True)
-        dset_n_rays = f.create_dataset("n_rays", (total_size,), dtype='float64')
-        dset_hist = f.create_dataset("histogram", (total_size,2,50), dtype='float64')
+        dset_n_rays = f.create_dataset("n_rays/ImagePlane", (total_size,), dtype='float64')
+        dset_hist = f.create_dataset("histogram/ImagePlane", (total_size,2,50), dtype='float64')
         dset_hist.attrs['lims'] = x_lims, y_lims
         lims_list = []
         no_xy_translation_ip_params = RayParameterContainer([(key, value) for key, value in params().items() if key not in ['ImagePlane.translationXerror', 'ImagePlane.translationYerror']])
