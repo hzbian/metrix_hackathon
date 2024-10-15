@@ -296,18 +296,73 @@ if __name__ == '__main__':
     else:
         trainer.fit(model=model, datamodule=datamodule)
 
+class Model:
+    def __init__(self, path):
+        model_orig = MetrixXYHistSurrogate.load_from_checkpoint(path)
+        if torch.cuda.is_available():
+            model_orig = model_orig.to('cuda')
+        #model_orig.compile()
+        model_orig.eval()
+        self.x_factor = 2./20. # translationX_interval length [mm] / histogram_interval length [mmm]
+        self.y_factor = 2./6.  # translationY_interval length [mm] / histogram_interval length [mmm]
+        self.model_orig = model_orig
+        self.device = model_orig.device
+        self.standardizer = self.model_orig.standardizer
+    def __call__(self, x, clone_output=False):
+        assert x.shape[-1] == 37
+        inp = torch.cat((x[..., :-3],x[..., -1:]), dim=-1)
+        with torch.no_grad():
+            output = self.model_orig(inp)
+        output = output.view(*(output.size()[:-1]), 2, -1)
+        if clone_output:
+            output = output.clone()
+        translation_x = x[..., -3]
+        translation_y = x[..., -2]
+        output[..., 0, :] = Model.batch_translate_histograms(output[..., 0, :], (translation_x-0.5)*self.x_factor)
+        output[..., 1, :] = Model.batch_translate_histograms(output[..., 1, :], (translation_y-0.5) *self.y_factor)
+        
+        return output.flatten(start_dim=-2)
+        
+    @staticmethod
+    def batch_translate_histograms(hist_batch, shift_tensors):
+        """
+        Translate a batch of histograms in the x-direction based on the batch of shift tensors.
+        The histograms have defined ranges on both x and y axes.
+    
+        Parameters:
+        hist_batch (torch.Tensor): A tensor of shape [batch_size, 2, 50] representing a batch of histograms.
+        shift_tensors (torch.Tensor): A tensor of shape [batch_size, 1] representing the shift proportions for each histogram between -0.5 and 0.5.
+        x_range (tuple): The range of the x-axis as (min, max).
+        y_range (tuple): The range of the y-axis as (min, max).
+    
+        Returns:
+        torch.Tensor: The translated histograms with out-of-bounds values ignored and zeros filled.
+        """
+        num_bins = hist_batch.shape[-1]
+        shift_tensors = shift_tensors
+    
+        # Calculate the number of bins to shift for each histogram in the batch
+        translation_bins = torch.round(shift_tensors * num_bins).long() # Shape: [batch_size]  
+        translated_hist_batch = torch.zeros_like(hist_batch)
+        bin_indices = torch.arange(num_bins, device=hist_batch.device).unsqueeze(0)  # Shape: [1, num_bins]
+        # Calculate the valid indices after translation for each histogram
+        valid_indices = bin_indices - translation_bins.unsqueeze(-1)  # Shape: [batch_size, num_bins]
+        
+        valid_mask = (valid_indices >= 0) & (valid_indices < num_bins)  # Mask for valid positions
+        valid_indices = torch.where(valid_mask, valid_indices, 0)
+        # Translate the x-axis values (first row of histograms)
+        translated_hist_batch = torch.gather(hist_batch, -1, valid_indices)
+        translated_hist_batch = torch.where(valid_mask, translated_hist_batch, torch.zeros_like(translated_hist_batch))
+        return translated_hist_batch
+
 class HistSurrogateEngine(Engine):
     def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/14mxibq2/checkpoints/epoch=102-step=19603784.ckpt"):
         super().__init__()
-        self.model = module.load_from_checkpoint(checkpoint_path)
-        self.model.to(torch.device('cpu'))
-        self.model.compile()
-        self.model.eval()
-        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': self.model.standardizer})
+        self.model = Model(checkpoint_path)
+        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': self.model.model_orig.standardizer}, device=self.model.device)
 
     def run(self, param_containers: list[RayParameterContainer], transforms: RayTransform | dict[str, RayTransform] | Iterable[RayTransform | dict[str, RayTransform]] | None = None) -> list[dict]:
         param_containers_tensor = torch.vstack([self.select({"1e5/params":param_container})[0] for param_container in param_containers])
-        param_containers_tensor = torch.cat((param_containers_tensor[..., :-3],param_containers_tensor[..., -1:]), dim=-1)
         with torch.no_grad():
             output = self.model(param_containers_tensor)
             hist_len = int(output.shape[-1] / 2)

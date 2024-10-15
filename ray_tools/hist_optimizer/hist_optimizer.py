@@ -25,7 +25,7 @@ from ray_nn.data.transform import Select
 
 def tensor_to_param_container(ten, ray_parameter_container: RayParameterContainer):
     assert sum([1 if isinstance(value, MutableParameter) else 0 for key, value in ray_parameter_container.items()]) == ten.shape[0]
-    assert ten.min() >= 0. and ten.max() <= 1.
+    #assert ten.min() >= 0. and ten.max() <= 1.
     param_dict_list = []
     i=0
     for label, entry in ray_parameter_container.items():
@@ -65,113 +65,6 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
         mse_list.append(mse)
     return torch.stack(mse_list), x_simulation_hist_list, y_simulation_hist_list
 
-class Model:
-    def __init__(self, path):
-        model_orig = MetrixXYHistSurrogate.load_from_checkpoint(path)
-        if torch.cuda.is_available():
-            model_orig = model_orig.to('cuda')
-        #model_orig.compile()
-        model_orig.eval()
-        self.x_factor = 0./20.
-        self.y_factor = 0./4.
-        self.model_orig = model_orig
-        self.device = model_orig.device
-    def __call__(self, x, clone_output=False):
-        assert x.shape[-1] == 37
-        inp = torch.cat((x[..., :-3],x[..., -1:]), dim=-1)
-        output = self.model_orig(inp)
-        #print("Original Histogram Batch:")
-        #print(output.shape)
-        #output = output.view(*(output.size()[:-1]), 2, -1)
-        if clone_output:
-            output = output.clone()
-        translation_x = x[..., -3]
-        translation_y = x[..., -2]
-        #print("output", output.shape)
-        #print("tx", translation_x.shape)
-        ##output[..., 0, :] = Model.batch_translate_histograms(output[..., 0, :], translation_x*self.x_factor*0.5+0.5)
-        ##output[..., 1, :] = Model.batch_translate_histograms(output[..., 1, :], translation_y*self.y_factor*0.5+0.5)
-        #print("\nTranslated Histogram Batch:")
-        #print(output.flatten(start_dim=-2).shape)
-        
-        return output#output.flatten(start_dim=-2)
-        
-    @staticmethod
-    def batch_translate_histograms(hist_batch, shift_tensors):
-        #print(hist_batch.shape, shift_tensors.shape)
-        """
-        Translate a batch of histograms in the x-direction based on the batch of shift tensors.
-        The histograms have defined ranges on both x and y axes.
-    
-        Parameters:
-        hist_batch (torch.Tensor): A tensor of shape [batch_size, 2, 50] representing a batch of histograms.
-        shift_tensors (torch.Tensor): A tensor of shape [batch_size, 1] representing the shift proportions for each histogram.
-        x_range (tuple): The range of the x-axis as (min, max).
-        y_range (tuple): The range of the y-axis as (min, max).
-    
-        Returns:
-        torch.Tensor: The translated histograms with out-of-bounds values ignored and zeros filled.
-        """
-        num_bins = hist_batch.shape[-1]
-        #bin_width = (lim_min - lim_max) / num_bins
-
-        shift_tensors = shift_tensors * 2 - 1
-    
-        # Calculate the number of bins to shift for each histogram in the batch
-        translation_bins = (shift_tensors * num_bins).long() # Shape: [batch_size]
-        
-        translated_hist_batch = torch.zeros_like(hist_batch)
-        bin_indices = torch.arange(num_bins, device=hist_batch.device).unsqueeze(0)  # Shape: [1, num_bins]
-        #print("translation_bins", translation_bins.shape)
-        #print("bin_indices", bin_indices.shape)
-        #print("translation_bins.unsqueeze_1", translation_bins.unsqueeze(1).shape)
-        # Calculate the valid indices after translation for each histogram
-        valid_indices = bin_indices - translation_bins.unsqueeze(-1)  # Shape: [batch_size, num_bins]
-        l
-        
-        valid_mask = (valid_indices >= 0) & (valid_indices < num_bins)  # Mask for valid positions
-        valid_indices = torch.where(valid_mask, valid_indices, 0)
-        #print("valid_indices", valid_indices, valid_indices.shape)
-        #print(valid_indices, valid_mask)
-        #print(translated_hist_batch.shape, valid_mask.shape, valid_indices.shape, valid_indices[valid_mask])
-        # Translate the x-axis values (first row of histograms)
-        #print("hist_batch shape", hist_batch.shape)
-        #translated_hist_batch = hist_batch[:,valid_indices] # hist_batch[valid_indices[valid_mask]]
-        #print(hist_batch.shape, valid_indices.shape)
-        #print("valid_indices", valid_indices)
-        #print("hist_batch.shape", hist_batch.shape)
-        translated_hist_batch = torch.gather(hist_batch, -1, valid_indices)
-        #print("uh oh no gather")
-        translated_hist_batch = torch.where(valid_mask, translated_hist_batch, torch.zeros_like(translated_hist_batch))
-        #print("kay we got through")
-        # Copy the y-axis values (second row) without modification
-        #translated_hist_batch[:, 1, :] = hist_batch[:, 1, :]
-    
-        return translated_hist_batch
-
-
-#batch_size = 2
-#hist_batch = torch.rand(batch_size, 5)  # Create a batch of 4 random 2x50 histograms
-#shift_tensors = torch.rand(batch_size)  # Shifts by 10%, 50%, 75%, and 30%
-#print("in", hist_batch)
-#translated_hist_batch = Model.batch_translate_histograms(hist_batch, shift_tensors)
-#print("out", translated_hist_batch)
-#indices = torch.tensor([[-4, -3, -2, -1,  0], [-4, -3, -2, -1,  0]])
-#print(indices.shape)
-#print(hist_batch.T[indices].shape)
-
-#model(torch.randn(4, 5, 36, device=model.device))
-#a = torch.arange(3).repeat(2,1)
-#print(a)
-#print("\nTranslated Histogram Batch:")
-
-#print(translated_hist_batch)
-#indices = torch.tensor([[1,0,1],[1,1,0]])
-#print("indices", indices, indices.shape)
-
-#print(a[indices], a[indices].shape)
-
-#torch.index_select(input, dim, indices,
 
 
 def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_offset=0.2, beamline_trials=1000, fixed_parameters=[8, 14, 20, 21, 27, 28]):    
