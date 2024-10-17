@@ -9,6 +9,8 @@ import h5py
 import numpy as np
 from torch.utils.data import Dataset
 
+from ray_tools.base.parameter import NumericalParameter, RandomOutputParameter, RandomParameter, RayParameterContainer
+
 from .data_tools import h5_to_dict
 
 
@@ -206,3 +208,26 @@ class HistDataset(Dataset):
         return tuple([self.transforms[i](value[idx]) if self.transforms is not None else value[idx] for i, value in enumerate(self.data_dict.values())])
     def __len__(self) -> int:
         return self.data_dict[self.sub_groups[0]].shape[0]
+    
+    @staticmethod
+    def retrieve_parameter_container(h5_file_path):
+        with h5py.File(h5_file_path, 'r') as f:
+            exported_planes = f['histogram'].keys()
+            
+            param_container_list = []
+            for key, value in f['parameters'].attrs.items():
+                if hasattr(value, '__iter__'):
+                    if key.split(".")[0] in exported_planes:
+                        param_container_list.append((key, RandomOutputParameter(value_lims=value)))
+                    else:
+                        param_container_list.append((key, RandomParameter(value_lims=value)))
+                else:
+                    param_container_list.append((key, NumericalParameter(value)))
+                    
+            pc = RayParameterContainer(param_container_list)
+            return pc
+
+    @staticmethod
+    def retrieve_xy_lims(h5_file_path):
+        with h5py.File(h5_file_path, 'r') as f:
+            return f['histogram']['ImagePlane'].attrs['lims']

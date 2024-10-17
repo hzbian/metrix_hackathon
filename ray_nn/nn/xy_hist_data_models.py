@@ -37,7 +37,7 @@ plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
 
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', input_parameter_count=34, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', input_parameter_count=34, input_parameter_container=None, histogram_lims=None, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
@@ -48,6 +48,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.lr_scheduler = lr_scheduler
         self.optimizer = optimizer
         self.standardizer = standardizer
+        self.histogram_lims = histogram_lims
+        self.input_parameter_container = input_parameter_container
         self.register_buffer("validation_y_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_hat_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_empty_plot_data", torch.tensor([]))
@@ -262,7 +264,7 @@ if __name__ == '__main__':
     #                    sub_groups=['1e5/params',
     #                                '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
     h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate_50+50+z/histogram_*.h5'))
-    sub_groups = ['parameters', 'histogram', 'n_rays']
+    sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
     transforms=[lambda x: x[1:].float(), lambda x: standardizer(x.flatten().float()), lambda x: x.int()]
     dataset = HistDataset(h5_files, sub_groups, transforms, normalize_sub_groups=['parameters'])
     memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10)
@@ -271,7 +273,7 @@ if __name__ == '__main__':
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers, split_training=0, split_swap_epochs=split_swap_epochs)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer, input_parameter_count=35)
+    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer, input_parameter_count=35, input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
     test = False
     if not test:
         wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
