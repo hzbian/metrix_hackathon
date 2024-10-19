@@ -1,7 +1,7 @@
 import torch
-from ray_tools.hist_optimizer.hist_optimizer import tensor_to_param_container, mse_engines_comparison, Model, find_good_offset_problem, optimize_smart_walker, optimize_brute, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, param_tensor_to_ray_outputs, compare_with_reference
+from ray_tools.hist_optimizer.hist_optimizer import tensor_to_param_container, mse_engines_comparison, find_good_offset_problem, optimize_smart_walker, optimize_brute, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, param_tensor_to_ray_outputs, compare_with_reference
 import matplotlib.pyplot as plt
-from ray_nn.nn.xy_hist_data_models import MetrixXYHistSurrogate, StandardizeXYHist, HistSurrogateEngine
+from ray_nn.nn.xy_hist_data_models import MetrixXYHistSurrogate, Model, StandardizeXYHist, HistSurrogateEngine
 from ray_tools.base.engine import RayEngine
 from ray_tools.base.backend import RayBackendDockerRAYUI
 from ray_optim.plot import Plot
