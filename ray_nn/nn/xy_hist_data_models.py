@@ -309,6 +309,7 @@ class Model:
         self.y_factor = 2./6.  # translationY_interval length [mm] / histogram_interval length [mmm]
         self.model_orig = model_orig
         self.device = model_orig.device
+        self.input_parameter_container = model_orig.input_parameter_container
         self.standardizer = self.model_orig.standardizer
     def __call__(self, x, clone_output=False):
         assert x.shape[-1] == 37
