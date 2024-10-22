@@ -17,8 +17,9 @@ from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONT
 from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_tools.base.backend import RayOutput
 from ray_tools.base.engine import Engine
-from ray_tools.base.parameter import RayParameterContainer
+from ray_tools.base.parameter import MutableParameter, NumericalOutputParameter, RandomOutputParameter, RayParameterContainer
 from ray_tools.base.transform import RayTransform
+from ray_tools.base.utils import RandomGenerator
 from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset, HistDataset
 from ray_nn.data.transform import Select
 
@@ -37,19 +38,19 @@ plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
 
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam', input_parameter_count=34, input_parameter_container=None, histogram_lims=None, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
-        self.net = self.create_sequential(input_parameter_count, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
+        self.input_parameter_container = input_parameter_container
+        self.mutable_parameter_count = len([item for item in self.input_parameter_container.values() if isinstance(item, MutableParameter)])
+        self.net = self.create_sequential(self.mutable_parameter_count, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
         self.validation_plot_len = 4
-        self.input_parameter_count = input_parameter_count
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
         self.optimizer = optimizer
         self.standardizer = standardizer
         self.histogram_lims = histogram_lims
-        self.input_parameter_container = input_parameter_container
         self.register_buffer("validation_y_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_hat_plot_data", torch.tensor([]))
         self.register_buffer("validation_y_empty_plot_data", torch.tensor([]))
@@ -273,7 +274,7 @@ if __name__ == '__main__':
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers, split_training=0, split_swap_epochs=split_swap_epochs)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer, input_parameter_count=35, input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
+    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer, input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
     test = False
     if not test:
         wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
@@ -305,26 +306,53 @@ class Model:
             model_orig = model_orig.to('cuda')
         #model_orig.compile()
         model_orig.eval()
-        self.x_factor = 2./20. # translationX_interval length [mm] / histogram_interval length [mmm]
-        self.y_factor = 2./6.  # translationY_interval length [mm] / histogram_interval length [mmm]
         self.model_orig = model_orig
         self.device = model_orig.device
+        self.histogram_lims = model_orig.histogram_lims
         self.input_parameter_container = model_orig.input_parameter_container
+        new_entries = [('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42))),
+            ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42)))]
+        x_lims = dict(new_entries)['ImagePlane.translationXerror'].value_lims
+        y_lims = dict(new_entries)['ImagePlane.translationYerror'].value_lims
+        hist_x_lims = model_orig.histogram_lims[0]
+        hist_y_lims = model_orig.histogram_lims[1]
+        self.x_factor = (x_lims[1]-x_lims[0])/(hist_x_lims[1]-hist_x_lims[0]).item() # translationX_interval length [mm] / histogram_interval length [mmm]
+        self.y_factor = (y_lims[1]-y_lims[0])/(hist_y_lims[1]-hist_y_lims[0]).item()  # translationY_interval length [mm] / histogram_interval length [mmm]
+        self.input_parameter_container = Model.add_entries_to_pc(self.model_orig.input_parameter_container, new_entries)
+        self.mutable_parameter_count = model_orig.mutable_parameter_count + 2
         self.standardizer = self.model_orig.standardizer
-    def __call__(self, x, clone_output=False):
+    @staticmethod
+    def add_entries_to_pc(pc: RayParameterContainer, new_entries: list):
+        new_parameter_container = []
+        done = False
+        for key, value in pc.items():
+            if key == 'ImagePlane.translationZerror':
+                new_parameter_container += new_entries
+                done = True
+            new_parameter_container.append((key, value))
+        if not done:
+            new_parameter_container += new_entries
+        return RayParameterContainer(new_parameter_container)
+        
+
+    def __call__(self, x, clone_output=False, grad=True):
         assert x.shape[-1] == 37
         inp = torch.cat((x[..., :-3],x[..., -1:]), dim=-1)
-        with torch.no_grad():
+        if grad:
             output = self.model_orig(inp)
+        else:
+            with torch.no_grad():
+                output = self.model_orig(inp)
         output = output.view(*(output.size()[:-1]), 2, -1)
         if clone_output:
-            output = output.clone()
+            output_copy = output.clone()
+        else: 
+            output_copy = output
         translation_x = x[..., -3]
         translation_y = x[..., -2]
-        output[..., 0, :] = Model.batch_translate_histograms(output[..., 0, :], (translation_x-0.5)*self.x_factor)
-        output[..., 1, :] = Model.batch_translate_histograms(output[..., 1, :], (translation_y-0.5) *self.y_factor)
-        
-        return output.flatten(start_dim=-2)
+        output_copy[..., 0,:] = Model.batch_translate_histograms(output[..., 0, :], (translation_x-0.5)*self.x_factor)
+        output_copy[..., 1, :] = Model.batch_translate_histograms(output[..., 1, :], (translation_y-0.5) *self.y_factor)
+        return output_copy.flatten(start_dim=-2)
         
     @staticmethod
     def batch_translate_histograms(hist_batch, shift_tensors):
@@ -362,7 +390,7 @@ class HistSurrogateEngine(Engine):
     def __init__(self, module=MetrixXYHistSurrogate, checkpoint_path: str="outputs/xy_hist/14mxibq2/checkpoints/epoch=102-step=19603784.ckpt"):
         super().__init__()
         self.model = Model(checkpoint_path)
-        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': self.model.model_orig.standardizer}, device=self.model.device)
+        self.select = Select(keys=['1e5/params'], omit_ray_params=['U41_318eV.numberRays'], search_space=self.model.input_parameter_container, non_dict_transform={'1e5/ray_output/ImagePlane/histogram': self.model.model_orig.standardizer}, device=self.model.device)
 
     def run(self, param_containers: list[RayParameterContainer], transforms: RayTransform | dict[str, RayTransform] | Iterable[RayTransform | dict[str, RayTransform]] | None = None) -> list[dict]:
         param_containers_tensor = torch.vstack([self.select({"1e5/params":param_container})[0] for param_container in param_containers])

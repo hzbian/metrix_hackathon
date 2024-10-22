@@ -67,11 +67,21 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
 
 
 
-def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_offset=0.2, beamline_trials=1000, fixed_parameters=[8, 14, 20, 21, 27, 28]):    
+def find_good_offset_problem(model, iterations=10000, offset_trials=100, max_offset=0.2, beamline_trials=1000, fixed_parameters=[8, 14, 20, 21, 27, 28], z_array=[-33., 0., 5., 10.], z_array_label='ImagePlane.translationZerror'):
+    mutable_parameter_count = model.mutable_parameter_count
+    assert z_array_label in model.input_parameter_container.keys()
+    z_array_min, z_array_max = model.input_parameter_container[z_array_label].value_lims
+    normalized_z_array = torch.tensor((z_array - z_array_min) / (z_array_max - z_array_min), device=model.device).float()
+    
     for i in tqdm.tqdm(range(iterations)):
-        offsets = (torch.rand(1, offset_trials, 34, device=model.device) * max_offset * 2) - max_offset
-        uncompensated_parameters = torch.rand(beamline_trials, 1, offsets.shape[-1], device=model.device)
-        uncompensated_parameters[:,:,fixed_parameters] = uncompensated_parameters[0,0,fixed_parameters].unsqueeze(0).unsqueeze(1)
+        offsets = (torch.rand(1, offset_trials, mutable_parameter_count, device=model.device) * max_offset * 2) - max_offset
+        uncompensated_parameters = torch.rand(beamline_trials, 1, 1, offsets.shape[-1], device=model.device)
+        uncompensated_parameters[:,:,:,fixed_parameters] = uncompensated_parameters[0,0,0,fixed_parameters].unsqueeze(0).unsqueeze(1)
+        uncompensated_parameters = torch.repeat_interleave(uncompensated_parameters, len(z_array), dim=1)
+        print(offsets.shape, uncompensated_parameters.shape)
+        print(uncompensated_parameters[0, :, 0, -1])
+        print(uncompensated_parameters[0, :, 0, -1]+normalized_z_array)
+        return None, None, None
         tensor_sum = offsets + uncompensated_parameters
         tensor_sum = torch.clamp(tensor_sum, 0, 1)
         uncompensated_parameters = tensor_sum - offsets
@@ -152,9 +162,9 @@ def evaluate_evaluation_method(method, model, observed_rays, uncompensated_param
     loss_min_tens_tens = torch.vstack(loss_min_tens_list)
     return losses.mean().item(), losses.std().item(), loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens
 
-def simulate_param_tensor(input_param_tensor, engine):
+def simulate_param_tensor(input_param_tensor, engine, ray_parameter_container):
     #print("simulating", input_param_tensor.shape)
-    pc = tensor_list_to_param_container_list(input_param_tensor[...,:34])
+    pc = tensor_list_to_param_container_list(input_param_tensor, ray_parameter_container)
     param_container_list = []
     for i in input_param_tensor:
         i = i.squeeze()
@@ -180,14 +190,14 @@ def simulate_param_tensor(input_param_tensor, engine):
     engine_output = engine.run(pc, MultiLayer([0.])) ###exported_plain_transforms
     return ray_output_to_tensor(engine_output, 'ImagePlane')
 
-def plot_param_tensors(best_parameters, uncompensated_parameters, engine, observed_rays_point_cloud=None, compensated_parameters=None):
+def plot_param_tensors(best_parameters, uncompensated_parameters, engine, ray_parameter_container, observed_rays_point_cloud=None, compensated_parameters=None):
     assert observed_rays_point_cloud is not None or compensated_parameters is not None # you should provide one of two
     if compensated_parameters is not None:
-        observed_rays = simulate_param_tensor(compensated_parameters, engine)
+        observed_rays = simulate_param_tensor(compensated_parameters, engine, ray_parameter_container)
     else:
         observed_rays = observed_rays_point_cloud
-    best_rays = simulate_param_tensor(best_parameters, engine)
-    uncompensated_rays = simulate_param_tensor(uncompensated_parameters, engine)
+    best_rays = simulate_param_tensor(best_parameters, engine, ray_parameter_container)
+    uncompensated_rays = simulate_param_tensor(uncompensated_parameters, engine, ray_parameter_container)
 
     x_means = []
     y_means = []
@@ -220,10 +230,10 @@ iterations x samples x parameters
 output shape
 ray output list of iterations of lists of samples
 '''
-def param_tensor_to_ray_outputs(input_tens, engine):
+def param_tensor_to_ray_outputs(input_tens, engine, ray_paramer_container):
     out_list = []
     for entry in input_tens:
-        param_container_list = tensor_list_to_param_container_list(entry)
+        param_container_list = tensor_list_to_param_container_list(entry, ray_paramer_container)
         out = engine.run(param_container_list, MultiLayer([0.]))
         out_list.append(out)
     return out_list
