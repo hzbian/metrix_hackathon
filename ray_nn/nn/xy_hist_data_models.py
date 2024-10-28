@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from contextlib import nullcontext
 import glob
 import math
 import psutil
@@ -310,7 +311,7 @@ class Model:
         self.device = model_orig.device
         self.histogram_lims = model_orig.histogram_lims
         self.input_parameter_container = model_orig.input_parameter_container
-        new_entries = [('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42))),
+        new_entries = [('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-7,7), rg=RandomGenerator(42))),
             ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42)))]
         x_lims = dict(new_entries)['ImagePlane.translationXerror'].value_lims
         y_lims = dict(new_entries)['ImagePlane.translationYerror'].value_lims
@@ -321,6 +322,11 @@ class Model:
         self.input_parameter_container = Model.add_entries_to_pc(self.model_orig.input_parameter_container, new_entries)
         self.mutable_parameter_count = model_orig.mutable_parameter_count + 2
         self.standardizer = self.model_orig.standardizer
+        self.offset_space_overrides = {'ImagePlane.translationXerror': RandomOutputParameter(value_lims=(-3.,3.), rg=RandomGenerator(42)), 'ImagePlane.translationYerror': RandomOutputParameter(value_lims=(-2.0,2.0), rg=RandomGenerator(42)), 'ImagePlane.translationZerror': RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42))}
+        self.max_offset_share = 0.2
+        self.offset_space = Model.calculate_offset_space(self.input_parameter_container, self.max_offset_share, self.offset_space_overrides)
+        self.rescale_multiplier, self.rescale_addend = Model.mutable_parameter_offset_conversion_factor(self.input_parameter_container, self.offset_space, device=self.device)
+
     @staticmethod
     def add_entries_to_pc(pc: RayParameterContainer, new_entries: list):
         new_parameter_container = []
@@ -333,16 +339,61 @@ class Model:
         if not done:
             new_parameter_container += new_entries
         return RayParameterContainer(new_parameter_container)
-        
+    @staticmethod
+    def calculate_offset_space(input_parameter_container: RayParameterContainer, max_offset_share: float, offset_space_overrides={}):
+        new_parameter_container = []
+        for key, value in input_parameter_container.items():
+            if key in offset_space_overrides.keys():
+                new_parameter_container.append((key, offset_space_overrides[key]))
+            else:
+                if isinstance(value, MutableParameter):
+                    value_copy = value.clone()
+                    old_size = value_copy.value_lims[1] - value_copy.value_lims[0]
+                    #old_center = old_size / 2. + value_copy.value_lims[0]
+                    #new_min = old_center - (old_size * max_offset_share) / 2.
+                    #new_max = old_center + (old_size * max_offset_share) / 2.
+                    new_min = - old_size * max_offset_share / 2.
+                    new_max = old_size * max_offset_share / 2.
+                    value_copy.value_lims = (new_min, new_max)
+                else:
+                    value_copy = value
+                new_parameter_container.append((key, value_copy))
+        return RayParameterContainer(new_parameter_container)
+    
+    @staticmethod
+    def mutable_parameter_offset_conversion_factor(model_space: RayParameterContainer, offset_space: RayParameterContainer, device):
+        model_min_list = []
+        model_max_list = []
+        offset_min_list = []
+        offset_max_list = []
+        for key, value in model_space.items():
+            if isinstance(value, MutableParameter):
+                model_min_list.append(value.value_lims[0])
+                model_max_list.append(value.value_lims[1])
+                offset_value = offset_space[key]
+                assert isinstance(offset_value, MutableParameter)
+                offset_min_list.append(offset_value.value_lims[0])
+                offset_max_list.append(offset_value.value_lims[1])
+        model_min = torch.tensor(model_min_list, device=device)
+        model_max = torch.tensor(model_max_list, device=device)
+        offset_min = torch.tensor(offset_min_list, device=device)
+        offset_max = torch.tensor(offset_max_list, device=device)
+        rescale_scaler = 1. / (model_max - model_min)
+        rescale_multiplier = (offset_max- offset_min) * rescale_scaler
+        rescale_addend = (offset_min) * rescale_scaler
+        return rescale_multiplier.float(), rescale_addend.float()
+    def rescale_offset(self, offset):
+        return offset * self.rescale_multiplier + self.rescale_addend
 
-    def __call__(self, x, clone_output=False, grad=True):
+    def __call__(self, x, offset=None, clone_output=False, grad=False):
         assert x.shape[-1] == 37
+        if offset is not None:
+            x = x + self.rescale_offset(offset)
         inp = torch.cat((x[..., :-3],x[..., -1:]), dim=-1)
-        if grad:
+            
+        with torch.no_grad() if not grad else nullcontext():
             output = self.model_orig(inp)
-        else:
-            with torch.no_grad():
-                output = self.model_orig(inp)
+
         output = output.view(*(output.size()[:-1]), 2, -1)
         if clone_output:
             output_copy = output.clone()
