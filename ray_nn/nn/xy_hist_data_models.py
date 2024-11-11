@@ -243,7 +243,7 @@ class StandardizeXYHist():
 if __name__ == '__main__':
     load_len: int | None = None
     standardizer = StandardizeXYHist()
-    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate_50+50+z/histogram_*.h5'))
+    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/histogram_*.h5'))
     sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
     transforms=[lambda x: x[1:].float(), lambda x: standardizer(x.flatten().float()), lambda x: x.int()]
     dataset = HistDataset(h5_files, sub_groups, transforms, normalize_sub_groups=['parameters'])
@@ -252,10 +252,10 @@ if __name__ == '__main__':
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer,  input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), layer_size=7, histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
     test = False
     if not test:
-        wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
+        wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
     else:
         wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
