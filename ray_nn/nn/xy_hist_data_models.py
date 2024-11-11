@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from torch.nn import Module
 import wandb
+import gc
 
 from datasets.metrix_simulation.config_ray_emergency_surrogate import PARAM_CONTAINER_FUNC as params
 from ray_nn.data.lightning_data_module import DefaultDataModule
@@ -39,33 +40,50 @@ plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
 
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, total_bin_count:int=100, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
         self.input_parameter_container = input_parameter_container
+        self.total_bin_count = total_bin_count
         self.mutable_parameter_count = len([item for item in self.input_parameter_container.values() if isinstance(item, MutableParameter)])
-        self.net = self.create_sequential(self.mutable_parameter_count, 100, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
+        self.net = self.create_sequential(self.mutable_parameter_count, self.total_bin_count, layer_size, blow=blow, shrink_factor=shrink_factor, activation_function=nn.Mish(), last_activation=last_activation)
         self.validation_plot_len = 4
         self.learning_rate = learning_rate
         self.lr_scheduler = lr_scheduler
         self.optimizer = optimizer
         self.standardizer = standardizer
+        self.criterion = torch.nn.MSELoss()
         self.histogram_lims = histogram_lims
-        self.register_buffer("validation_y_plot_data", torch.tensor([]))
-        self.register_buffer("validation_y_hat_plot_data", torch.tensor([]))
-        self.register_buffer("validation_y_empty_plot_data", torch.tensor([]))
-        self.register_buffer("validation_y_hat_empty_plot_data", torch.tensor([]))
-        self.register_buffer("train_y_empty_plot_data", torch.tensor([]))
-        self.register_buffer("train_y_plot_data", torch.tensor([]))
-        self.register_buffer("train_y_hat_empty_plot_data", torch.tensor([]))
-        self.register_buffer("train_y_hat_plot_data", torch.tensor([]))
+        self.register_buffer("validation_y_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
+        self.register_buffer("validation_y_hat_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
+        self.register_buffer("validation_y_empty_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
+        self.register_buffer("validation_y_hat_empty_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
+        special_sample_input = torch.tensor([[0.6176527143, 0.2370701432, 0.5204789042, 0.3861027360, 0.6581171155,
+         0.6619033217, 0.6320477128, 0.2780615389, 0.5915879607, 0.2885326445,
+         0.4318543971, 0.5335806012, 0.4898788631, 0.5250989199, 0.5505525470,
+         0.5152570605, 0.4368085861, 0.4815735817, 0.5060048699, 0.4239439666,
+         0.6532316208, 0.5210996866, 0.4563755095, 0.3020407259, 0.6783920527,
+         0.4192821085, 0.2460880578, 0.4803712368, 0.6794303656, 0.6803815365,
+         0.6727091074, 0.4795180857, 0.4443074763, 0.5825657845]], device=self.device)
+        shape_diff = self.mutable_parameter_count - special_sample_input.shape[1]
+        self.register_buffer("special_sample_input", torch.nn.functional.pad(special_sample_input, (shape_diff,0), "constant", 0.))
+        self.register_buffer("special_sample_simulation_output", torch.tensor([[   0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,  156.,
+         918.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,   13., 1048.,   13.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
+           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.]]))
         print(self.net)
 
     def forward(self, input):
         return self.net(input)
 
-    def create_sequential(self, input_length, output_length, layer_size, blow: int | float =0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None, batch_norm=False, layer_norm=False):
+    def create_sequential(self, input_length, output_length, layer_size, blow: int | float = 0, shrink_factor="log", activation_function: Module=nn.ReLU(), last_activation: Module | None = None, batch_norm=False, layer_norm=False):
         layers = [input_length]
         blow_disabled = blow == 1 or blow == 0
         if not blow_disabled:
@@ -109,17 +127,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         x, y = batch
         y = y.flatten(start_dim=1)
         y_hat = self.net(x)
-        loss = nn.functional.mse_loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
         self.log("train_loss", loss, prog_bar=True, logger=True)
-        empty_mask = y.mean(dim=1) == 0.
-        if (~empty_mask).sum() > 0. and self.train_y_plot_data.shape[0] < self.validation_plot_len:
-            append_len = self.validation_plot_len - self.train_y_plot_data.shape[0]
-            self.train_y_plot_data = torch.cat([self.train_y_plot_data,  y[~empty_mask][:append_len]])
-            self.train_y_hat_plot_data = torch.cat([self.train_y_hat_plot_data,  y_hat[~empty_mask][:append_len]])
-        if empty_mask.sum() > 0. and self.train_y_empty_plot_data.shape[0] < self.validation_plot_len:
-            append_len = self.validation_plot_len - self.train_y_empty_plot_data.shape[0]
-            self.train_y_empty_plot_data = torch.cat([self.train_y_empty_plot_data,  y[empty_mask][:append_len]])
-            self.train_y_hat_empty_plot_data = torch.cat([self.train_y_hat_empty_plot_data,  y_hat[empty_mask][:append_len]])
         return loss
     
     def validation_step(self, batch):
@@ -128,22 +137,23 @@ class MetrixXYHistSurrogate(L.LightningModule):
         y_hat = self.net(x)
         empty_mask = y.mean(dim=1) == 0.
         y_nonempty = y[~empty_mask]
-        y_hat_nonempty = y_hat[~empty_mask]
-        if (~empty_mask).sum() > 0. and self.validation_y_plot_data.shape[0] < self.validation_plot_len:
-            append_len = self.validation_plot_len - self.validation_y_plot_data.shape[0]
-            self.validation_y_plot_data = torch.cat([self.validation_y_plot_data, y_nonempty[:append_len]])
-            self.validation_y_hat_plot_data = torch.cat([self.validation_y_hat_plot_data, y_hat_nonempty[:append_len]])
-        if empty_mask.sum() > 0. and self.validation_y_empty_plot_data.shape[0] < self.validation_plot_len:
-            append_len = self.validation_plot_len - self.validation_y_empty_plot_data.shape[0]
-            self.validation_y_empty_plot_data = torch.cat([self.validation_y_empty_plot_data,  y[empty_mask][:append_len]])
-            self.validation_y_hat_empty_plot_data = torch.cat([self.validation_y_hat_empty_plot_data,  y_hat[empty_mask][:append_len]])
-        if (~empty_mask).sum() > 0.:
-            nonempty_loss = nn.functional.mse_loss(y_hat_nonempty, y_nonempty)
+        y_hat_nonempty = y_hat[~empty_mask]  
+        if len(y_nonempty) > 0:
+            still_available_mask = torch.isnan(self.validation_y_plot_data).all(dim=1)
+            available_indices = torch.arange(len(still_available_mask), device=y_nonempty.device)[still_available_mask]
+            self.validation_y_plot_data[available_indices[:len(y_nonempty)]] = y_nonempty[:still_available_mask.sum()]
+            self.validation_y_hat_plot_data[available_indices[:len(y_hat_nonempty)]] = y_hat_nonempty[:still_available_mask.sum()]
+            nonempty_loss = self.criterion(y_hat_nonempty, y_nonempty)
             self.log("val_nonempty_loss", nonempty_loss, prog_bar=True, logger=True)
-        val_loss = nn.functional.mse_loss(y_hat, y)
+        if empty_mask.sum() > 0:
+            still_available_mask = torch.isnan(self.validation_y_empty_plot_data).all(dim=1)
+            available_indices = torch.arange(len(still_available_mask), device=y.device)[still_available_mask]
+            self.validation_y_empty_plot_data[available_indices[:len(y[empty_mask])]] = y[empty_mask][:still_available_mask.sum()]
+            self.validation_y_hat_empty_plot_data[available_indices[:len(y_hat[empty_mask])]] = y_hat[empty_mask][:still_available_mask.sum()]
+        val_loss = self.criterion(y_hat, y)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
         return val_loss
-    
+
     def test_step(self, batch):
         return self.validation_step(batch)
     
@@ -164,8 +174,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
         ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$ histogram')
         plt.legend()
         fig.supylabel('Normalized ray counts')
-        
         return fig
+
     @staticmethod
     def create_plot(label: str, y_hat, y):
         if len(y) > 0:
@@ -173,42 +183,20 @@ class MetrixXYHistSurrogate(L.LightningModule):
             fig = MetrixXYHistSurrogate.plot_data(y_hat.cpu().detach().numpy(), y.cpu().detach().numpy())
             plt.savefig("outputs/"+label+".pdf")
             wandb.log({label: wandb.Image(fig)})
-            plt.close(fig)
+            fig.clf()
+            plt.close("all")
+            gc.collect()
 
     def on_validation_epoch_end(self):
         MetrixXYHistSurrogate.create_plot('validation', self.validation_y_hat_plot_data, self.validation_y_plot_data)
-        MetrixXYHistSurrogate.create_plot('train', self.train_y_hat_plot_data, self.train_y_plot_data)
         MetrixXYHistSurrogate.create_plot('validation_empty', self.validation_y_hat_empty_plot_data, self.validation_y_empty_plot_data)
-        MetrixXYHistSurrogate.create_plot('train_empty', self.train_y_hat_empty_plot_data, self.train_y_empty_plot_data)
-        self.train_y_hat_plot_data = torch.tensor([]).to(self.train_y_plot_data)
-        self.train_y_hat_empty_plot_data = torch.tensor([]).to(self.train_y_empty_plot_data)
-        self.train_y_empty_plot_data = torch.tensor([]).to(self.train_y_hat_empty_plot_data)
-        self.train_y_plot_data = torch.tensor([]).to(self.train_y_hat_plot_data)
-        self.validation_y_hat_plot_data = torch.tensor([]).to(self.validation_y_plot_data)
-        self.validation_y_plot_data = torch.tensor([]).to(self.validation_y_hat_plot_data)
-        self.validation_y_hat_empty_plot_data = torch.tensor([]).to(self.validation_y_empty_plot_data)
-        self.validation_y_empty_plot_data = torch.tensor([]).to(self.validation_y_hat_empty_plot_data)
-        special_sample_input = torch.tensor([[0.6176527143, 0.2370701432, 0.5204789042, 0.3861027360, 0.6581171155,
-         0.6619033217, 0.6320477128, 0.2780615389, 0.5915879607, 0.2885326445,
-         0.4318543971, 0.5335806012, 0.4898788631, 0.5250989199, 0.5505525470,
-         0.5152570605, 0.4368085861, 0.4815735817, 0.5060048699, 0.4239439666,
-         0.6532316208, 0.5210996866, 0.4563755095, 0.3020407259, 0.6783920527,
-         0.4192821085, 0.2460880578, 0.4803712368, 0.6794303656, 0.6803815365,
-         0.6727091074, 0.4795180857, 0.4443074763, 0.5825657845]], device=self.device)
-        shape_diff = self.input_parameter_count - special_sample_input.shape[1]
-        special_sample_input = torch.nn.functional.pad(special_sample_input, (shape_diff,0), "constant", 0.)
-        special_sample_simulation_output = torch.tensor([[   0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,  156.,
-         918.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,   13., 1048.,   13.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,
-           0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.,    0.]])
-        MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(special_sample_input)), special_sample_simulation_output)
-
+        self.validation_y_hat_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_plot_data)
+        self.validation_y_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_hat_plot_data)
+        self.validation_y_hat_empty_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_empty_plot_data)
+        self.validation_y_empty_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_hat_empty_plot_data)
+        MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(self.special_sample_input)), self.special_sample_simulation_output)
+        gc.collect()
+        
     def configure_optimizers(self):
         if self.optimizer == "adam_w":
             optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
@@ -254,28 +242,17 @@ class StandardizeXYHist():
     
 if __name__ == '__main__':
     load_len: int | None = None
-    dataset_normalize_outputs = True
-    h5_files_original = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/data_raw_*.h5'))
-    h5_files_selected = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate/selected/data_raw_*.h5'))
-    #assert len(h5_files_original) == len(h5_files_selected)
-    original_ratio = 0.2
-    amount_original = int(len(h5_files_original) * original_ratio)
-    h5_files = h5_files_original[:amount_original]+h5_files_selected[amount_original:]
     standardizer = StandardizeXYHist()
-    #dataset = RayDataset(h5_files=h5_files,
-    #                    sub_groups=['1e5/params',
-    #                                '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], transform=Select(keys=['1e5/params', '1e5/ray_output/ImagePlane/histogram', '1e5/ray_output/ImagePlane/n_rays'], search_space=params(), non_dict_transform={'1e5/ray_output/ImagePlane/histogram': standardizer}))
     h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate_50+50+z/histogram_*.h5'))
     sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
     transforms=[lambda x: x[1:].float(), lambda x: standardizer(x.flatten().float()), lambda x: x.int()]
     dataset = HistDataset(h5_files, sub_groups, transforms, normalize_sub_groups=['parameters'])
-    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10)
-    split_swap_epochs = 1000
+    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10, debug_mode=False)
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
-    datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers, split_training=0, split_swap_epochs=split_swap_epochs)
+    datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, dataset_normalize_outputs=dataset_normalize_outputs, standardizer=standardizer, input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
     test = False
     if not test:
         wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish", project="xy_hist", save_dir='outputs')
@@ -287,7 +264,7 @@ if __name__ == '__main__':
         datamodule.setup(stage="fit")
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100000, check_val_every_n_epoch=1, callbacks=[lr_monitor], reload_dataloaders_every_n_epochs=split_swap_epochs)
+    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100000, check_val_every_n_epoch=1, callbacks=[lr_monitor])
     trainer.init_module()
 
     if test:
@@ -349,9 +326,6 @@ class Model:
                 if isinstance(value, MutableParameter):
                     value_copy = value.clone()
                     old_size = value_copy.value_lims[1] - value_copy.value_lims[0]
-                    #old_center = old_size / 2. + value_copy.value_lims[0]
-                    #new_min = old_center - (old_size * max_offset_share) / 2.
-                    #new_max = old_center + (old_size * max_offset_share) / 2.
                     new_min = - old_size * max_offset_share / 2.
                     new_max = old_size * max_offset_share / 2.
                     value_copy.value_lims = (new_min, new_max)

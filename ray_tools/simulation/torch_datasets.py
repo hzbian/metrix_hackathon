@@ -131,7 +131,7 @@ class MemoryDataset(Dataset):
         return self.load_len
 
 class BalancedMemoryDataset(Dataset):
-    def __init__(self, dataset: Dataset, load_len: int | None = None, min_n_rays: int = 1000, good_samples_per_bad: int = 3, **kwargs):
+    def __init__(self, dataset: Dataset, load_len: int | None = None, min_n_rays: int = 1000, good_samples_per_bad: int = 3, debug_mode=False, **kwargs):
         super().__init__()
         self.min_n_rays = min_n_rays
         self.good_samples_per_bad = good_samples_per_bad
@@ -147,7 +147,7 @@ class BalancedMemoryDataset(Dataset):
         self.bad = []
         for idx in trange(load_len):
             new_item = dataset.__getitem__(idx, **kwargs)
-            if new_item[2] >= min_n_rays:
+            if new_item[2] >= min_n_rays or (debug_mode and idx % 2 == 0):
                 self.good.append(new_item[:2])
             else:
                 self.bad.append(new_item[:2])
