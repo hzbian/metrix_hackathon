@@ -248,6 +248,7 @@ if __name__ == '__main__':
     transforms=[lambda x: x[1:].float(), lambda x: standardizer(x.flatten().float()), lambda x: x.int()]
     dataset = HistDataset(h5_files, sub_groups, transforms, normalize_sub_groups=['parameters'])
     memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10, debug_mode=False)
+    del dataset
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers)
