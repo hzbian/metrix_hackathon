@@ -22,7 +22,6 @@ from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import MutableParameter, NumericalOutputParameter, RandomOutputParameter, RayParameterContainer
 from ray_tools.base.transform import RayTransform
 from ray_tools.base.utils import RandomGenerator
-from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset, HistDataset
 from ray_nn.data.transform import Select
 
 SMALL_SIZE = 10
@@ -137,7 +136,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         y_hat = self.net(x)
         empty_mask = y.mean(dim=1) == 0.
         y_nonempty = y[~empty_mask]
-        y_hat_nonempty = y_hat[~empty_mask]  
+        y_hat_nonempty = y_hat[~empty_mask]
         if len(y_nonempty) > 0:
             still_available_mask = torch.isnan(self.validation_y_plot_data).all(dim=1)
             available_indices = torch.arange(len(still_available_mask), device=y_nonempty.device)[still_available_mask]
@@ -243,17 +242,18 @@ class StandardizeXYHist():
 if __name__ == '__main__':
     load_len: int | None = None
     standardizer = StandardizeXYHist()
-    h5_files = list(glob.iglob('datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/histogram_*.h5'))
-    sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
-    transforms=[lambda x: x[1:].float(), lambda x: standardizer(x.flatten().float()), lambda x: x.int()]
-    dataset = HistDataset(h5_files, sub_groups, transforms, normalize_sub_groups=['parameters'])
-    memory_dataset = BalancedMemoryDataset(dataset=dataset, load_len=load_len, min_n_rays=10, debug_mode=False)
-    del dataset
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
-    datamodule = DefaultDataModule(dataset=memory_dataset, num_workers=num_workers)
+    def a(x):
+        return x[1:].float()
+    def b(x):
+        return standardizer(x.flatten().float())
+    def c(x):
+        return x.int()
+    transforms = [a, b, c]
+    datamodule = DefaultDataModule([i+1 for i in range(8)], [9, 10], None, 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/', 'histogram_*.h5', transforms=transforms, num_workers=num_workers, load_len=load_len)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer,  input_parameter_container=HistDataset.retrieve_parameter_container(h5_files[0]), layer_size=7, histogram_lims=HistDataset.retrieve_xy_lims(h5_files[0]))
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer,  input_parameter_container=datamodule.get_parameter_container(), layer_size=7, histogram_lims=datamodule.get_xy_lims())
     test = False
     if not test:
         wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
