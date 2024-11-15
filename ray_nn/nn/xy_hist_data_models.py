@@ -39,7 +39,7 @@ plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
 
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, total_bin_count:int=100, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, total_bin_count:int=100, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  batch_size:int = 32, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
@@ -54,6 +54,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.standardizer = standardizer
         self.criterion = torch.nn.MSELoss()
         self.histogram_lims = histogram_lims
+        self.batch_size = batch_size
         self.register_buffer("validation_y_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
         self.register_buffer("validation_y_hat_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
         self.register_buffer("validation_y_empty_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
@@ -241,6 +242,7 @@ class StandardizeXYHist():
     
 if __name__ == '__main__':
     load_len: int | None = None
+    batch_size = 32
     standardizer = StandardizeXYHist()
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
@@ -251,12 +253,12 @@ if __name__ == '__main__':
     def c(x):
         return x.int()
     transforms = [a, b, c]
-    datamodule = DefaultDataModule([i+1 for i in range(8)], [9, 10], None, 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/', 'histogram_*.h5', transforms=transforms, num_workers=num_workers, load_len=load_len)
+    datamodule = DefaultDataModule([i+1 for i in range(6)], [9, 10], None, 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/', 'histogram_*.h5', transforms=transforms, batch_size_train=batch_size, batch_size_val=batch_size, num_workers=num_workers, load_len=load_len)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer,  input_parameter_container=datamodule.get_parameter_container(), layer_size=7, histogram_lims=datamodule.get_xy_lims())
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer,  input_parameter_container=datamodule.get_parameter_container(), layer_size=7, batch_size=batch_size, histogram_lims=datamodule.get_xy_lims())
     test = False
     if not test:
-        wandb_logger = WandbLogger(name="ref2_bal_10_sch_.999_std_log_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
+        wandb_logger = WandbLogger(name="ref2_dm+_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
     else:
         wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
