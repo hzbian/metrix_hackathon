@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sized
 import math
+import os
 from typing import Any
 import torch
 from tqdm import tqdm, trange
@@ -131,10 +132,11 @@ class MemoryDataset(Dataset):
         return self.load_len
 
 class BalancedMemoryDataset(Dataset):
-    def __init__(self, dataset: Dataset, load_len: int | None = None, min_n_rays: int = 1000, good_samples_per_bad: int = 3, debug_mode=False, **kwargs):
+    def __init__(self, dataset: Dataset, load_len: int | None = None, min_n_rays: int = 1000, good_samples_per_bad: int = 3, subset=None, **kwargs):
         super().__init__()
         self.min_n_rays = min_n_rays
         self.good_samples_per_bad = good_samples_per_bad
+        self.subset = subset
         if load_len is not None:
             if isinstance(dataset, Sized) and load_len > len(dataset):
                 raise ValueError("Loaded length needs to be smaller or equal to dataset length.")
@@ -147,7 +149,7 @@ class BalancedMemoryDataset(Dataset):
         self.bad = []
         for idx in trange(load_len):
             new_item = dataset.__getitem__(idx, **kwargs)
-            if new_item[2] >= min_n_rays or (debug_mode and idx % 2 == 0):
+            if new_item[2] >= min_n_rays:
                 self.good.append(new_item[:2])
             else:
                 self.bad.append(new_item[:2])
@@ -155,13 +157,23 @@ class BalancedMemoryDataset(Dataset):
             raise Exception("Make sure that there are good and bad samples in your dataset.")
 
     def __getitem__(self, idx: int) -> Any:
+        if self.subset == 'good':
+            return self.good[idx]
+        elif self.subset == 'bad':
+            return self.bad[idx]
+
         if idx%(self.good_samples_per_bad+1) == 0:
             return self.bad[(idx//(self.good_samples_per_bad+1)) % len(self.bad)]
         else:
             return self.good[(idx - 1 - idx//(self.good_samples_per_bad+1)) % len(self.good)]
 
     def __len__(self) -> int:
-        return max(len(self.bad)*(self.good_samples_per_bad+1), math.ceil(len(self.good) / self.good_samples_per_bad * (self.good_samples_per_bad+1)))
+        if self.subset == 'good':
+            return len(self.good)
+        elif self.subset == 'bad':
+            return len(self.bad)
+        else:
+            return max(len(self.bad)*(self.good_samples_per_bad+1), math.ceil(len(self.good) / self.good_samples_per_bad * (self.good_samples_per_bad+1)))
 
 def extract_field(dataset: RayDataset, field: str) -> list[Any]:
     data = len(dataset) * [None]
@@ -171,11 +183,15 @@ def extract_field(dataset: RayDataset, field: str) -> list[Any]:
 
 class HistDataset(Dataset):
     def __init__(self,
-                 h5_files: list[str],
+                 ids: list[int],
+                 path: str,
+                 file_pattern: str,
                  sub_groups: list[str],
                  transforms: list[Callable] | None = None,
                 normalize_sub_groups: list[str]| None = None,
                 load_max: int | None = None):
+        file_pattern = file_pattern.split('*')
+        h5_files = [os.path.join(path, file_pattern[0]+str(i)+file_pattern[1]) for i in ids]
         self.h5_files = np.array(h5_files, dtype=str)
         self.h5_files_obj = [h5py.File(f, "r", swmr=True, libver='latest') for f in self.h5_files]
         
@@ -208,10 +224,9 @@ class HistDataset(Dataset):
         return tuple([self.transforms[i](value[idx]) if self.transforms is not None else value[idx] for i, value in enumerate(self.data_dict.values())])
     def __len__(self) -> int:
         return self.data_dict[self.sub_groups[0]].shape[0]
-    
-    @staticmethod
-    def retrieve_parameter_container(h5_file_path):
-        with h5py.File(h5_file_path, 'r') as f:
+
+    def retrieve_parameter_container(self):
+        with h5py.File(self.h5_files[0], 'r') as f:
             exported_planes = f['histogram'].keys()
             
             param_container_list = []
@@ -227,7 +242,6 @@ class HistDataset(Dataset):
             pc = RayParameterContainer(param_container_list)
             return pc
 
-    @staticmethod
-    def retrieve_xy_lims(h5_file_path):
-        with h5py.File(h5_file_path, 'r') as f:
+    def retrieve_xy_lims(self):
+        with h5py.File(self.h5_files[0], 'r') as f:
             return f['histogram']['ImagePlane'].attrs['lims']

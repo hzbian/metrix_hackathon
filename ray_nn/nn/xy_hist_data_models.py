@@ -20,6 +20,7 @@ from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_tools.base.backend import RayOutput
 from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import MutableParameter, NumericalOutputParameter, RandomOutputParameter, RayParameterContainer
+from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset, HistDataset
 from ray_tools.base.transform import RayTransform
 from ray_tools.base.utils import RandomGenerator
 from ray_nn.data.transform import Select
@@ -239,23 +240,39 @@ class StandardizeXYHist():
         else:
             return element * self.divisor
 
-    
+    def generate_dataset(self, ids):
+        h5_files = [os.path.join(self.dataset_path, self.file_pattern[0]+str(i)+self.file_pattern[1]) for i in ids]
+        dataset = HistDataset(h5_files, self.sub_groups, self.transforms, normalize_sub_groups=self.normalize_sub_groups, load_max=self.load_len)
+        if self.parameter_container is None or self.xy_lims is None:
+            self.parameter_container = dataset.retrieve_parameter_container(h5_files[0])
+            self.xy_lims = dataset.retrieve_xy_lims(h5_files[0])
+        
+        del dataset
+        return memory_dataset
+        
 if __name__ == '__main__':
     load_len: int | None = None
     batch_size = 32
     standardizer = StandardizeXYHist()
+    sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
+    normalize_sub_groups = ['parameters']
+    file_pattern = 'histogram_*.h5'
+    path = 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/'
+    transforms = [lambda x: x[1:].float(), lambda x:standardizer(x.flatten().float()), lambda x: x.int()]
+    train_dataset = HistDataset([i+1 for i in range(6)], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
+    memory_train_dataset = BalancedMemoryDataset(dataset=train_dataset, load_len=load_len, min_n_rays=10)
+    del train_dataset
+    val_dataset = HistDataset([9, 10], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
+    input_parameter_container = val_dataset.retrieve_parameter_container()
+    histogram_lims = val_dataset.retrieve_xy_lims()
+    memory_val_dataset = BalancedMemoryDataset(dataset=val_dataset, load_len=load_len, min_n_rays=10)
+    del val_dataset
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
-    def a(x):
-        return x[1:].float()
-    def b(x):
-        return standardizer(x.flatten().float())
-    def c(x):
-        return x.int()
-    transforms = [a, b, c]
-    datamodule = DefaultDataModule([i+1 for i in range(6)], [9, 10], None, 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/', 'histogram_*.h5', transforms=transforms, batch_size_train=batch_size, batch_size_val=batch_size, num_workers=num_workers, load_len=load_len)
+    datamodule = DefaultDataModule(train_dataset=memory_train_dataset, val_dataset=memory_val_dataset, test_dataset=None, batch_size_train=batch_size, batch_size_val=batch_size, num_workers=num_workers)
     datamodule.prepare_data()
-    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer,  input_parameter_container=datamodule.get_parameter_container(), layer_size=7, batch_size=batch_size, histogram_lims=datamodule.get_xy_lims())
+    
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=7, batch_size=batch_size, histogram_lims=histogram_lims)
     test = False
     if not test:
         wandb_logger = WandbLogger(name="ref2_dm+_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
