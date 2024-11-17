@@ -151,6 +151,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
             available_indices = torch.arange(len(still_available_mask), device=y.device)[still_available_mask]
             self.validation_y_empty_plot_data[available_indices[:len(y[empty_mask])]] = y[empty_mask][:still_available_mask.sum()]
             self.validation_y_hat_empty_plot_data[available_indices[:len(y_hat[empty_mask])]] = y_hat[empty_mask][:still_available_mask.sum()]
+            empty_loss = self.criterion(y_hat[empty_mask], y[empty_mask])
+            self.log("val_empty_loss", empty_loss, prog_bar=True, logger=True)
         val_loss = self.criterion(y_hat, y)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
         return val_loss
