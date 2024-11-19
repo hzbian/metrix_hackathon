@@ -20,7 +20,7 @@ from ray_nn.data.lightning_data_module import DefaultDataModule
 from ray_tools.base.backend import RayOutput
 from ray_tools.base.engine import Engine
 from ray_tools.base.parameter import MutableParameter, NumericalOutputParameter, RandomOutputParameter, RayParameterContainer
-from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, RayDataset, HistDataset
+from ray_tools.simulation.torch_datasets import BalancedMemoryDataset, MemoryDataset, HistDataset
 from ray_tools.base.transform import RayTransform
 from ray_tools.base.utils import RandomGenerator
 from ray_nn.data.transform import Select
@@ -36,8 +36,6 @@ plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
 plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
 plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
-
-
 
 class MetrixXYHistSurrogate(L.LightningModule):
     def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, total_bin_count:int=100, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  batch_size:int = 32, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
@@ -267,17 +265,16 @@ if __name__ == '__main__':
     val_dataset = HistDataset([9, 10], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
     input_parameter_container = val_dataset.retrieve_parameter_container()
     histogram_lims = val_dataset.retrieve_xy_lims()
-    memory_val_dataset = BalancedMemoryDataset(dataset=val_dataset, load_len=load_len, min_n_rays=10)
+    memory_val_dataset = MemoryDataset(dataset=val_dataset, load_len=load_len, item_len=2)
     del val_dataset
     workers = psutil.Process().cpu_affinity()
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(train_dataset=memory_train_dataset, val_dataset=memory_val_dataset, test_dataset=None, batch_size_train=batch_size, batch_size_val=batch_size, num_workers=num_workers)
-    datamodule.prepare_data()
     
     model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=7, batch_size=batch_size, histogram_lims=histogram_lims)
     test = False
     if not test:
-        wandb_logger = WandbLogger(name="ref2_dm+_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
+        wandb_logger = WandbLogger(name="ref2_dm+_val_unbal_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
     else:
         wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
@@ -288,7 +285,7 @@ if __name__ == '__main__':
     lr_monitor = LearningRateMonitor(logging_interval='step')
     trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100000, check_val_every_n_epoch=1, callbacks=[lr_monitor])
     trainer.init_module()
-
+    
     if test:
         model = MetrixXYHistSurrogate.load_from_checkpoint(
         checkpoint_path="outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt",
