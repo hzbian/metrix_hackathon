@@ -17,7 +17,7 @@ class DefaultDataModule(L.LightningDataModule):
         seed_train: int = 42,  # fixed seed to be used shuffle in train dataloader
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["dataset"])
+        self.save_hyperparameters(ignore=["train_dataset", "val_dataset", "test_dataset"])
 
         self.batch_size_train = batch_size_train
         self.batch_size_val = batch_size_val
