@@ -113,7 +113,7 @@ class MemoryDataset(Dataset):
     :param kwargs: Optional keywords for dataset.__getitem__.
     """
 
-    def __init__(self, dataset: Dataset, load_len: int | None = None, **kwargs):
+    def __init__(self, dataset: Dataset, load_len: int | None = None, item_len: int | None = None, **kwargs):
         super().__init__()
         if load_len is not None:
             if isinstance(dataset, Sized) and load_len > len(dataset):
@@ -123,7 +123,7 @@ class MemoryDataset(Dataset):
             load_len = len(dataset)
 
         self.load_len = load_len
-        self.memory_dataset = [dataset.__getitem__(idx, **kwargs) for idx in trange(load_len)]
+        self.memory_dataset = [dataset.__getitem__(idx, **kwargs)[:item_len] for idx in trange(load_len)]
 
     def __getitem__(self, idx: int) -> Any:
         return self.memory_dataset[idx]
@@ -153,6 +153,7 @@ class BalancedMemoryDataset(Dataset):
                 self.good.append(new_item[:2])
             else:
                 self.bad.append(new_item[:2])
+        del dataset
         if not len(self.good) > 0 or not len(self.bad) > 0:
             raise Exception("Make sure that there are good and bad samples in your dataset.")
 
