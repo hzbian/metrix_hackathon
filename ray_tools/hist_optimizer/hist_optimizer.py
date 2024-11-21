@@ -1,6 +1,6 @@
 import glob
 import pickle
-import tqdm
+from tqdm.auto import tqdm, trange
 import torch
 import matplotlib.pyplot as plt
 
@@ -73,7 +73,7 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
     z_array_min, z_array_max = model.input_parameter_container[z_array_label].value_lims
     normalized_z_array = torch.tensor((z_array - z_array_min) / (z_array_max - z_array_min), device=model.device).float()
     
-    for i in tqdm.tqdm(range(iterations)):
+    for i in tqdm(range(iterations)):
         offsets = torch.rand(offset_trials, mutable_parameter_count, device=model.device)
         uncompensated_parameters = torch.rand(beamline_trials, 1, 1, offsets.shape[-1], device=model.device)
         uncompensated_parameters[:,:,:,fixed_parameters] = uncompensated_parameters[0,0,0,fixed_parameters].unsqueeze(0).unsqueeze(1)
@@ -107,66 +107,18 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
     compensated_parameters_selected = uncompensated_parameters_selected+scaled_offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
-def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, num_candidates=1000000, max_offset=0.2):
-    loss_min = float('inf')
-    pbar = tqdm.trange(iterations)
-    loss_min_params = None
-    
-    with torch.no_grad():
-        loss_min_list = []
-        for i in pbar:
-            offsets = (torch.rand((1, num_candidates, uncompensated_parameters.shape[-1]), device=model.device) * max_offset * 2) - max_offset
-            tensor_sum = offsets + uncompensated_parameters
-            
-            compensated_rays = model(tensor_sum)
-            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(-1)
-            loss = loss_orig.min()
-            if loss < loss_min:
-                loss_min = loss
-                loss_min_params = tensor_sum[:, loss_orig.argmin(), :]
-                pbar.set_postfix({"loss": loss_min.item()})
-            loss_min_list.append(loss_min)
-    return loss_min_params, loss_min, loss_min_list
-
-def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, step_width=0.02):
-    loss_min = float('inf')
-    loss_min_list = []
-    offsets = torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device)
-    
-    pbar = tqdm.trange(iterations)
-    with torch.no_grad():
-        for i in pbar:
-            offsets = offsets + (torch.randn(offsets.shape[0], num_candidates, offsets.shape[-1], device=model.device) * step_width)
-            offsets = torch.clamp(offsets, 0, 1)
-            scaled_offsets = model.rescale_offset(offsets)
-            compensated_rays = model(uncompensated_parameters+scaled_offsets)
-            #print("combino shape",(compensated_rays - observed_rays).shape)
-            #compensated_rays = compensated_rays.flatten(start_dim=2)
-            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
-            #print(loss_orig.shape)
-        
-            loss = loss_orig.min()
-            offsets = offsets[:, loss_orig.argmin(), :].unsqueeze(dim=1)
-            if loss < loss_min:
-                loss_min = loss.item()
-                tensor_sum = scaled_offsets + uncompensated_parameters
-                #print("offsets", offsets.shape)
-                #print("tensor sum", tensor_sum.shape)
-                loss_min_params = tensor_sum[:, :, loss_orig.argmin(), :]
-                pbar.set_postfix({"loss": loss.item()})
-            loss_min_list.append(loss_min)
-    return loss_min_params, loss_min, loss_min_list
-
 # get mean of best solutions, std of best solutions, tensor of means of progress, tensor of std of progress
 def evaluate_evaluation_method(method, model, observed_rays, uncompensated_parameters, offsets, max_offset=0.2, num_candidates=1000000, iterations=1000, repetitions=10):
     loss_list = []
     loss_min_tens_list = []
+    loss_min_params_tens = torch.zeros((repetitions, uncompensated_parameters.shape[1], uncompensated_parameters.shape[-1]), device=model.device)
     for i in range(repetitions):
-        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, max_offset=max_offset, )
+        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)
         loss_min_tens_list.append(torch.tensor(loss_min_list, device=model.device))
-        if i == 0:
-           loss_min_params_tens = torch.empty((0, loss_min_params[0].shape[-1]), device=model.device)
-        loss_min_params_tens = torch.vstack((loss_min_params_tens, loss_min_params[0]))
+        #if i == 0:
+        #   loss_min_params_tens = torch.empty((0, loss_min_params[0].shape[-1]), device=model.device)
+        #print(loss_min_params.shape)
+        loss_min_params_tens[i] = loss_min_params[0]
         loss_list.append(loss)
     losses = torch.tensor(loss_list)
     loss_min_tens_tens = torch.vstack(loss_min_tens_list)
@@ -261,10 +213,10 @@ iterations x samples x parameters
 output shape
 ray output list of iterations of lists of samples
 '''
-def param_tensor_to_ray_outputs(input_tens, engine, ray_paramer_container):
+def param_tensor_to_ray_outputs(input_tens, engine, ray_parameter_container):
     out_list = []
     for entry in input_tens:
-        param_container_list = tensor_list_to_param_container_list(entry, ray_paramer_container)
+        param_container_list = tensor_list_to_param_container_list(entry, ray_parameter_container)
         out = engine.run(param_container_list, MultiLayer([0.]))
         out_list.append(out)
     return out_list
@@ -272,7 +224,7 @@ def param_tensor_to_ray_outputs(input_tens, engine, ray_paramer_container):
 def compare_with_reference(reference_ray_outputs, compensated_parameters_selected_ray_outputs, output_plane='ImagePlane'):
     loss_fn = SamplesLoss("sinkhorn", blur=0.1)
     distances_list = []
-    for repetition in tqdm.tqdm(compensated_parameters_selected_ray_outputs):
+    for repetition in tqdm(compensated_parameters_selected_ray_outputs):
         distances_rep_list = []
         for i in range(len(reference_ray_outputs[0])):
             sinkhorn_distance = loss_fn(ray_dict_to_tensor(repetition[i], output_plane).contiguous(), ray_dict_to_tensor(reference_ray_outputs[0][i], output_plane).contiguous())
@@ -281,3 +233,178 @@ def compare_with_reference(reference_ray_outputs, compensated_parameters_selecte
         distances_list.append(distances_rep)
     distances = torch.stack(distances_list)
     return distances.mean().item(), distances.std().item()
+
+def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, num_candidates=1000000):
+    loss_min = float('inf')
+    pbar = trange(iterations, leave=False)
+    loss_min_params = None
+    
+    with torch.no_grad():
+        loss_min_list = []
+        for i in pbar:
+            offsets = torch.rand((1, num_candidates, uncompensated_parameters.shape[-1]), device=model.device)
+            scaled_offsets = model.rescale_offset(offsets)
+            tensor_sum = uncompensated_parameters+scaled_offsets
+            compensated_rays = model(tensor_sum)
+            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(dim=(0, 1, -1))
+            loss = loss_orig.min()
+            if loss < loss_min:
+                loss_min = loss
+                loss_min_params = tensor_sum[:, :, loss_orig.argmin(), :]
+                pbar.set_postfix({"loss": loss_min.item()})
+            loss_min_list.append(loss_min)
+    return loss_min_params, loss_min, loss_min_list
+
+def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, step_width=0.02):
+    loss_min = float('inf')
+    loss_min_list = []
+    offsets = torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device)
+    
+    pbar = trange(iterations, leave=False)
+    with torch.no_grad():
+        for i in pbar:
+            offsets = offsets + (torch.randn(offsets.shape[0], num_candidates, offsets.shape[-1], device=model.device) * step_width)
+            offsets = torch.clamp(offsets, 0, 1)
+            scaled_offsets = model.rescale_offset(offsets)
+            compensated_rays = model(uncompensated_parameters+scaled_offsets)
+            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
+        
+            loss = loss_orig.min()
+            offsets = offsets[:, loss_orig.argmin(), :].unsqueeze(dim=1)
+            if loss < loss_min:
+                loss_min = loss.item()
+                tensor_sum = scaled_offsets + uncompensated_parameters
+                loss_min_params = tensor_sum[:,:, loss_orig.argmin(), :]
+                pbar.set_postfix({"loss": loss.item()})
+            loss_min_list.append(loss_min)
+    return loss_min_params, loss_min, loss_min_list
+
+def optimize_pso(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, step_width=0.02):
+    loss_min = float('inf')
+    loss_min_list = []
+    
+    # Initialize particles randomly in the parameter space
+    offsets = torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device)
+    velocities = torch.randn_like(offsets) * step_width  # Initialize velocities
+    
+    # Initialize personal and global bests
+    personal_best_offsets = offsets.clone()
+    personal_best_loss = torch.full((1, num_candidates), float('inf'), device=model.device)
+    global_best_offset = offsets[:, 0, :].unsqueeze(dim=1)  # Start with first particle
+    global_best_loss = float('inf')
+    
+    pbar = trange(iterations, leave=False)
+    with torch.no_grad():
+        for i in pbar:
+            # Rescale and evaluate the current offsets
+            scaled_offsets = model.rescale_offset(offsets)
+            compensated_rays = model(uncompensated_parameters + scaled_offsets)
+            losses = ((compensated_rays - observed_rays) ** 2).mean(dim=(0, 1, -1))
+            
+            # Update personal bests
+            improved_mask = losses < personal_best_loss
+            personal_best_loss[improved_mask] = losses[improved_mask.flatten()]
+            #print(personal_best_offsets.shape, offsets.shape)
+            personal_best_offsets[:, improved_mask.flatten(), :] = offsets[ :,improved_mask.flatten(), :]
+            
+            # Update global best
+            min_loss, min_index = personal_best_loss.min(dim=1)
+            if min_loss < global_best_loss:
+                global_best_loss = min_loss.item()
+                global_best_offset = personal_best_offsets[:, min_index, :]
+                
+            # Update particle velocities and positions
+            inertia = 0.5
+            cognitive = 1.5
+            social = 1.5
+            velocities = (inertia * velocities
+                          + cognitive * torch.rand_like(offsets) * (personal_best_offsets - offsets)
+                          + social * torch.rand_like(offsets) * (global_best_offset - offsets))
+            
+            offsets = offsets + velocities
+            offsets = torch.clamp(offsets, 0, 1)  # Keep within bounds
+            
+            # Track the best loss for progress reporting
+            loss_min_list.append(global_best_loss)
+            pbar.set_postfix({"loss": global_best_loss})
+    
+    # Return the best parameters found
+    loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), global_best_loss, loss_min_list
+
+
+def optimize_ea(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=100, mutation_rate=0.1, crossover_rate=0.7
+):
+    # Initialize population
+    population = torch.rand(num_candidates, uncompensated_parameters.shape[-1], device=model.device)
+    best_individual = None
+    best_loss = float('inf')
+    loss_history = []
+
+    pbar = trange(iterations, leave=False)
+    with torch.no_grad():
+        for _ in pbar:
+            # Rescale offsets and evaluate fitness
+            scaled_population = model.rescale_offset(population.unsqueeze(0).unsqueeze(0))  # Shape: (1, pop_size, params_dim)
+            compensated_rays = model(uncompensated_parameters + scaled_population)
+            losses = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)  # Shape: (pop_size,)
+            
+            # Update best solution
+            min_loss, min_idx = losses.min(dim=0)
+            if min_loss < best_loss:
+                best_loss = min_loss.item()
+                best_individual = population[min_idx].clone()
+                pbar.set_postfix({"best_loss": best_loss})
+            
+            loss_history.append(best_loss)
+
+            # Selection (Tournament Selection)
+            tournament_size = 3
+            selected_indices = torch.randint(0, num_candidates, (num_candidates, tournament_size), device=model.device)
+            tournament_fitness = losses[selected_indices]  # Shape: (num_candidates, tournament_size)
+            best_indices_in_tournaments = torch.argmin(tournament_fitness, dim=1)  # Shape: (num_candidates,)
+            selected = selected_indices[torch.arange(num_candidates), best_indices_in_tournaments] 
+
+            # Crossover
+
+            parent1 = population[selected[::2]]
+            parent2 = population[selected[1::2]]
+            
+            if parent1.shape[0] > parent2.shape[0]:
+                parent2 = torch.cat([parent2, parent2[:1]], dim=0)
+            
+            # Random crossover decisions
+            crossover_mask = (torch.rand(parent1.shape[0], 1, device=model.device) < crossover_rate).expand(-1, parent1.shape[1])
+            
+            # Random crossover points
+            crossover_points = torch.randint(
+                0, parent1.shape[1], 
+                (parent1.shape[0], 1), 
+                device=model.device
+            ).expand(-1, parent1.shape[1])
+            
+            # Generate masks for slicing
+            indices = torch.arange(parent1.shape[1], device=model.device)
+            crossover_mask = indices < crossover_points
+            
+            # Create offspring
+            offspring1 = torch.where(crossover_mask, parent1, parent2)
+            offspring2 = torch.where(crossover_mask, parent2, parent1)
+            
+            # Combine offspring
+            offspring = torch.cat([offspring1, offspring2], dim=0)
+
+            # Mutation
+            #offspring = torch.stack(offspring)
+            mutation_mask = torch.rand_like(offspring) < mutation_rate
+            mutations = torch.randn_like(offspring) * 0.1  # Scale mutations
+            offspring = offspring + mutation_mask * mutations
+            offspring = torch.clamp(offspring, 0, 1)  # Ensure valid range
+
+            # Replace population
+            population = offspring
+    # Return the best solution found
+    loss_min_params = model.rescale_offset(best_individual) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), best_loss, loss_history
