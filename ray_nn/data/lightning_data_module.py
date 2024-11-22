@@ -56,7 +56,7 @@ class DefaultDataModule(L.LightningDataModule):
     def test_dataloader(self):
         assert self.test_dataset is not None
         return DataLoader(
-            self.val_dataset,
+            self.test_dataset,
             shuffle=False,
             batch_size=self.batch_size_val,
             num_workers=self.num_workers,
