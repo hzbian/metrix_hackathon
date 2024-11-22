@@ -53,6 +53,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.standardizer = standardizer
         self.criterion = torch.nn.MSELoss()
         self.histogram_lims = histogram_lims
+        self.val_empty_loss_list = []
         self.batch_size = batch_size
         self.register_buffer("validation_y_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
         self.register_buffer("validation_y_hat_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
@@ -150,6 +151,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
             self.validation_y_empty_plot_data[available_indices[:len(y[empty_mask])]] = y[empty_mask][:still_available_mask.sum()]
             self.validation_y_hat_empty_plot_data[available_indices[:len(y_hat[empty_mask])]] = y_hat[empty_mask][:still_available_mask.sum()]
             empty_loss = self.criterion(y_hat[empty_mask], y[empty_mask])
+            self.val_empty_loss_list.append(empty_loss)
             self.log("val_empty_loss", empty_loss, prog_bar=True, logger=True)
         val_loss = self.criterion(y_hat, y)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
@@ -196,6 +198,9 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_hat_empty_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_empty_plot_data)
         self.validation_y_empty_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_hat_empty_plot_data)
         MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(self.special_sample_input)), self.special_sample_simulation_output)
+        all_preds = torch.stack(self.val_empty_loss_list)
+        print(all_preds.mean())
+        self.val_empty_loss_list.clear()
         gc.collect()
         
     def configure_optimizers(self):
@@ -252,17 +257,17 @@ class StandardizeXYHist():
         
 if __name__ == '__main__':
     load_len: int | None = None
-    batch_size = 32
+    batch_size = 128
     standardizer = StandardizeXYHist()
     sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
     normalize_sub_groups = ['parameters']
     file_pattern = 'histogram_*.h5'
     path = 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/'
-    transforms = [lambda x: x[1:].float(), lambda x:standardizer(x.flatten().float()), lambda x: x.int()]
-    train_dataset = HistDataset([i+1 for i in range(6)], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
+    transforms = [lambda x: x[:, 1:].float(), lambda x: standardizer(x.flatten(start_dim=1).float()), lambda x: x.int()]
+    train_dataset = HistDataset([i+1 for i in range(10)], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
     memory_train_dataset = BalancedMemoryDataset(dataset=train_dataset, load_len=load_len, min_n_rays=10)
     del train_dataset
-    val_dataset = HistDataset([9, 10], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
+    val_dataset = HistDataset([11, 12], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
     input_parameter_container = val_dataset.retrieve_parameter_container()
     histogram_lims = val_dataset.retrieve_xy_lims()
     memory_val_dataset = MemoryDataset(dataset=val_dataset, load_len=load_len, item_len=2)
@@ -274,7 +279,7 @@ if __name__ == '__main__':
     model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=7, batch_size=batch_size, histogram_lims=histogram_lims)
     test = False
     if not test:
-        wandb_logger = WandbLogger(name="ref2_dm+_val_unbal_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
+        wandb_logger = WandbLogger(name="ref3_dm+_val_unbal_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
     else:
         wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
@@ -378,6 +383,9 @@ class Model:
     def rescale_offset(self, offset):
         return offset * self.rescale_multiplier + self.rescale_addend
 
+    def unscale_offset(self, offset):
+        return (offset - self.rescale_addend) / self.rescale_multiplier
+        
     def __call__(self, x, offset=None, clone_output=False, grad=False):
         assert x.shape[-1] == 37
         if offset is not None:
