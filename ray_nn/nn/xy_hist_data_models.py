@@ -53,7 +53,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.standardizer = standardizer
         self.criterion = torch.nn.MSELoss()
         self.histogram_lims = histogram_lims
-        self.val_empty_loss_list = []
         self.batch_size = batch_size
         self.register_buffer("validation_y_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
         self.register_buffer("validation_y_hat_plot_data", torch.full((self.validation_plot_len, self.total_bin_count), torch.nan))
@@ -151,7 +150,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
             self.validation_y_empty_plot_data[available_indices[:len(y[empty_mask])]] = y[empty_mask][:still_available_mask.sum()]
             self.validation_y_hat_empty_plot_data[available_indices[:len(y_hat[empty_mask])]] = y_hat[empty_mask][:still_available_mask.sum()]
             empty_loss = self.criterion(y_hat[empty_mask], y[empty_mask])
-            self.val_empty_loss_list.append(empty_loss)
             self.log("val_empty_loss", empty_loss, prog_bar=True, logger=True)
         val_loss = self.criterion(y_hat, y)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
@@ -198,9 +196,6 @@ class MetrixXYHistSurrogate(L.LightningModule):
         self.validation_y_hat_empty_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_empty_plot_data)
         self.validation_y_empty_plot_data = torch.full((self.validation_plot_len, self.total_bin_count), torch.nan).to(self.validation_y_hat_empty_plot_data)
         MetrixXYHistSurrogate.create_plot('special_sample', self.standardizer.destandardize(self(self.special_sample_input)), self.special_sample_simulation_output)
-        all_preds = torch.stack(self.val_empty_loss_list)
-        print(all_preds.mean())
-        self.val_empty_loss_list.clear()
         gc.collect()
         
     def configure_optimizers(self):
