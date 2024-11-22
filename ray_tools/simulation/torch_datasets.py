@@ -3,7 +3,7 @@ import math
 import os
 from typing import Any
 import torch
-from tqdm import tqdm, trange
+from tqdm.auto import tqdm, trange
 
 import h5py
 
@@ -145,36 +145,33 @@ class BalancedMemoryDataset(Dataset):
             load_len = len(dataset)
 
         self.load_len = load_len
-        self.good = []
-        self.bad = []
-        for idx in trange(load_len):
-            new_item = dataset.__getitem__(idx, **kwargs)
-            if new_item[2] >= min_n_rays:
-                self.good.append(new_item[:2])
-            else:
-                self.bad.append(new_item[:2])
+        mask = dataset.data_dict['n_rays/ImagePlane'] >= min_n_rays
+        self.good = (dataset.data_dict['parameters'][mask], dataset.data_dict['histogram/ImagePlane'][mask])
+        self.bad = (dataset.data_dict['parameters'][~mask], dataset.data_dict['histogram/ImagePlane'][~mask])
         del dataset
         if not len(self.good) > 0 or not len(self.bad) > 0:
             raise Exception("Make sure that there are good and bad samples in your dataset.")
 
     def __getitem__(self, idx: int) -> Any:
         if self.subset == 'good':
-            return self.good[idx]
+            return self.good[0][idx], self.good[1][idx]
         elif self.subset == 'bad':
-            return self.bad[idx]
+            return self.bad[0][idx], self.bad[1][idx]
 
         if idx%(self.good_samples_per_bad+1) == 0:
-            return self.bad[(idx//(self.good_samples_per_bad+1)) % len(self.bad)]
+            translated_idx = (idx//(self.good_samples_per_bad+1)) % len(self.bad)
+            return self.bad[0][translated_idx], self.bad[1][translated_idx]
         else:
-            return self.good[(idx - 1 - idx//(self.good_samples_per_bad+1)) % len(self.good)]
+            translated_idx = (idx - 1 - idx//(self.good_samples_per_bad+1)) % len(self.good)
+            return self.good[0][translated_idx], self.good[1][translated_idx]
 
     def __len__(self) -> int:
         if self.subset == 'good':
-            return len(self.good)
+            return len(self.good[0])
         elif self.subset == 'bad':
-            return len(self.bad)
+            return len(self.bad[0])
         else:
-            return max(len(self.bad)*(self.good_samples_per_bad+1), math.ceil(len(self.good) / self.good_samples_per_bad * (self.good_samples_per_bad+1)))
+            return max(len(self.bad[0])*(self.good_samples_per_bad+1), math.ceil(len(self.good[0]) / self.good_samples_per_bad * (self.good_samples_per_bad+1)))
 
 def extract_field(dataset: RayDataset, field: str) -> list[Any]:
     data = len(dataset) * [None]
@@ -201,10 +198,10 @@ class HistDataset(Dataset):
         self.data_dict = dict([(key,[]) for key in sub_groups])
         
         
-        for f in self.h5_files_obj:
+        for f in tqdm(self.h5_files_obj, leave=False):
             for key, value in self.data_dict.items():
                 value.append(f[key][:load_max])
-        for key in self.sub_groups:
+        for i, key in enumerate(self.sub_groups):
             data = np.concatenate(self.data_dict[key])
             if normalize_sub_groups is not None and key in normalize_sub_groups:
                 min_list = []
@@ -219,10 +216,17 @@ class HistDataset(Dataset):
                 min_vec = np.array(min_list)
                 max_vec = np.array(max_list)
                 data = (data - min_vec) / (max_vec - min_vec)
-            self.data_dict[key] = torch.from_numpy(data)
+            assert self.transforms is None or len(self.transforms) == len(self.data_dict)
+            value = torch.from_numpy(data)
+            if self.transforms == None:
+                self.data_dict[key] = value
+            else:
+                self.data_dict[key] = self.transforms[i](value)
+                
     def __getitem__(self, idx: int):
-        assert self.transforms is None or len(self.transforms) == len(self.data_dict)
-        return tuple([self.transforms[i](value[idx]) if self.transforms is not None else value[idx] for i, value in enumerate(self.data_dict.values())])
+        output = tuple([value[idx] for i, value in enumerate(self.data_dict.values())])
+        return output
+
     def __len__(self) -> int:
         return self.data_dict[self.sub_groups[0]].shape[0]
 
