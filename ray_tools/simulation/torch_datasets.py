@@ -149,7 +149,7 @@ class BalancedMemoryDataset(Dataset):
         self.good = (dataset.data_dict['parameters'][mask], dataset.data_dict['histogram/ImagePlane'][mask])
         self.bad = (dataset.data_dict['parameters'][~mask], dataset.data_dict['histogram/ImagePlane'][~mask])
         del dataset
-        if not len(self.good) > 0 or not len(self.bad) > 0:
+        if not len(self.good[0]) > 0 or not len(self.bad[0]) > 0:
             raise Exception("Make sure that there are good and bad samples in your dataset.")
 
     def __getitem__(self, idx: int) -> Any:
@@ -159,10 +159,10 @@ class BalancedMemoryDataset(Dataset):
             return self.bad[0][idx], self.bad[1][idx]
 
         if idx%(self.good_samples_per_bad+1) == 0:
-            translated_idx = (idx//(self.good_samples_per_bad+1)) % len(self.bad)
+            translated_idx = (idx//(self.good_samples_per_bad+1)) % len(self.bad[0])
             return self.bad[0][translated_idx], self.bad[1][translated_idx]
         else:
-            translated_idx = (idx - 1 - idx//(self.good_samples_per_bad+1)) % len(self.good)
+            translated_idx = (idx - 1 - idx//(self.good_samples_per_bad+1)) % len(self.good[0])
             return self.good[0][translated_idx], self.good[1][translated_idx]
 
     def __len__(self) -> int:
