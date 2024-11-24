@@ -38,7 +38,7 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 # In[18]:
 
 
-file_root = '../../'
+file_root = ''
 outputs_dir = os.path.join(file_root, 'outputs/')
 engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml'),
                                 exported_planes=["ImagePlane"],
@@ -51,7 +51,7 @@ engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1
                                 as_generator=False)
 
 
-model_path = os.path.join(file_root, "outputs/xy_hist/ft1rr9h0/checkpoints/epoch=68-step=65665644.ckpt")
+model_path = os.path.join(file_root, "outputs/xy_hist/ft1rr9h0/checkpoints/epoch=70-step=67568996.ckpt")
 surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
 
 model = Model(path=model_path)
