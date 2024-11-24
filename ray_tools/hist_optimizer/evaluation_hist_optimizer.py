@@ -13,7 +13,7 @@ sys.path.append("..")
 sys.path.append("../..")
 import matplotlib.pyplot as plt
 from ray_tools.hist_optimizer.hist_optimizer import tensor_to_param_container, mse_engines_comparison, find_good_offset_problem, optimize_tpe, optimize_smart_walker, optimize_brute, optimize_pso, optimize_ea, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, simulate_param_tensor, compare_with_reference, fancy_plot_param_tensors
-from scipy.stats import ttest_rel
+from scipy.stats import ttest_ind
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.engine import RayEngine
 from ray_nn.data.lightning_data_module import DefaultDataModule
@@ -230,8 +230,8 @@ plt.savefig(os.path.join(outputs_dir,'bl_optimizer_iterations.pdf'), bbox_inches
 
 
 @staticmethod
-def significant_confidence_levels(group_A, group_B, confidence=0.99):
-    ci = ttest_rel(group_A.flatten().cpu(), group_B.flatten().cpu()).confidence_interval(confidence_level=confidence)
+def significant_confidence_levels(group_A, group_B, confidence=0.95):
+    ci = ttest_ind(group_A.flatten().cpu(), group_B.flatten().cpu()).confidence_interval(confidence_level=confidence)
     confidence_interval = (ci.low.item(), ci.high.item())
     return not (confidence_interval[0] < 0. and confidence_interval[1] > 0.), confidence_interval
 
@@ -247,7 +247,7 @@ def statistics(method_evaluation_dict):
             min_mean = loss_best_mean
 
     for key, (loss_best, mean_progress, std_progress, offset_rmse, execution_time) in method_evaluation_dict.items():
-         statistics_dict[key] =  statistics_dict[key] + (key==min_mean_key,) + significant_confidence_levels(loss_best, method_evaluation_dict[min_mean_key][0]) + (offset_rmse.mean().item(), execution_time)
+         statistics_dict[key] =  statistics_dict[key] + (key==min_mean_key,) + significant_confidence_levels(loss_best, method_evaluation_dict[min_mean_key][0]) + (offset_rmse.mean().item(), offset_rmse.std().item(), execution_time)
          #diff = (result_dict[key] - result_dict[min_mean_key]).flatten().abs().cpu()
          #mean = torch.mean(diff)
          #std_dev = torch.std(diff)
@@ -259,12 +259,12 @@ statistics_dict = statistics(method_evaluation_dict)
 
 
 def generate_latex_table(data):
-    table = "\\begin{tabular}{l|ccccc}\n"
-    table += "\\hline\n"
-    table += "Method & \\acs{MSE} $\\pm \\sigma$ & (\\acs{CI}) & Mean Offset \\acs{RMSE} & Execution Time (s) \\\\ \n"
+    table = r"""\begin{tabularx}{\textwidth}{p{2cm}|*{4}{>{\centering\arraybackslash}X}}"""
+    table += "\n\\hline\n"
+    table += "Method & \\acs{MSE} $\\pm\\sigma$ & (\\acs{CI}) & Mean Offset \\acs{RMSE} $\\pm\\sigma$ & Execution Time (s) \\\\ \n"
     table += "\\hline\n"
     
-    for method, (mean, std_dev, is_best, is_significant, ci, offset_rmse, execution_time) in data.items():
+    for method, (mean, std_dev, is_best, is_significant, ci, offset_rmse, offset_rmse_std, execution_time) in data.items():
         # Format the mean and standard deviation in scientific notation
         mean_str = f"{mean:.2e}".replace("e+0", "e+").replace("e-0", "e-")
         std_dev_str = f"$\\pm${std_dev:.2e}".replace("e+0", "e+").replace("e-0", "e-")
@@ -286,13 +286,13 @@ def generate_latex_table(data):
         if is_best:
             ci_str = "~"
         else:
-            ci_str = f"({ci[0]:.3f}, {ci[1]:.3f})"
+            ci_str = f"({ci[0]:.2e}".replace("e+0", "e+").replace("e-0", "e-")+f", {ci[1]:.2e})".replace("e+0", "e+").replace("e-0", "e-")
         
         # Add the row to the table
-        table += f"{method} & {mean_with_std_dev} & {ci_str} & {offset_rmse:.2f} & {execution_time:.2f} \\\\ \n"
+        table += f"{method} & {mean_with_std_dev} & {ci_str} & {offset_rmse:.2f} \\pm{offset_rmse_std:.2f} & {execution_time:.2f} \\\\ \n"
     
     table += "\\hline\n"
-    table += "\\end{tabular}\n"
+    table += "\\end{tabularx}\n"
     
     return table
 # Generate the LaTeX table
@@ -306,16 +306,16 @@ print(latex_table)
 
 
 loss_min_params, loss, loss_min_list = optimize_pso(model, observed_rays, uncompensated_parameters_selected, iterations=1000, num_candidates=10000)
-fig = fancy_plot_param_tensors(loss_min_params[:2], uncompensated_parameters_selected[:2].squeeze(), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:2].squeeze())
+fig = fancy_plot_param_tensors(loss_min_params[:], uncompensated_parameters_selected[:].squeeze(), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:].squeeze())
 pio.write_html(fig, os.path.join(outputs_dir,'fancy.html'))
 
 
 # In[49]:
 
 
-loss_min_ray_outputs = simulate_param_tensor(loss_min_params[:2, :3], engine, model.input_parameter_container, exported_plane='ImagePlane')
-reference_ray_outputs = simulate_param_tensor(compensated_parameters_selected[:2, :3].squeeze(-2), engine, model.input_parameter_container, exported_plane='ImagePlane')
-reference_ray_outputs_2 = simulate_param_tensor(compensated_parameters_selected[:2, :3].squeeze(-2), engine, model.input_parameter_container, exported_plane='ImagePlane')
+loss_min_ray_outputs = simulate_param_tensor(loss_min_params[:, :], engine, model.input_parameter_container, exported_plane='ImagePlane')
+reference_ray_outputs = simulate_param_tensor(compensated_parameters_selected[:, :].squeeze(-2), engine, model.input_parameter_container, exported_plane='ImagePlane')
+reference_ray_outputs_2 = simulate_param_tensor(compensated_parameters_selected[:, :].squeeze(-2), engine, model.input_parameter_container, exported_plane='ImagePlane')
 
 out = compare_with_reference(reference_ray_outputs, loss_min_ray_outputs)
 print("deviation best to ref", out[0].item(), "±", out[1])
