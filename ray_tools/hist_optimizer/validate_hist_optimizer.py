@@ -20,14 +20,13 @@ engine = RayEngine(rml_basefile='rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.r
 surrogate_engine = HistSurrogateEngine(checkpoint_path="outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt")
 
 model = Model(path="outputs/xy_hist/qhmpdasi/checkpoints/epoch=295-step=118652488.ckpt")
-max_offset = 0.2
 
-offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, max_offset=max_offset)
+offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model)
 
 with torch.no_grad():
     observed_rays = model(compensated_parameters_selected)
     
-loss_min_params, loss, loss_min_list = optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, iterations=200, max_offset=max_offset)
+loss_min_params, loss, loss_min_list = optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, iterations=200)
 
 fig = plot_param_tensors(loss_min_params[[1,2,4,8]], uncompensated_parameters_selected[[1,2,4,8]], engine = engine, compensated_parameters=compensated_parameters_selected[[1,2,4,8]])
 fig.savefig('outputs/offset_compensation.png', bbox_inches='tight')
@@ -39,13 +38,13 @@ method_dict = {"smart walker": optimize_smart_walker, "brute force": optimize_br
 method_evaluation_list = []
 
 for key, entry in method_dict.items():
-    mean_best, std_best, mean_progress, std_progress, loss_min_params_tens = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, offsets_selected, max_offset=max_offset, repetitions=10, num_candidates=1000000, iterations=200)
+    mean_best, std_best, mean_progress, std_progress, loss_min_params_tens = evaluate_evaluation_method(entry, model, observed_rays, uncompensated_parameters_selected, offsets_selected, repetitions=10, num_candidates=1000000, iterations=200)
     method_evaluation_list.append((key, mean_best, std_best, mean_progress, std_progress))
 
     # calculate deviations from target offset
-    normalized_offsets = (offsets_selected + max_offset) / (max_offset + max_offset)
+    normalized_offsets = model.rescale_offset(selected_offsets)
     predicted_offsets = (loss_min_params_tens - uncompensated_parameters_selected[0].squeeze())
-    normalized_predicted_offsets = (predicted_offsets + max_offset) / (max_offset + max_offset)
+    normalized_predicted_offsets = model.rescale_offset(predicted_offsets)
     rmse = ((normalized_offsets-predicted_offsets)**2).mean().sqrt().item()
     print(key, ":", mean_best, "±", std_best, "RMSE from target offset:", rmse)
     loss_min_params_tens = (uncompensated_parameters_selected + predicted_offsets).swapaxes(0,1)
@@ -78,9 +77,9 @@ plt.show()
 
 repetitions=10
 t0 = benchmark.Timer(
-    stmt='optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, max_offset=max_offset, iterations=200)',
+    stmt='optimize_smart_walker(model, observed_rays, uncompensated_parameters_selected, iterations=200)',
     setup='from __main__ import optimize_smart_walker',
-    globals={'model': model, 'observed_rays': observed_rays, 'uncompensated_parameters_selected': uncompensated_parameters_selected, 'max_offset': max_offset},
+    globals={'model': model, 'observed_rays': observed_rays, 'uncompensated_parameters_selected': uncompensated_parameters_selected},
     num_threads=1,
     label='optimize smart walker',
     sub_label='optimize smart walker')

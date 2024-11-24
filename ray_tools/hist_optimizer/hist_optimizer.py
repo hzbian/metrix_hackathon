@@ -1,7 +1,7 @@
 import glob
-import pickle
 from tqdm.auto import tqdm, trange
 import torch
+import optuna
 import matplotlib.pyplot as plt
 
 from ray_optim.plot import Plot
@@ -73,7 +73,7 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
     z_array_min, z_array_max = model.input_parameter_container[z_array_label].value_lims
     normalized_z_array = torch.tensor((z_array - z_array_min) / (z_array_max - z_array_min), device=model.device).float()
     
-    for i in tqdm(range(iterations)):
+    for i in range(iterations):
         offsets = torch.rand(offset_trials, mutable_parameter_count, device=model.device)
         uncompensated_parameters = torch.rand(beamline_trials, 1, 1, offsets.shape[-1], device=model.device)
         uncompensated_parameters[:,:,:,fixed_parameters] = uncompensated_parameters[0,0,0,fixed_parameters].unsqueeze(0).unsqueeze(1)
@@ -85,6 +85,8 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
         all_params_true = mask.all(dim=(-1, -2,-3))
         uncompensated_parameters = uncompensated_parameters[all_params_true]
         tensor_sum = tensor_sum[all_params_true]
+        if i % 50 == 0 and i != 0:
+            print(f"Epoch {i}: Still searching.")
         if tensor_sum.shape[0] == 0:
             continue
         uncompensated_parameters = tensor_sum - scaled_offsets
@@ -95,7 +97,6 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
             all_z_trials_sufficient_hist = beamline_trials_with_sufficient_hist.sum(dim=0)==len(z_array)
             condition = all_z_trials_sufficient_hist
             if all_z_trials_sufficient_hist.any():
-                print(condition.sum().item(), "results.")
                 condition_args = torch.arange(len(condition), device=model.device)[condition]
                 condition_args = condition_args[:1]
                 sufficient_sum_per_hist_selected = compensated_rays[:, :, condition_args[0]].sum(dim=-1)>0.5
@@ -107,43 +108,34 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
     compensated_parameters_selected = uncompensated_parameters_selected+scaled_offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
-# get mean of best solutions, std of best solutions, tensor of means of progress, tensor of std of progress
-def evaluate_evaluation_method(method, model, observed_rays, uncompensated_parameters, offsets, max_offset=0.2, num_candidates=1000000, iterations=1000, repetitions=10):
+def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10):
     loss_list = []
     loss_min_tens_list = []
-    loss_min_params_tens = torch.zeros((repetitions, uncompensated_parameters.shape[1], uncompensated_parameters.shape[-1]), device=model.device)
+    _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28]) # only for getting the shape
+    loss_min_params_tens = torch.full((repetitions, uncompensated_parameters.shape[1], uncompensated_parameters.shape[-1]), float('nan'), device=model.device)
+    offset_rmse_tens = torch.full((repetitions,), float('nan'), device=model.device)
     for i in range(repetitions):
+        offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28])
+        with torch.no_grad():
+            observed_rays = model(compensated_parameters)
         loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)
+        predicted_offsets = loss_min_params[0, 0] - uncompensated_parameters[0, 0, 0]
+        normalized_predicted_offsets = model.unscale_offset(predicted_offsets)
+        offset_rmse = ((offsets-normalized_predicted_offsets)**2).mean().sqrt()
+        offset_rmse_tens[i] = offset_rmse
         loss_min_tens_list.append(torch.tensor(loss_min_list, device=model.device))
-        #if i == 0:
-        #   loss_min_params_tens = torch.empty((0, loss_min_params[0].shape[-1]), device=model.device)
-        #print(loss_min_params.shape)
         loss_min_params_tens[i] = loss_min_params[0]
         loss_list.append(loss)
     losses = torch.tensor(loss_list)
     loss_min_tens_tens = torch.vstack(loss_min_tens_list)
-    return losses.mean().item(), losses.std().item(), loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens
+    return losses, loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens, offset_rmse_tens
 
-def simulate_param_tensor(input_param_tensor, engine, ray_parameter_container, z_layers=[]):
-    pc = tensor_list_to_param_container_list(input_param_tensor, ray_parameter_container)
-    param_container_list = []
-    for i in input_param_tensor:
-        i = i.squeeze()
-        param_container_list.append(
-            RayParameterContainer([
-            ('ImagePlane.translationXerror', NumericalOutputParameter(value=(i[-2].item()-0.5)*20)),
-            ('ImagePlane.translationYerror', NumericalOutputParameter(value=(i[-1].item()-0.5)*4)),
-            ]))
-        
-    exported_plain_transforms = RayOptimizer.translate_exported_plain_transforms(
-        exported_plane="ImagePlane",
-        param_container_list=param_container_list,
-        transform = MultiLayer([0.]),
-    )
-    engine_output = engine.run(pc, MultiLayer([0.])) ###exported_plain_transforms
-    return ray_output_to_tensor(engine_output, 'ImagePlane')
-
-def simulate_param_tensor2(input_param_tensor, engine, ray_parameter_container, exported_plane='ImagePlane'):
+''' input shape
+iterations x samples x parameters
+output shape
+ray output list of iterations of lists of samples
+'''
+def simulate_param_tensor(input_param_tensor, engine, ray_parameter_container, exported_plane='ImagePlane'):
     assert len(input_param_tensor.shape) == 3
     pc = tensor_list_to_param_container_list(input_param_tensor[:,0], ray_parameter_container)
     for entry in pc:
@@ -155,16 +147,16 @@ def simulate_param_tensor2(input_param_tensor, engine, ray_parameter_container, 
     z_layer_list = z_layers.tolist()
     
     engine_output = engine.run(pc, MultiLayer(z_layer_list))
-    return [ray_dict_to_tensor(entry, "ImagePlane", to_cpu=True) for entry in engine_output]
+    return [ray_dict_to_tensor(entry, exported_plane, to_cpu=True) for entry in engine_output]
     
 def fancy_plot_param_tensors(best_parameters, uncompensated_parameters, engine, ray_parameter_container, observed_rays_point_cloud=None, compensated_parameters=None):
     assert observed_rays_point_cloud is not None or compensated_parameters is not None # you should provide one of two
     if compensated_parameters is not None:
-        observed_rays = simulate_param_tensor2(compensated_parameters, engine, ray_parameter_container)
+        observed_rays = simulate_param_tensor(compensated_parameters, engine, ray_parameter_container)
     else:
         observed_rays = observed_rays_point_cloud
-    best_rays = simulate_param_tensor2(best_parameters, engine, ray_parameter_container)
-    uncompensated_rays = simulate_param_tensor2(uncompensated_parameters, engine, ray_parameter_container)
+    best_rays = simulate_param_tensor(best_parameters, engine, ray_parameter_container)
+    uncompensated_rays = simulate_param_tensor(uncompensated_parameters, engine, ray_parameter_container)
     return Plot.fancy_ray(
         [uncompensated_rays, observed_rays, best_rays],
         [ "Uncompensated", "Experiment", "Compensated"],
@@ -207,27 +199,22 @@ def plot_param_tensors(best_parameters, uncompensated_parameters, engine, ray_pa
 def tensor_list_to_param_container_list(input_param_tensor, ray_parameter_container):
     return [tensor_to_param_container(input_param_tensor[i].squeeze(), ray_parameter_container) for i in range(input_param_tensor.shape[0])]
 
-
-''' input shape
-iterations x samples x parameters
-output shape
-ray output list of iterations of lists of samples
-'''
-def param_tensor_to_ray_outputs(input_tens, engine, ray_parameter_container):
-    out_list = []
-    for entry in input_tens:
-        param_container_list = tensor_list_to_param_container_list(entry, ray_parameter_container)
-        out = engine.run(param_container_list, MultiLayer([0.]))
-        out_list.append(out)
-    return out_list
-
-def compare_with_reference(reference_ray_outputs, compensated_parameters_selected_ray_outputs, output_plane='ImagePlane'):
+def compare_with_reference(reference_ray_outputs, loss_min_ray_outputs):
     loss_fn = SamplesLoss("sinkhorn", blur=0.1)
     distances_list = []
-    for repetition in tqdm(compensated_parameters_selected_ray_outputs):
+    
+    for i in range(len(loss_min_ray_outputs)):
+        distances_list.append(loss_fn(loss_min_ray_outputs[i].contiguous(), reference_ray_outputs[i].contiguous()))
+    distances = torch.concat(distances_list)
+    return distances.mean(), distances.std()
+
+def compare_with_reference_bak(reference_ray_outputs, compensated_ray_outputs, output_plane='ImagePlane'):
+    loss_fn = SamplesLoss("sinkhorn", blur=0.1)
+    distances_list = []
+    for repetition in tqdm(compensated_ray_outputs, leave=False):
         distances_rep_list = []
-        for i in range(len(reference_ray_outputs[0])):
-            sinkhorn_distance = loss_fn(ray_dict_to_tensor(repetition[i], output_plane).contiguous(), ray_dict_to_tensor(reference_ray_outputs[0][i], output_plane).contiguous())
+        for i in range(len(reference_ray_outputs)):
+            sinkhorn_distance = loss_fn(repetition.contiguous(), reference_ray_outputs[i].contiguous())
             distances_rep_list.append(sinkhorn_distance)
         distances_rep = torch.concat(distances_rep_list)
         distances_list.append(distances_rep)
@@ -279,6 +266,30 @@ def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterat
             loss_min_list.append(loss_min)
     return loss_min_params, loss_min, loss_min_list
 
+def optimize_tpe(model, observed_rays, uncompensated_parameters, iterations, num_candidates=None):
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    
+    def objective_function(offsets, model, observed_rays, uncompensated_parameters):
+        # Evaluate the model's loss with these offsets
+        scaled_offsets = model.rescale_offset(offsets)
+        compensated_rays = model(uncompensated_parameters + scaled_offsets)
+        loss = ((compensated_rays - observed_rays) ** 2).mean().item()
+        return loss
+    
+    def objective(trial):
+        param_list = torch.tensor([trial.suggest_float(str(i), 0, 1.) for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+        return objective_function(param_list, model, observed_rays, uncompensated_parameters)
+    
+    study = optuna.create_study()
+    
+    study.optimize(objective, n_trials=iterations, show_progress_bar=True)
+    
+    losses = torch.tensor([trial.value for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE], device=model.device)
+    best_losses = torch.cummin(losses, dim=0).values
+    global_best_offset = torch.tensor(list(study.best_params.values()), device=model.device)
+    loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), study.best_value, best_losses.tolist()
+    
 def optimize_pso(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, step_width=0.02):
     loss_min = float('inf')
     loss_min_list = []
@@ -304,7 +315,6 @@ def optimize_pso(model, observed_rays, uncompensated_parameters, iterations, num
             # Update personal bests
             improved_mask = losses < personal_best_loss
             personal_best_loss[improved_mask] = losses[improved_mask.flatten()]
-            #print(personal_best_offsets.shape, offsets.shape)
             personal_best_offsets[:, improved_mask.flatten(), :] = offsets[ :,improved_mask.flatten(), :]
             
             # Update global best
