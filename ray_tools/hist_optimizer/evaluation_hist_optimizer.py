@@ -12,7 +12,7 @@ from tqdm.auto import tqdm, trange
 sys.path.append("..")
 sys.path.append("../..")
 import matplotlib.pyplot as plt
-from hist_optimizer import tensor_to_param_container, mse_engines_comparison, find_good_offset_problem, optimize_tpe, optimize_smart_walker, optimize_brute, optimize_pso, optimize_ea, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, simulate_param_tensor, compare_with_reference, fancy_plot_param_tensors
+from ray_tools.hist_optimizer.hist_optimizer import tensor_to_param_container, mse_engines_comparison, find_good_offset_problem, optimize_tpe, optimize_smart_walker, optimize_brute, optimize_pso, optimize_ea, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, simulate_param_tensor, compare_with_reference, fancy_plot_param_tensors
 from scipy.stats import ttest_rel
 from ray_tools.base.transform import MultiLayer
 from ray_tools.base.engine import RayEngine
@@ -27,12 +27,9 @@ from ray_tools.base.parameter import NumericalParameter, OutputParameter, Numeri
 from sub_projects.ray_optimization.real_data import import_data
 from sub_projects.ray_optimization.utils import ray_dict_to_tensor, ray_output_to_tensor
 from scipy.stats import kstest
-get_ipython().run_line_magic('load_ext', 'autoreload')
 from torch.utils import benchmark
 import plotly.io as pio
 torch.manual_seed(42)
-get_ipython().run_line_magic('autoreload', '2')
-get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 # In[18]:
@@ -44,7 +41,7 @@ engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1
                                 exported_planes=["ImagePlane"],
                                 ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
                                                                   docker_container_name='ray-ui-service-test',
-                                                                  dockerfile_path='../../ray_docker/rayui',
+                                                                  dockerfile_path=os.path.join(file_root, 'ray_docker/rayui'),
                                                                   ray_workdir='/dev/shm/ray-workdir',
                                                                   verbose=False),
                                 num_workers=-1,

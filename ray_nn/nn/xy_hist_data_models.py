@@ -239,19 +239,9 @@ class StandardizeXYHist():
             return (torch.exp(element) * self.divisor) - 1
         else:
             return element * self.divisor
-
-    def generate_dataset(self, ids):
-        h5_files = [os.path.join(self.dataset_path, self.file_pattern[0]+str(i)+self.file_pattern[1]) for i in ids]
-        dataset = HistDataset(h5_files, self.sub_groups, self.transforms, normalize_sub_groups=self.normalize_sub_groups, load_max=self.load_len)
-        if self.parameter_container is None or self.xy_lims is None:
-            self.parameter_container = dataset.retrieve_parameter_container(h5_files[0])
-            self.xy_lims = dataset.retrieve_xy_lims(h5_files[0])
-        
-        del dataset
-        return memory_dataset
         
 if __name__ == '__main__':
-    load_len: int | None = None
+    load_len: int | None = 1000
     batch_size = 128
     standardizer = StandardizeXYHist()
     sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
