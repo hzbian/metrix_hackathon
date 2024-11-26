@@ -1,9 +1,14 @@
 import glob
+import os
 from tqdm.auto import tqdm, trange
 import torch
 import optuna
+from torch.utils import benchmark
+from scipy.stats import ttest_ind
 import matplotlib.pyplot as plt
-
+from evotorch import Problem
+from evotorch.algorithms import SNES
+import logging
 from ray_optim.plot import Plot
 from ray_tools.base.transform import MultiLayer
 from ray_nn.data.lightning_data_module import DefaultDataModule
@@ -65,7 +70,89 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
         mse_list.append(mse)
     return torch.stack(mse_list), x_simulation_hist_list, y_simulation_hist_list
 
+def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions):
+    method_evaluation_dict = {}
+    for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
+        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(entry[0], model, repetitions=2, num_candidates=entry[1], iterations=iterations)
+        method_evaluation_dict[key]= (loss_best, mean_progress, std_progress, offset_rmse)
 
+    for key, (optimizer, num_candidates) in method_dict.items():
+        t0 = benchmark.Timer(
+            stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
+            setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
+            globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': 12, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
+            num_threads=1,
+            label='optimize '+key,
+            sub_label=None)
+        results = t0.timeit(benchmark_repetitions)
+        execution_time = results.raw_times[0]
+        method_evaluation_dict[key] += (execution_time,)
+    return method_evaluation_dict
+
+def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations, num_candidates):
+    return optimizer(model, observed_rays, uncompensated_parameters, iterations, num_candidates)
+
+@staticmethod
+def significant_confidence_levels(group_A, group_B, confidence=0.95):
+    ci = ttest_ind(group_A.flatten().cpu(), group_B.flatten().cpu()).confidence_interval(confidence_level=confidence)
+    confidence_interval = (ci.low.item(), ci.high.item())
+    return not (confidence_interval[0] < 0. and confidence_interval[1] > 0.), confidence_interval
+
+
+def statistics(method_evaluation_dict):
+    min_mean = float('inf')
+    statistics_dict = {}
+    for key, (loss_best, mean_progress, std_progress, _, _) in method_evaluation_dict.items():
+        loss_best_mean = loss_best.mean()
+        statistics_dict[key] = (loss_best_mean.item(), loss_best.std().item())
+        if loss_best_mean < min_mean:
+            min_mean_key = key
+            min_mean = loss_best_mean
+
+    for key, (loss_best, mean_progress, std_progress, offset_rmse, execution_time) in method_evaluation_dict.items():
+         statistics_dict[key] =  statistics_dict[key] + (key==min_mean_key,) + significant_confidence_levels(loss_best, method_evaluation_dict[min_mean_key][0]) + (offset_rmse.mean().item(), offset_rmse.std().item(), execution_time)
+         #diff = (result_dict[key] - result_dict[min_mean_key]).flatten().abs().cpu()
+         #mean = torch.mean(diff)
+         #std_dev = torch.std(diff)
+    return statistics_dict
+
+def generate_latex_table(data):
+    table = r"""\begin{tabularx}{\textwidth}{p{2cm}|*{4}{>{\centering\arraybackslash}X}}"""
+    table += "\n\\hline\n"
+    table += "Method & \\acs{MSE} $\\pm\\sigma$ & (\\acs{CI}) & Mean Offset \\acs{RMSE} $\\pm\\sigma$ & Execution Time (s) \\\\ \n"
+    table += "\\hline\n"
+    
+    for method, (mean, std_dev, is_best, is_significant, ci, offset_rmse, offset_rmse_std, execution_time) in data.items():
+        # Format the mean and standard deviation in scientific notation
+        mean_str = f"{mean:.2e}".replace("e+0", "e+").replace("e-0", "e-")
+        std_dev_str = f"$\\pm${std_dev:.2e}".replace("e+0", "e+").replace("e-0", "e-")
+        
+        # If the method is the best, make the mean bold
+        if is_best:
+            mean_str = "\\textbf{" + mean_str + "}"
+        
+        # If it's significant, add the dagger symbol
+        if is_significant and not is_best:
+            significant_str = "$\\dagger$"
+        else:
+            significant_str = ""
+        
+        # Combine mean, std_dev, and significance markers
+        mean_with_std_dev = f"{mean_str} {std_dev_str} {significant_str}".strip()
+        
+        # Format confidence interval as (lower, upper)
+        if is_best:
+            ci_str = "~"
+        else:
+            ci_str = f"({ci[0]:.2e}".replace("e+0", "e+").replace("e-0", "e-")+f", {ci[1]:.2e})".replace("e+0", "e+").replace("e-0", "e-")
+        
+        # Add the row to the table
+        table += f"{method} & {mean_with_std_dev} & {ci_str} & {offset_rmse:.2f} \\pm{offset_rmse_std:.2f} & {execution_time:.2f} \\\\ \n"
+    
+    table += "\\hline\n"
+    table += "\\end{tabularx}\n"
+    
+    return table
 
 def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_trials=10000, fixed_parameters=[8, 14, 20, 21, 27, 28], z_array=[-25., -20., -15., -10., -5., 0., 5., 10., 15., 20., 25., 30.], z_array_label='ImagePlane.translationZerror'):
     mutable_parameter_count = model.mutable_parameter_count
@@ -108,6 +195,89 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
     compensated_parameters_selected = uncompensated_parameters_selected+scaled_offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
+def generate_n_offset_problems(model, n=10000):
+    offsets_list = []
+    uncompensated_parameters_list = []
+    compensated_parameters_list = []
+    for i in trange(n):
+        offsets_trial, uncompensated_parameters_trial, compensated_parameters_trial = find_good_offset_problem(model)
+        offsets_list.append(offsets_trial)
+        uncompensated_parameters_list.append(uncompensated_parameters_trial)
+        compensated_parameters_list.append(compensated_parameters_trial)
+    return torch.stack(offsets_list), uncompensated_parameters_list, compensated_parameters_list
+
+def correlation_matrix(data, model, label, outputs_dir):
+    data = data.squeeze().cpu()
+    # Standardize the data (optional but often necessary)
+    mean = data.mean(dim=0, keepdim=True)
+    std = data.std(dim=0, keepdim=True)
+    data_standardized = (data - mean) / std
+    
+    # Compute the correlation matrix
+    correlation_matrix = torch.mm(data_standardized.T, data_standardized) / (data_standardized.size(0) - 1)
+    
+    # Convert the correlation matrix to a numpy array for plotting
+    correlation_matrix_np = correlation_matrix.numpy()
+    print("min-entry", correlation_matrix.min(), "max-entry", (correlation_matrix-torch.eye(correlation_matrix.shape[0])).max())
+    # Plot the heatmap using matplotlib
+    plt.figure(figsize=(10, 8))  # Adjust the figure size as needed
+    cax = plt.imshow(correlation_matrix_np, cmap='RdYlBu_r', vmin=-1, vmax=1)
+    
+    # Add color bar
+    plt.colorbar(cax, label="Correlation")
+    
+    # Set title and labels
+    plt.title("Correlation matrix "+label)
+    plt.xlabel("Features")
+    plt.ylabel("Features")
+    plt.grid(True, alpha=0.3)
+    
+    # Disable the axis ticks (both x and y)
+    labels = [key for key, value in model.input_parameter_container.items() if isinstance(value, MutableParameter)]
+    labels = labels[:data.shape[-1]] # omit translationZerror if not in data
+    plt.yticks(ticks = torch.arange(len(labels)), labels=labels)  # Round bin edges for readability
+    plt.xticks(ticks = torch.arange(len(labels)), labels=labels, rotation=90)  # Round bin edges for readability
+    
+    # Show the plot
+    plt.savefig(os.path.join(outputs_dir,'cor_mat_'+label.replace(" ", "_")+'.pdf'), bbox_inches='tight')
+    return plt.gcf()
+
+def correlation_plot(data, model, label, outputs_dir, n_bins=15):
+    # Example: Creating a random 1000x37 tensor (1000 samples, 37 features)
+    data = data.squeeze().cpu() #torch.randn(1000, 37)  # Your tensor with 1000 samples and 37 features
+    
+    # Initialize a 2D array to store histogram values (one column per feature)
+    hist_matrix = []
+    
+    # Loop through each feature (column) and compute its histogram
+    bin_edges = None  # Initialize bin_edges to store the first feature's bin edges
+    
+    for i in range(data.shape[1]):  # Iterate over each feature
+        feature_data = data[:, i].cpu()#.numpy()  # Convert the feature to a NumPy array
+        counts, bin_edges = torch.histogram(feature_data, bins=n_bins, range=(feature_data.min().item(), feature_data.max().item()))
+        hist_matrix.append(counts)
+    
+    # Convert the list of histograms to a NumPy array and transpose it (features as columns)
+    
+    # Plot the 2D histogram using imshow
+    plt.figure(figsize=(8, 8))
+    plt.imshow(hist_matrix, aspect='auto', vmin=0, cmap='hot', interpolation='none')
+    
+    # Add color bar
+    plt.colorbar(label='Count [#]')
+    
+    # Label axes
+    plt.ylabel('Parameter')
+    plt.xlabel('Bin value [normalized]')
+    plt.title(label+' distribution')
+    labels = [key for key, value in model.input_parameter_container.items() if isinstance(value, MutableParameter)]
+    labels = labels[:data.shape[-1]] # omit translationZerror if not in data
+    plt.yticks(ticks = torch.arange(len(labels)), labels=labels)  # Round bin edges for readability
+    plt.xticks(ticks=torch.arange(n_bins), labels=torch.round(bin_edges[:-1], decimals=2).numpy())  # Round bin edges for readability
+    
+    # Show the plot
+    plt.savefig(os.path.join(outputs_dir,'cor_mat_'+label.replace(" ", "_")+'.pdf'), bbox_inches='tight')
+
 def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10):
     loss_list = []
     loss_min_tens_list = []
@@ -129,6 +299,25 @@ def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations
     losses = torch.tensor(loss_list)
     loss_min_tens_tens = torch.vstack(loss_min_tens_list)
     return losses, loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens, offset_rmse_tens
+
+def plot_optimizer_iterations(method_evaluation_dict, outputs_dir):
+    plt.figure(figsize = (6.905, 4.434))
+    ax = plt.gca()
+    i = 0
+    plot_list = []
+    for key, (_, mean_progress, std_progress, _, _) in method_evaluation_dict.items():
+        color = plt.rcParams["axes.prop_cycle"].by_key()["color"][i+3]
+        plt.fill_between(torch.arange(len(mean_progress)), (mean_progress-std_progress).cpu(), (mean_progress+std_progress).cpu(), color=color, alpha=0.2)
+        plot, = plt.plot(torch.arange(len(mean_progress)), mean_progress.cpu(), alpha = 1., c = color)
+        plot_list.append(plot)
+        i = i+1
+    ax.legend(plot_list, [key for key in method_evaluation_dict.keys()], prop={'size': 11})
+    ax.tick_params(axis='both', which='major', labelsize=11)
+    plt.xlabel('Iteration [#]', fontsize=16)
+    plt.ylabel('Normalized MSE [log scale]', fontsize=16)
+    ax.set_yscale('log')
+    plt.tight_layout()
+    plt.savefig(os.path.join(outputs_dir,'bl_optimizer_iterations.pdf'), bbox_inches='tight', pad_inches = 0)
 
 ''' input shape
 iterations x samples x parameters
@@ -417,4 +606,50 @@ def optimize_ea(
             population = offspring
     # Return the best solution found
     loss_min_params = model.rescale_offset(best_individual) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), best_loss, loss_history
+
+def optimize_evotorch(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=100,
+):   
+    # Define the loss function
+    def loss(x: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            tensor_sum = model.rescale_offset(x) + uncompensated_parameters
+            compensated_rays = model(tensor_sum, clone_output=True)
+            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
+        return loss_orig
+    
+    def constrained_loss(x: torch.Tensor) -> torch.Tensor:
+        penalty = torch.sum((x < 0.) | (x > 1.0), dim=-1).float()
+        total_loss = loss(x) + 1.0 * penalty  # Add large penalty for violations
+        return total_loss
+    logging.getLogger("evotorch").setLevel(logging.WARNING)
+    
+    # Define the problem
+    problem = Problem(
+        "min",
+        constrained_loss,
+        initial_bounds=(0., 1.),
+        solution_length=model.mutable_parameter_count,
+        vectorized=True,
+        device="cuda",  # Enable for GPU support
+    )
+    
+    # Create the searcher
+    searcher = SNES(problem, popsize=num_candidates, stdev_init=0.2)
+    
+    # Set up tqdm for progress tracking
+    num_generations = iterations
+    loss_history = []
+    with tqdm(total=num_generations, desc="Evotorch Progress", leave=False) as pbar:
+        for generation in range(num_generations):
+            searcher.step()  # Perform a single optimization step
+            pbar.update(1)  # Update the progress bar
+            best = searcher.status["pop_best"]
+            best_item = best.evals.item()
+            pbar.set_postfix({"loss": best_item})
+            loss_history.append(best_item)
+    best_loss = best.evals.item()
+    loss_min_params = model.rescale_offset(best.values) + uncompensated_parameters
     return loss_min_params.squeeze(-2), best_loss, loss_history
