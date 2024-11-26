@@ -96,7 +96,7 @@ correlation_plot(uncompensated_parameters_stack, model, label="Uncompensated par
 
 
 loss_min_params, loss, loss_min_list = optimize_ea(model, observed_rays, uncompensated_parameters_selected, iterations=5000, num_candidates=1000)
-fig = fancy_plot_param_tensors(loss_min_params[:], uncompensated_parameters_selected[:].squeeze(), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:2].squeeze())
+fig = fancy_plot_param_tensors(loss_min_params[:], uncompensated_parameters_selected[:].squeeze(), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:].squeeze())
 pio.write_html(fig, os.path.join(outputs_dir,'fancy.html'))
 
 
