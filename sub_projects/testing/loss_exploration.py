@@ -95,8 +95,8 @@ def save_plot(var_name: str, output_directory: str='plots/'):
     ax = plt.gca()
     #ax.set_yscale('log')
     #ax.set_xscale('log')
-    plt.xlabel('Absolute error')
-    plt.ylabel('Loss distance')
+    plt.xlabel('Absolute error [a.u.]')
+    plt.ylabel('Loss distance [a.u.]')
     plt.tight_layout()
     plt.legend()
 
@@ -116,7 +116,7 @@ if __name__ == '__main__':
         "generalized_box_iou_loss": BoxIoULoss(torchvision.ops.generalized_box_iou_loss, reduction='mean'),
     }
     sinkhorn_loss = {
-        "sinkhorn_loss": SinkhornLoss(),
+        "Sinkhorn": SinkhornLoss(),
     }
     ray_count_loss = {
     #    "ray_count_mse": RayCountMSE(),
@@ -135,14 +135,15 @@ if __name__ == '__main__':
     #    "js_loss": JSLoss(),
         "KLD": KLDLoss(),
         "MSE": MSELoss(),
-        "var_mse_loss": VarMSELoss(),
-        "mean_mse_loss": MeanMSELoss(),
+        "Var-MSE": VarMSELoss(),
+        "Mean-MSE": MeanMSELoss(),
 
     }
-    investigate_loss = torch_loss | iou_loss | sinkhorn_loss # | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
-    for var_name in ['y_mean', 'y_var']:
-        for loss_string, loss in tqdm(investigate_loss.items()):
-            investigate_and_plot_var(var_name=var_name, value_lims=(0.0, 2.0), loss=loss, loss_string=loss_string)
-            if isinstance(loss, ScheduledLoss):
-                loss.reset_passed_epochs()
-        save_plot(var_name)
+    investigate_loss = torch_loss | sinkhorn_loss #| iou_loss # | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
+    for lim in [2.0, 0.001]:
+        for var_name in ['y_mean', 'y_var']:
+            for loss_string, loss in tqdm(investigate_loss.items()):
+                investigate_and_plot_var(var_name=var_name, value_lims=(0.0, lim), loss=loss, loss_string=loss_string)
+                if isinstance(loss, ScheduledLoss):
+                    loss.reset_passed_epochs()
+            save_plot(var_name+str(lim))
