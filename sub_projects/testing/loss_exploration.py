@@ -1,6 +1,7 @@
 import sys
 import os
 
+from matplotlib.pylab import cycler
 import numpy as np
 import torch.nn
 import torchvision
@@ -93,12 +94,13 @@ def plot_investigated_var(offsets, distances, loss_string):
 
 def save_plot(var_name: str, output_directory: str='plots/'):
     ax = plt.gca()
+    plt.rcParams["figure.figsize"] = (4, 2)
     #ax.set_yscale('log')
     #ax.set_xscale('log')
     plt.xlabel('Absolute error [a.u.]')
     plt.ylabel('Loss distance [a.u.]')
     plt.tight_layout()
-    plt.legend()
+    plt.legend( markerscale=2, scatterpoints=3)
 
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -140,6 +142,11 @@ if __name__ == '__main__':
 
     }
     investigate_loss = torch_loss | sinkhorn_loss #| iou_loss # | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
+    default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+    custom_colors = default_colors[:2] + default_colors[3:]
+
+    plt.rcParams['axes.prop_cycle'] = cycler(color=custom_colors)
     for lim in [2.0, 0.001]:
         for var_name in ['y_mean', 'y_var']:
             for loss_string, loss in tqdm(investigate_loss.items()):
