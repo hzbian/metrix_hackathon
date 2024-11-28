@@ -133,13 +133,13 @@ if __name__ == '__main__':
     }
     torch_loss = {
     #    "js_loss": JSLoss(),
-        "kld_loss": KLDLoss(),
-        "mse_loss": MSELoss(),
+        "KLD": KLDLoss(),
+        "MSE": MSELoss(),
         "var_mse_loss": VarMSELoss(),
         "mean_mse_loss": MeanMSELoss(),
 
     }
-    investigate_loss = torch_loss # | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
+    investigate_loss = torch_loss | iou_loss | sinkhorn_loss # | cov_mse | histogram_mse | ray_count_loss | sinkhorn_loss | iou_loss
     for var_name in ['y_mean', 'y_var']:
         for loss_string, loss in tqdm(investigate_loss.items()):
             investigate_and_plot_var(var_name=var_name, value_lims=(0.0, 2.0), loss=loss, loss_string=loss_string)
