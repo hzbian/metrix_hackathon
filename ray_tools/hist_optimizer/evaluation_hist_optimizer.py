@@ -8,7 +8,6 @@ import sys
 import os
 import pickle
 
-sys.path.append("..")
 sys.path.append("../..")
 
 import matplotlib.pyplot as plt
@@ -16,7 +15,7 @@ import plotly.io as pio
 from tqdm.auto import tqdm, trange
 import torch
 
-from ray_tools.hist_optimizer.hist_optimizer import generate_latex_table, statistics, generate_n_offset_problems, tensor_to_param_container, evaluate_method_dict, mse_engines_comparison, correlation_plot, correlation_matrix, find_good_offset_problem, plot_optimizer_iterations, optimize_tpe, optimize_evotorch, optimize_smart_walker, optimize_brute, optimize_pso, optimize_ea, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, simulate_param_tensor, compare_with_reference, fancy_plot_param_tensors
+from ray_tools.hist_optimizer.hist_optimizer import generate_latex_table, statistics, generate_n_offset_problems, tensor_to_param_container, evaluate_method_dict, mse_engines_comparison, correlation_plot, correlation_matrix, find_good_offset_problem, plot_optimizer_iterations, optimize_tpe, optimize_evotorch, optimize_smart_walker, optimize_brute, optimize_pso, optimize_ea, evaluate_evaluation_method, plot_param_tensors, tensor_list_to_param_container_list, simulate_param_tensor, compare_with_reference, optimize_evotorch_cmaes, fancy_plot_param_tensors
 from ray_tools.base.engine import RayEngine
 from ray_nn.nn.xy_hist_data_models import HistSurrogateEngine, Model, StandardizeXYHist
 from ray_tools.base.backend import RayBackendDockerRAYUI
@@ -24,11 +23,10 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 torch.manual_seed(42)
 
 
-
 # In[ ]:
 
 
-file_root = '../../'
+file_root = ''
 outputs_dir = os.path.join(file_root, 'outputs/')
 engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml'),
                                 exported_planes=["ImagePlane"],
@@ -41,7 +39,7 @@ engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1
                                 as_generator=False)
 
 
-model_path = os.path.join(file_root, "outputs/xy_hist/ft1rr9h0/checkpoints/epoch=70-step=67568996.ckpt")
+model_path = os.path.join(file_root, "outputs/xy_hist/s021yw7n/checkpoints/epoch=235-step=70000000.ckpt")
 surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
 
 model = Model(path=model_path)
@@ -50,7 +48,7 @@ model = Model(path=model_path)
 # In[ ]:
 
 
-offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28])
+offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
 
 with torch.no_grad():
     observed_rays = model(compensated_parameters_selected)
@@ -95,7 +93,7 @@ correlation_plot(uncompensated_parameters_stack, model, label="Uncompensated par
 # In[ ]:
 
 
-loss_min_params, loss, loss_min_list = optimize_ea(model, observed_rays, uncompensated_parameters_selected, iterations=5000, num_candidates=1000)
+loss_min_params, loss, loss_min_list = optimize_evotorch_cmaes(model, observed_rays, uncompensated_parameters_selected, iterations=2000, num_candidates=1000)
 fig = fancy_plot_param_tensors(loss_min_params[:], uncompensated_parameters_selected[:].squeeze(), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:].squeeze())
 pio.write_html(fig, os.path.join(outputs_dir,'fancy.html'))
 
@@ -125,9 +123,9 @@ plt.savefig(os.path.join(outputs_dir,'fixed_plot.png'), bbox_inches='tight', pad
 # In[ ]:
 
 
-method_dict = {"Smart Walker": (optimize_smart_walker, 1000), "Brute Force": (optimize_brute, 1000), "TPE": (optimize_tpe, None), "PSO": (optimize_pso, 1000), "EA": (optimize_ea, 1000), "EVO": (optimize_evotorch, 1000)}
+method_dict = {"Smart Walker": (optimize_smart_walker, 1000), "Brute Force": (optimize_brute, 1000), "TPE": (optimize_tpe, None), "PSO": (optimize_pso, 1000), "CMA-ES": (optimize_evotorch_cmaes, 1000)}
 
-method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=5000, repetitions=30, benchmark_repetitions=10)
+method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=2000, repetitions=30, benchmark_repetitions=10)
 with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:
     pickle.dump(method_evaluation_dict, f)
 
@@ -148,6 +146,12 @@ latex_table = generate_latex_table(statistics_dict)
 
 # Output the LaTeX table
 print(latex_table)
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:
