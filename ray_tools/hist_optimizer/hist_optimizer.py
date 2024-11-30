@@ -7,7 +7,7 @@ from torch.utils import benchmark
 from scipy.stats import ttest_ind
 import matplotlib.pyplot as plt
 from evotorch import Problem
-from evotorch.algorithms import SNES
+from evotorch.algorithms import SNES, CMAES
 import logging
 from ray_optim.plot import Plot
 from ray_tools.base.transform import MultiLayer
@@ -154,7 +154,7 @@ def generate_latex_table(data):
     
     return table
 
-def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_trials=10000, fixed_parameters=[8, 14, 20, 21, 27, 28], z_array=[-25., -20., -15., -10., -5., 0., 5., 10., 15., 20., 25., 30.], z_array_label='ImagePlane.translationZerror'):
+def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_trials=10000, fixed_parameters=[8, 14, 20, 21, 27, 28, 34], z_array=[-25., -20., -15., -10., -5., 0., 5., 10., 15., 20., 25., 30.], z_array_label='ImagePlane.translationZerror'):
     mutable_parameter_count = model.mutable_parameter_count
     assert z_array_label in model.input_parameter_container.keys()
     z_array_min, z_array_max = model.input_parameter_container[z_array_label].value_lims
@@ -281,11 +281,11 @@ def correlation_plot(data, model, label, outputs_dir, n_bins=15):
 def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10):
     loss_list = []
     loss_min_tens_list = []
-    _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28]) # only for getting the shape
+    _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34]) # only for getting the shape
     loss_min_params_tens = torch.full((repetitions, uncompensated_parameters.shape[1], uncompensated_parameters.shape[-1]), float('nan'), device=model.device)
     offset_rmse_tens = torch.full((repetitions,), float('nan'), device=model.device)
     for i in range(repetitions):
-        offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28])
+        offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
         with torch.no_grad():
             observed_rays = model(compensated_parameters)
         loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)
@@ -607,10 +607,17 @@ def optimize_ea(
     # Return the best solution found
     loss_min_params = model.rescale_offset(best_individual) + uncompensated_parameters
     return loss_min_params.squeeze(-2), best_loss, loss_history
+def optimize_evotorch_cmaes(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=100):
+    return optimize_evotorch(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=num_candidates, algorithm=CMAES
+    )
 
 def optimize_evotorch(
     model, observed_rays, uncompensated_parameters, iterations, 
-    num_candidates=100,
+    num_candidates=100, algorithm=SNES
 ):   
     # Define the loss function
     def loss(x: torch.Tensor) -> torch.Tensor:
@@ -637,7 +644,7 @@ def optimize_evotorch(
     )
     
     # Create the searcher
-    searcher = SNES(problem, popsize=num_candidates, stdev_init=0.2)
+    searcher = algorithm(problem, popsize=num_candidates, stdev_init=0.2)
     
     # Set up tqdm for progress tracking
     num_generations = iterations
