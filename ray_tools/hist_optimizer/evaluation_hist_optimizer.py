@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 import sys
@@ -23,7 +23,8 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 torch.manual_seed(42)
 
 
-# In[ ]:
+
+# In[34]:
 
 
 file_root = ''
@@ -45,7 +46,7 @@ surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
 model = Model(path=model_path)
 
 
-# In[ ]:
+# In[46]:
 
 
 offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
@@ -56,41 +57,41 @@ with torch.no_grad():
 
 # # Examine 10000 problems
 
-# In[ ]:
+# In[55]:
 
 
 offsets_list, uncompensated_parameters_list, compensated_parameters_list = generate_n_offset_problems(model, 10000)
 
 
-# In[ ]:
+# In[48]:
 
 
 correlation_matrix(offsets_list, model, "offsets", outputs_dir=outputs_dir)
 
 
-# In[ ]:
+# In[27]:
 
 
-stacked_uncompensated_parameters = torch.vstack([entry[:, 0, 0, :36] for entry in uncompensated_parameters_list])
+stacked_uncompensated_parameters = torch.vstack([entry[:, 0, 0, :] for entry in uncompensated_parameters_list])
 correlation_matrix(stacked_uncompensated_parameters, model, "uncompensated parameters", outputs_dir=outputs_dir)
 
 
-# In[ ]:
+# In[49]:
 
 
 correlation_plot(offsets_list, model, label="Offsets", outputs_dir=outputs_dir)
 
 
-# In[ ]:
+# In[50]:
 
 
-uncompensated_parameters_stack = torch.vstack([entry[:, 0, 0, :36] for entry in uncompensated_parameters_list])
+uncompensated_parameters_stack = torch.vstack([entry[:, 0, 0, :-1] for entry in uncompensated_parameters_list])
 correlation_plot(uncompensated_parameters_stack, model, label="Uncompensated parameters", outputs_dir=outputs_dir)
 
 
 # # Examine best optimizer
 
-# In[ ]:
+# In[51]:
 
 
 loss_min_params, loss, loss_min_list = optimize_evotorch_cmaes(model, observed_rays, uncompensated_parameters_selected, iterations=2000, num_candidates=1000)
@@ -98,7 +99,7 @@ fig = fancy_plot_param_tensors(loss_min_params[:], uncompensated_parameters_sele
 pio.write_html(fig, os.path.join(outputs_dir,'fancy.html'))
 
 
-# In[ ]:
+# In[52]:
 
 
 loss_min_ray_outputs = simulate_param_tensor(loss_min_params[:, :], engine, model.input_parameter_container, exported_plane='ImagePlane')

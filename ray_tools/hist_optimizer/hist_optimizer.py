@@ -172,7 +172,7 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
         all_params_true = mask.all(dim=(-1, -2,-3))
         uncompensated_parameters = uncompensated_parameters[all_params_true]
         tensor_sum = tensor_sum[all_params_true]
-        if i % 50 == 0 and i != 0:
+        if i % 500 == 0 and i != 0:
             print(f"Epoch {i}: Still searching.")
         if tensor_sum.shape[0] == 0:
             continue

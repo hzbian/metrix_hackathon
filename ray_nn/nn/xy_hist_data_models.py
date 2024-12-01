@@ -297,18 +297,24 @@ class Model:
         self.device = model_orig.device
         self.histogram_lims = model_orig.histogram_lims
         self.input_parameter_container = model_orig.input_parameter_container
-        new_entries = [('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-7,7), rg=RandomGenerator(42))),
-            ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42)))]
+        new_entries = [
+            ('ImagePlane.intensityScale', RandomOutputParameter(value_lims=(0.2,1), rg=RandomGenerator(42))),
+            ('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-7,7), rg=RandomGenerator(42))),
+            ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42))),
+                      ]
         x_lims = dict(new_entries)['ImagePlane.translationXerror'].value_lims
         y_lims = dict(new_entries)['ImagePlane.translationYerror'].value_lims
         hist_x_lims = model_orig.histogram_lims[0]
         hist_y_lims = model_orig.histogram_lims[1]
+        intensity_lims = dict(new_entries)['ImagePlane.intensityScale'].value_lims
+        self.intensity_addend = intensity_lims[0]
+        self.intensity_multiplier = intensity_lims[1] - intensity_lims[0]
         self.x_factor = (x_lims[1]-x_lims[0])/(hist_x_lims[1]-hist_x_lims[0]).item() # translationX_interval length [mm] / histogram_interval length [mmm]
         self.y_factor = (y_lims[1]-y_lims[0])/(hist_y_lims[1]-hist_y_lims[0]).item()  # translationY_interval length [mm] / histogram_interval length [mmm]
         self.input_parameter_container = Model.add_entries_to_pc(self.model_orig.input_parameter_container, new_entries)
-        self.mutable_parameter_count = model_orig.mutable_parameter_count + 2
+        self.mutable_parameter_count = model_orig.mutable_parameter_count + len(new_entries)
         self.standardizer = self.model_orig.standardizer
-        self.offset_space_overrides = {'ImagePlane.translationXerror': RandomOutputParameter(value_lims=(-3.,3.), rg=RandomGenerator(42)), 'ImagePlane.translationYerror': RandomOutputParameter(value_lims=(-2.0,2.0), rg=RandomGenerator(42)), 'ImagePlane.translationZerror': RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42))}
+        self.offset_space_overrides = {'ImagePlane.translationXerror': RandomOutputParameter(value_lims=(-3.,3.), rg=RandomGenerator(42)), 'ImagePlane.translationYerror': RandomOutputParameter(value_lims=(-2.0,2.0), rg=RandomGenerator(42)), 'ImagePlane.translationZerror': RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42)), 'ImagePlane.intensityScale': RandomOutputParameter(value_lims=(0.2,1), rg=RandomGenerator(42))}
         self.max_offset_share = 0.2
         self.offset_space = Model.calculate_offset_space(self.input_parameter_container, self.max_offset_share, self.offset_space_overrides)
         self.rescale_multiplier, self.rescale_addend = Model.mutable_parameter_offset_conversion_factor(self.input_parameter_container, self.offset_space, device=self.device)
@@ -372,10 +378,10 @@ class Model:
         return (offset - self.rescale_addend) / self.rescale_multiplier
         
     def __call__(self, x, offset=None, clone_output=False, grad=False):
-        assert x.shape[-1] == 37
+        assert x.shape[-1] == self.mutable_parameter_count
         if offset is not None:
             x = x + self.rescale_offset(offset)
-        inp = torch.cat((x[..., :-3],x[..., -1:]), dim=-1)
+        inp = torch.cat((x[..., :self.model_orig.mutable_parameter_count-1],x[..., -1:]), dim=-1)
             
         with torch.no_grad() if not grad else nullcontext():
             output = self.model_orig(inp)
@@ -389,6 +395,7 @@ class Model:
         translation_y = x[..., -2]
         output_copy[..., 0,:] = Model.batch_translate_histograms(output[..., 0, :], (translation_x-0.5)*self.x_factor)
         output_copy[..., 1, :] = Model.batch_translate_histograms(output[..., 1, :], (translation_y-0.5) *self.y_factor)
+        output_copy = output_copy*(self.intensity_multiplier * (x[..., -4] + self.intensity_addend)).unsqueeze(-1).unsqueeze(-1)
         return output_copy.flatten(start_dim=-2)
         
     @staticmethod
