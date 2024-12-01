@@ -73,14 +73,14 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
 def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions):
     method_evaluation_dict = {}
     for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
-        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(entry[0], model, repetitions=2, num_candidates=entry[1], iterations=iterations)
+        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(entry[0], model, repetitions=repetitions, num_candidates=entry[1], iterations=iterations)
         method_evaluation_dict[key]= (loss_best, mean_progress, std_progress, offset_rmse)
 
     for key, (optimizer, num_candidates) in method_dict.items():
         t0 = benchmark.Timer(
             stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
             setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
-            globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': 12, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
+            globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
             num_threads=1,
             label='optimize '+key,
             sub_label=None)
