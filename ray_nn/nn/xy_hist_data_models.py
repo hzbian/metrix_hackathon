@@ -298,7 +298,7 @@ class Model:
         self.histogram_lims = model_orig.histogram_lims
         self.input_parameter_container = model_orig.input_parameter_container
         new_entries = [
-            ('ImagePlane.intensityScale', RandomOutputParameter(value_lims=(0.2,1), rg=RandomGenerator(42))),
+            ('ImagePlane.intensityScale', RandomOutputParameter(value_lims=(0.8,1.2), rg=RandomGenerator(42))),
             ('ImagePlane.translationXerror', RandomOutputParameter(value_lims=(-7,7), rg=RandomGenerator(42))),
             ('ImagePlane.translationYerror', RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42))),
                       ]
@@ -314,7 +314,7 @@ class Model:
         self.input_parameter_container = Model.add_entries_to_pc(self.model_orig.input_parameter_container, new_entries)
         self.mutable_parameter_count = model_orig.mutable_parameter_count + len(new_entries)
         self.standardizer = self.model_orig.standardizer
-        self.offset_space_overrides = {'ImagePlane.translationXerror': RandomOutputParameter(value_lims=(-3.,3.), rg=RandomGenerator(42)), 'ImagePlane.translationYerror': RandomOutputParameter(value_lims=(-2.0,2.0), rg=RandomGenerator(42)), 'ImagePlane.translationZerror': RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42)), 'ImagePlane.intensityScale': RandomOutputParameter(value_lims=(0.2,1), rg=RandomGenerator(42))}
+        self.offset_space_overrides = {'ImagePlane.translationXerror': RandomOutputParameter(value_lims=(-3.,3.), rg=RandomGenerator(42)), 'ImagePlane.translationYerror': RandomOutputParameter(value_lims=(-2.0,2.0), rg=RandomGenerator(42)), 'ImagePlane.translationZerror': RandomOutputParameter(value_lims=(-3,3), rg=RandomGenerator(42)), 'ImagePlane.intensityScale': RandomOutputParameter(value_lims=(-0.2, 0.2), rg=RandomGenerator(42))}
         self.max_offset_share = 0.2
         self.offset_space = Model.calculate_offset_space(self.input_parameter_container, self.max_offset_share, self.offset_space_overrides)
         self.rescale_multiplier, self.rescale_addend = Model.mutable_parameter_offset_conversion_factor(self.input_parameter_container, self.offset_space, device=self.device)
@@ -395,7 +395,7 @@ class Model:
         translation_y = x[..., -2]
         output_copy[..., 0,:] = Model.batch_translate_histograms(output[..., 0, :], (translation_x-0.5)*self.x_factor)
         output_copy[..., 1, :] = Model.batch_translate_histograms(output[..., 1, :], (translation_y-0.5) *self.y_factor)
-        output_copy = output_copy*(self.intensity_multiplier * (x[..., -4] + self.intensity_addend)).unsqueeze(-1).unsqueeze(-1)
+        output_copy = output_copy*(self.intensity_multiplier * x[..., -4] + self.intensity_addend).unsqueeze(-1).unsqueeze(-1)
         return output_copy.flatten(start_dim=-2)
         
     @staticmethod
