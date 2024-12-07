@@ -99,13 +99,12 @@ class Plot:
                 xaxis_title='z',
                 yaxis_title='x',
                 zaxis_title='y',
+                xaxis=dict(title_font=dict(size=20)),  # Double font size (from default 10 to 20)
+                yaxis=dict(title_font=dict(size=20)),  # Double font size
+                zaxis=dict(title_font=dict(size=20)),  # Double font size
             ),
+            font=dict(size=16),  # Double font size for other texts
         )
-        #fig.update_layout(
-        #    scene = dict(
-        #         xaxis = dict(range=[-2,2],),
-        #        zaxis = dict(range=[-0.25,0],),
-        #        yaxis = dict(range=[-1.35,-1.1],),))
         steps = []
         fig_data = fig.data
         assert isinstance(fig_data, tuple)
@@ -538,6 +537,65 @@ class Plot:
             fig.suptitle(suptitle)
         return fig
 
+    @staticmethod
+    def plot_normalized_param_comparison(
+        predicted_params: torch.Tensor,
+        labels: list[str],
+        epoch: int | None = None,
+        training_samples_count: int | None = None,
+        real_params: torch.Tensor | None = None,
+        omit_labels: list[str] | None = None,
+    ) -> plt.Figure:
+        if omit_labels is None:
+            omit_labels = []
+        fig, ax = plt.subplots(1, 1, figsize=(4, 8))
+        ax.set_ylim([-0.5, 0.5])
+        normalized_predicted_params = predicted_params -0.5
+        if real_params is not None:
+            normalized_real_params = real_params -0.5
+            len_params = len(normalized_real_params)
+            ax2 = ax.twiny()
+            ax2.barh([i for i in range(len_params)],
+                [
+                    abs(normalized_real_params[i] - normalized_predicted_params[i])
+                    for i in range(len_params)
+                ],
+                #[i for i in range(len_params)],
+                color="tab:red",
+                alpha=0.2,
+                label="Difference",
+            )
+            ax2.set_xlabel("Difference", color="#d6272880")
+            ax2.tick_params(axis="x", labelcolor="#d6272880", color="#d6272880")
+            ax.stem([i for i in range(len_params)],
+                normalized_real_params,
+                label="Real Parameters",
+                 orientation='horizontal',
+            )
+        ax.stem(
+            normalized_predicted_params,
+            linefmt="orange",
+            markerfmt="o",
+            label="Predicted Parameters",
+            orientation='horizontal',
+        )
+        param_labels = labels
+        ax.set_yticks(range(len(param_labels)))
+        ax.set_yticklabels(param_labels)
+        fig.legend(loc='upper left')
+        ax.set_ylim([-1, len_params])
+        ax.set_xlabel("Normalized Compensation")
+        ax.set_ylabel("Parameter")
+        if epoch is not None:
+            suptitle = "Epoch " + str(epoch)
+        else:
+            suptitle = ""
+        if training_samples_count is not None:
+            suptitle += ", " + str(training_samples_count) + " Training Samples"
+        if suptitle != "":
+            fig.suptitle(suptitle)
+        return fig
+        
     @staticmethod
     def is_out_of_lim(
         torch_list: list[torch.Tensor], lims: tuple[float, float], coordinate_idx=0
