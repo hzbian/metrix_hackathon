@@ -38,7 +38,7 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=MEDIUM_SIZE)  # fontsize of the figure title
 
 class MetrixXYHistSurrogate(L.LightningModule):
-    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, total_bin_count:int=100, layer_size:int=4, blow=2.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  batch_size:int = 32, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
+    def __init__(self, standardizer, input_parameter_container:RayParameterContainer, histogram_lims, total_bin_count:int=100, layer_size:int=4, blow=5.0, shrink_factor:str='log', learning_rate:float=1e-4, optimizer:str='adam',  batch_size:int = 32, dataset_length: int | None=None, dataset_normalize_outputs:bool=False, last_activation=nn.Sigmoid(), lr_scheduler: str | None = "exp"):
         super(MetrixXYHistSurrogate, self).__init__()
         self.save_hyperparameters(ignore=['last_activation'])
 
@@ -118,7 +118,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
                 nn_layers.append(activation_function)
                 if batch_norm:
                     nn_layers.append(nn.BatchNorm1d(int(layers[i+1].item())))
-            if i == len(layers)-2:
+            if i == len(layers)-2 and last_activation is not None:
                 nn_layers.append(last_activation)
         return nn.Sequential(*nn_layers)
 
@@ -207,7 +207,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
-                    "scheduler": ExponentialLR(optimizer, gamma=0.999),
+                    "scheduler": ExponentialLR(optimizer, gamma=0.995),
                     "frequency": 1,
                 },
             }
@@ -241,7 +241,7 @@ class StandardizeXYHist():
             return element * self.divisor
         
 if __name__ == '__main__':
-    load_len: int | None = 1000
+    load_len: int | None = None
     batch_size = 128
     standardizer = StandardizeXYHist()
     sub_groups = ['parameters', 'histogram/ImagePlane', 'n_rays/ImagePlane']
@@ -250,7 +250,7 @@ if __name__ == '__main__':
     path = 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/'
     transforms = [lambda x: x[:, 1:].float(), lambda x: standardizer(x.flatten(start_dim=1).float()), lambda x: x.int()]
     train_dataset = HistDataset([i+1 for i in range(10)], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
-    memory_train_dataset = BalancedMemoryDataset(dataset=train_dataset, load_len=load_len, min_n_rays=10)
+    memory_train_dataset = BalancedMemoryDataset(dataset=train_dataset, load_len=load_len, min_n_rays=10, good_samples_per_bad=4)
     del train_dataset
     val_dataset = HistDataset([11, 12], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
     input_parameter_container = val_dataset.retrieve_parameter_container()
@@ -261,10 +261,10 @@ if __name__ == '__main__':
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(train_dataset=memory_train_dataset, val_dataset=memory_val_dataset, test_dataset=None, batch_size_train=batch_size, batch_size_val=batch_size, num_workers=num_workers)
     
-    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=7, batch_size=batch_size, histogram_lims=histogram_lims)
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=9, batch_size=batch_size, histogram_lims=histogram_lims)
     test = False
     if not test:
-        wandb_logger = WandbLogger(name="ref3_dm+_val_unbal_bal_10_sch_.999_mish_z+-30_7_l", project="xy_hist", save_dir='outputs')
+        wandb_logger = WandbLogger(name="ref4_dm+_val_unbal_bal_10_sch_.995_mish_z+-30_9_l_b5_gpb_4", project="xy_hist", save_dir='outputs')
     else:
         wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
@@ -273,7 +273,7 @@ if __name__ == '__main__':
         datamodule.setup(stage="fit")
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    trainer = L.Trainer(max_epochs=10000, logger=wandb_logger, log_every_n_steps=100000, check_val_every_n_epoch=1, callbacks=[lr_monitor])
+    trainer = L.Trainer(max_steps=900000000, logger=wandb_logger, log_every_n_steps=1000000, check_val_every_n_epoch=1, callbacks=[lr_monitor])
     trainer.init_module()
     
     if test:
