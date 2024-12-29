@@ -250,7 +250,7 @@ if __name__ == '__main__':
     path = 'datasets/metrix_simulation/ray_emergency_surrogate_50+50+z+-30/'
     transforms = [lambda x: x[:, 1:].float(), lambda x: standardizer(x.flatten(start_dim=1).float()), lambda x: x.int()]
     train_dataset = HistDataset([i+1 for i in range(10)], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
-    memory_train_dataset = BalancedMemoryDataset(dataset=train_dataset, load_len=load_len, min_n_rays=10, good_samples_per_bad=4)
+    memory_train_dataset = BalancedMemoryDataset(dataset=train_dataset, load_len=load_len, min_n_rays=1, good_samples_per_bad=4)
     del train_dataset
     val_dataset = HistDataset([11, 12], path, file_pattern, sub_groups, transforms, normalize_sub_groups, load_max=load_len)
     input_parameter_container = val_dataset.retrieve_parameter_container()
@@ -261,10 +261,10 @@ if __name__ == '__main__':
     num_workers = len(workers) if workers is not None else 0
     datamodule = DefaultDataModule(train_dataset=memory_train_dataset, val_dataset=memory_val_dataset, test_dataset=None, batch_size_train=batch_size, batch_size_val=batch_size, num_workers=num_workers)
     
-    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=9, batch_size=batch_size, histogram_lims=histogram_lims)
+    model = MetrixXYHistSurrogate(dataset_length=load_len, standardizer=standardizer, input_parameter_container=input_parameter_container, layer_size=8, batch_size=batch_size, histogram_lims=histogram_lims)
     test = False
     if not test:
-        wandb_logger = WandbLogger(name="ref4_dm+_val_unbal_bal_10_sch_.995_mish_z+-30_9_l_b5_gpb_4", project="xy_hist", save_dir='outputs')
+        wandb_logger = WandbLogger(name="ref5_dm+_val_unbal_bal_10_sch_.995_mish_z+-30_8_l_b5_gpb_4_r_min_1", project="xy_hist", save_dir='outputs')
     else:
         wandb_logger =  WandbLogger(name="test", project="xy_hist", save_dir='outputs', offline=True)
     if test:
