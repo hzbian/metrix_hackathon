@@ -273,7 +273,7 @@ if __name__ == '__main__':
         datamodule.setup(stage="fit")
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    trainer = L.Trainer(max_steps=900000000, logger=wandb_logger, log_every_n_steps=1000000, check_val_every_n_epoch=1, callbacks=[lr_monitor])
+    trainer = L.Trainer(max_steps=100000000, logger=wandb_logger, log_every_n_steps=1000000, check_val_every_n_epoch=1, callbacks=[lr_monitor])
     trainer.init_module()
     
     if test:
