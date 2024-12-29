@@ -163,13 +163,13 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
     @staticmethod
     def plot_data(prediction, ground_truth):
-        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, layout='constrained', figsize=(4.905, 4.434))
+        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, layout='constrained', figsize=(4.905, 12.434)) #4.434
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for i, y_element in enumerate(ground_truth):
-            ax[i, 0].plot(y_element[50:], label='simulation', c=colors[3])
-            ax[i, 0].plot(prediction[i, 50:], label='surrogate', c=colors[4])
-            ax[i, 1].plot(y_element[:50], label='simulation', c=colors[3])
-            ax[i, 1].plot(prediction[i, :50], label='surrogate', c=colors[4])
+            ax[i, 0].plot(y_element[:50], label='simulation', c=colors[3])
+            ax[i, 0].plot(prediction[i, :50], label='surrogate', c=colors[4])
+            ax[i, 1].plot(y_element[50:], label='simulation', c=colors[3])
+            ax[i, 1].plot(prediction[i, 50:], label='surrogate', c=colors[4])
             ax[i, 1].xaxis.set_major_locator(MultipleLocator(25))
         ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$ histogram')
         ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$ histogram')
