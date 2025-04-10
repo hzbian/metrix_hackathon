@@ -5,6 +5,7 @@ import math
 import psutil
 import torch
 from torch import optim, nn
+from matplotlib.lines import Line2D
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from torch.optim.lr_scheduler import ExponentialLR, ReduceLROnPlateau
@@ -163,7 +164,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
     @staticmethod
     def plot_data(prediction, ground_truth):
-        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, layout='constrained', figsize=(4.905, 12.434)) #4.434
+        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, layout='constrained', figsize=(4.905, 4.434)) #12.434
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for i, y_element in enumerate(ground_truth):
             ax[i, 0].plot(y_element[:50], label='simulation', c=colors[3])
@@ -176,6 +177,84 @@ class MetrixXYHistSurrogate(L.LightningModule):
         plt.legend()
         fig.supylabel('Normalized ray counts')
         return fig
+
+
+    @staticmethod
+    def plot_data_3(prediction, ground_truth, label_list=['Simulation', 'Surrogate']):
+        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, 
+                               layout='constrained', figsize=(7.08, 1.97)) ##figsize=(4.905, 4.434)
+        colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        
+        # Create lists to keep track of the secondary axes for setting shared limits
+        ax2_left = []
+        ax2_right = []
+        if label_list[0] == "Compensated":
+            c1 = colors[2]
+        else:
+            c1 = colors[1]
+
+        if label_list[1] == "Experiment":
+            c2 = colors[1]
+        else:
+            c2 = colors[4]
+        for i, y_element in enumerate(ground_truth):
+            # Plot simulation and surrogate data
+            sim_line_0, = ax[i, 0].plot(y_element[:50], label=label_list[0], c=c1,)
+            sur_line_0, = ax[i, 0].plot(prediction[i, :50], label=label_list[1], c=c2)
+            sim_line_1, = ax[i, 1].plot(y_element[50:], label=label_list[0], c=c1)
+            sur_line_1, = ax[i, 1].plot(prediction[i, 50:], label=label_list[1], c=c2)
+            
+            # Error computation
+            error_first_half = abs(y_element[:50] - prediction[i, :50])
+            error_second_half = abs(y_element[50:] - prediction[i, 50:])
+            
+            # Create second y-axis for error
+            ax2_0 = ax[i, 0].twinx()
+            ax2_1 = ax[i, 1].twinx()
+
+            error_color = colors[3]
+            # Plot error in log scale
+            err_line_0, = ax2_0.plot(error_first_half, label='Error', c=error_color, linestyle='dotted')
+            err_line_1, = ax2_1.plot(error_second_half, label='Error', c=error_color, linestyle='dotted')
+
+            
+            # Set color for the second y-axis
+            ax2_0.tick_params(axis='y', colors=error_color)
+            ax2_1.tick_params(axis='y', colors=error_color)
+            ax2_0.set_yticklabels([])
+            ax2_0.spines['right'].set_color(error_color)
+            ax2_1.spines['right'].set_color(error_color)
+            
+            # Add the second axes to lists for shared limits
+            ax2_left.append(ax2_0)
+            ax2_right.append(ax2_1)
+
+        second_axis = ax2_left + ax2_right
+        
+        for i in range(len(ax2_left)):
+            shared_ylim = (min(ax2_left[i].get_ylim()[0], ax2_right[i].get_ylim()[0]), max(ax2_left[i].get_ylim()[1], ax2_right[i].get_ylim()[1]))
+            ax2_left[i].set_ylim(shared_ylim)
+            ax2_right[i].set_ylim(shared_ylim)
+        
+        # Synchronize x-axis limits across both histogram types
+        x_lims = [a.get_xlim() for a in ax.flat]
+        shared_xlim = (min(l[0] for l in x_lims), max(l[1] for l in x_lims))
+        for a in ax.flat:
+            a.set_xlim(shared_xlim)
+        
+        # Shared labels
+        ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$ histogram')
+        ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$ histogram')
+        ##fig.supylabel('Normalized ray counts')
+        
+        # Add legend to the bottom-right subplot
+        lines = [sim_line_0, sur_line_0, err_line_0]
+        labels = [line.get_label() for line in lines]
+        ax2_left[-1].legend(lines, labels, loc='upper right')  # Adjust `loc` for precise placement
+        return fig
+
+
+
 
     @staticmethod
     def create_plot(label: str, y_hat, y):

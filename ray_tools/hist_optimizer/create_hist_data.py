@@ -29,7 +29,7 @@ def engine_output_to_np_array(out):
 def create_histogram_file(engine, seed, path="outputs/", total_size=10, batch_size=2, x_lims=(-10., 10.), y_lims=(-3., 3.)):
     with h5py.File(os.path.join(path, 'histogram_'+str(seed)+'.h5'), 'w') as f:
         torch.manual_seed(seed)
-        dset_arr = f.create_dataset("parameters", (total_size,36), dtype='float64', track_order=True)
+        dset_arr = f.create_dataset("parameters", (total_size,35), dtype='float64', track_order=True)
         dset_n_rays = f.create_dataset("n_rays/ImagePlane", (total_size,), dtype='float64')
         dset_hist = f.create_dataset("histogram/ImagePlane", (total_size,2,50), dtype='float64')
         dset_hist.attrs['lims'] = x_lims, y_lims
@@ -41,7 +41,7 @@ def create_histogram_file(engine, seed, path="outputs/", total_size=10, batch_si
             else:
                 lims_list.append((label, value.get_value()))
         dset_arr.attrs.update(lims_list)
-        random_params = torch.rand(total_size,35)
+        random_params = torch.rand(total_size,34)
     
         for i in trange(0, total_size, batch_size):
             end = min(i + batch_size, total_size)  # Ensure we don't go out of bounds

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from raypyng.xmltools import XmlElement
+from .raypyng.xmltools import XmlElement
 
 from .utils import RandomGenerator
 

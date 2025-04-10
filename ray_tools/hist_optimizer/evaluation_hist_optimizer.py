@@ -123,7 +123,7 @@ plt.savefig(os.path.join(outputs_dir,'fixed_plot.png'), bbox_inches='tight', pad
 # In[ ]:
 
 
-method_dict = {"Smart Walker": (optimize_smart_walker, 1000), "Brute Force": (optimize_brute, 1000), "TPE": (optimize_tpe, None), "PSO": (optimize_pso, 1000), "SNES": (optimize_evotorch, 1000)}
+method_dict = {"Smart Walker": (optimize_smart_walker, 1000), "Monte Carlo": (optimize_brute, 1000), "TPE": (optimize_tpe, None), "PSO": (optimize_pso, 1000), "SNES": (optimize_evotorch, 1000)}
 
 method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=2000, repetitions=30, benchmark_repetitions=10)
 with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:

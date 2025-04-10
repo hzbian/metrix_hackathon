@@ -99,6 +99,15 @@ def import_data(real_data_dir, imported_measurements, included_z_layers: list[fl
         else:
             output_dict = {}
         z_direction_dict = {}
+        mean_list = []
+        for file in files:
+            if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
+                path: str = os.path.join(subdir, file)
+                sample_image: Image.Image = get_image(path)
+                sample_image: Image.Image = subtract_black(sample_image, black)
+                sample: torch.Tensor = to_tensor(sample_image).to(device)
+                mean_list.append(sample.sum())
+        num_rays = torch.tensor(mean_list).mean().round().int().item()
         for file in files:
             if file.lower().endswith('.bmp') and not file.lower().endswith('black.bmp'):
                 path: str = os.path.join(subdir, file)
@@ -110,7 +119,7 @@ def import_data(real_data_dir, imported_measurements, included_z_layers: list[fl
                 grid, intensity = transform(sample, x_lims, y_lims)
                 cleaned_intensity, cleaned_indices = clean_intensity(intensity[0], threshold=0.02)
                 scatter = transform_weight(hist=grid[:, cleaned_indices], pc_weights=cleaned_intensity.unsqueeze(0),
-                                           num_rays=1000)
+                                           num_rays=num_rays)
                 ray_output: RayOutput = tensor_to_ray_output(scatter)
                 z_layer_id = float(file[:-4])
                 if z_layer_id in included_z_layers:

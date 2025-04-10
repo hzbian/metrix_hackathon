@@ -20,7 +20,7 @@ import h5py
 import torch
 import pandas as pd
 
-from raypyng import RMLFile
+from .raypyng.rml import RMLFile
 
 
 @dataclass

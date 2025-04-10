@@ -6,8 +6,8 @@ from collections.abc import Iterable
 
 from joblib import Parallel, delayed
 
-from raypyng import RMLFile
-from raypyng.xmltools import XmlElement
+from .raypyng.rml import RMLFile
+from .raypyng.xmltools import XmlElement
 
 from . import RayTransformType
 from .backend import RayBackend, RayOutput
