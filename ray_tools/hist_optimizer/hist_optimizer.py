@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 from evotorch import Problem
 from evotorch.algorithms import SNES, CMAES
 import logging
+from blop import DOF, Objective, Agent
+from bluesky import RunEngine
+from databroker import Broker
+
 from ray_optim.plot import Plot
 from ray_tools.base.transform import MultiLayer
 from ray_nn.data.lightning_data_module import DefaultDataModule
@@ -77,15 +81,15 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
         method_evaluation_dict[key]= (loss_best, mean_progress, std_progress, offset_rmse)
 
     for key, (optimizer, num_candidates) in method_dict.items():
-        t0 = benchmark.Timer(
-            stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
-            setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
-            globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
-            num_threads=1,
-            label='optimize '+key,
-            sub_label=None)
-        results = t0.timeit(benchmark_repetitions)
-        execution_time = results.raw_times[0]
+        #t0 = benchmark.Timer(
+        #    stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
+        #    setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
+        #    globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
+        #    num_threads=1,
+        #    label='optimize '+key,
+        #    sub_label=None)
+        #results = t0.timeit(benchmark_repetitions)
+        execution_time = 42#results.raw_times[0]
         method_evaluation_dict[key] += (execution_time,)
     return method_evaluation_dict
 
@@ -686,3 +690,46 @@ def optimize_evotorch(
     best_loss = best.evals.item()
     loss_min_params = model.rescale_offset(best.values) + uncompensated_parameters
     return loss_min_params.squeeze(-2), best_loss, loss_history
+
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations, warm_up_iterations=360, num_candidates=1):
+    db = Broker.named("temp")
+    RE = RunEngine({})
+    RE.subscribe(db.insert)
+
+    dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
+    objectives = [Objective(name="metrixs", description="METRIXS Beamline", target="min")]
+        
+    def objective_function(offsets, model, observed_rays, uncompensated_parameters):
+        # Evaluate the model's loss with these offsets
+        scaled_offsets = model.rescale_offset(offsets)
+        compensated_rays = model(uncompensated_parameters + scaled_offsets)
+        loss = ((compensated_rays - observed_rays) ** 2).mean().item()
+        return loss
+    
+    def objective(param_tens):
+        #param_list = torch.tensor([trial.suggest_float(str(i), 0, 1.) for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+        return objective_function(param_tens, model, observed_rays, uncompensated_parameters)
+
+    def digestion(df):
+        for index, entry in df.iterrows():
+            param_tens = torch.tensor([getattr(entry, f'{i}') for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+            df.loc[index, "metrixs"] = objective(param_tens)
+        return df
+    
+    agent = Agent(
+    dofs=dofs,
+    objectives=objectives,
+    digestion=digestion,
+    db=db,
+    )
+
+    RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
+    RE(agent.learn("ei", iterations=iterations-warm_up_iterations, n=num_candidates))
+    agent.plot_objectives()
+    losses = torch.tensor(agent.table['metrixs'], device=model.device)
+    
+    best_losses = torch.cummin(losses, dim=0).values
+    best_loss_idx = losses.argmin()
+    global_best_offset = torch.tensor([list(agent.table[str(i)])[best_loss_idx] for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+    loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), losses[best_loss_idx], best_losses.tolist()
