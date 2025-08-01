@@ -167,8 +167,8 @@ class Histogram(RayTransform):
         if self.x_lims is None:
             out['histogram'], bin_edges = torch.histogramdd(torch.stack([x_loc, y_loc]).T,
                                                                  bins=(self.n_bins_x, self.n_bins_y))
-            out['x_lims'] = (bin_edges[0][[0]].item(), bin_edges[0][[1]].item())
-            out['y_lims'] = (bin_edges[1][[0]].item(), bin_edges[1][[1]].item())
+            out['x_lims'] = (x_loc.min().item(), x_loc.max().item())
+            out['y_lims'] = (y_loc.min().item(), y_loc.max().item())
         else:
             if self.auto_center:
                 # compute center of mass and adapt limits
