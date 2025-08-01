@@ -8,21 +8,16 @@ DATASET_NAME = 'ray_surrogate'
 H5_MAX_SIZE = 10000
 BATCH_SIZE = 1000
 H5_IDX_RANGE = range(50)
+
 H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAME)
 
-RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn.rml')
+RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml')
 RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', DATASET_NAME)
 
 N_RAYS = ['1e5']
 
-EXPORTED_PLANES = ["U41_318eV",
-                   "ASBL",
-                   "M1-Cylinder",
-                   "Spherical Grating",
-                   "Exit Slit",
-                   "E1",
-                   "E2",
-                   "ImagePlane"]
+EXPORTED_PLANES = ["ImagePlane"]
+SEED = 42
 
 TRANSFORMS = [
     RayTransformConcat({
