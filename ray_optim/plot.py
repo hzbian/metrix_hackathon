@@ -17,11 +17,6 @@ from ray_tools.base.parameter import (
     RayParameterContainer,
 )
 
-mpl.rcParams["text.color"] = "dimgray"
-mpl.rcParams["axes.labelcolor"] = "dimgray"
-mpl.rcParams["xtick.color"] = "dimgray"
-mpl.rcParams["ytick.color"] = "dimgray"
-mpl.rcParams["axes.edgecolor"] = "dimgray"
 plt.switch_backend("Agg")
 
 
