@@ -107,11 +107,11 @@ def plot_result_dict(result_dict, optimize_dict):
             plt.legend(fontsize=11)
             plt.grid(True)
             plt.tight_layout()
-            plt.savefig(f"{optimizer_name}_{param_name}.pdf")
+            plt.savefig(f"outputs/{optimizer_name}_{param_name}.pdf")
             plt.show()
 
 if __name__ == "__main__":
-    file_root = '../../'
+    file_root = ''
     model_path = os.path.join(file_root, "outputs/xy_hist/s021yw7n/checkpoints/epoch=235-step=70000000.ckpt")
     surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
     model = Model(path=model_path)
