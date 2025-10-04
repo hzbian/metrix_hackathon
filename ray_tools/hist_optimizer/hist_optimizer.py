@@ -7,7 +7,9 @@ from torch.utils import benchmark
 from scipy.stats import mannwhitneyu
 import matplotlib.pyplot as plt
 from evotorch import Problem
-from evotorch.algorithms import SNES, CMAES
+from evotorch.algorithms import SNES, CMAES, GeneticAlgorithm
+from evotorch.operators import OnePointCrossOver, MultiPointCrossOver, GaussianMutation, SimulatedBinaryCrossOver
+
 import logging
 from blop import DOF, Objective, Agent
 from bluesky import RunEngine
@@ -31,6 +33,18 @@ from sub_projects.ray_optimization.real_data import import_data
 from ray_tools.base.transform import XYHistogram
 from ray_nn.data.transform import Select
 
+def new_label_names(labels):
+    replacements = {
+    'U41_318eV': 'U41',
+    'M1_Cylinder': 'M1',
+    'SphericalGrating': 'SG',
+    'ImagePlane': 'MeasurementUnit'
+    }
+    labels = [
+        next((v + param[len(k):] for k, v in replacements.items() if param.startswith(k)), param)
+        for param in labels
+    ]
+    return labels
 
 def tensor_to_param_container(ten, ray_parameter_container: RayParameterContainer):
     assert sum([1 if isinstance(value, MutableParameter) else 0 for key, value in ray_parameter_container.items()]) == ten.shape[0]
@@ -81,27 +95,21 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
         method_evaluation_dict[key]= (loss_best, mean_progress, std_progress, offset_rmse)
 
     for key, (optimizer, num_candidates) in method_dict.items():
-        #t0 = benchmark.Timer(
-        #    stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
-        #    setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
-        #    globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
-        #    num_threads=1,
-        #    label='optimize '+key,
-        #    sub_label=None)
-        #results = t0.timeit(benchmark_repetitions)
-        execution_time = 42#results.raw_times[0]
+        t0 = benchmark.Timer(
+            stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
+            setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
+            globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
+            num_threads=1,
+            label='optimize '+key,
+            sub_label=None)
+        results = t0.timeit(benchmark_repetitions)
+        execution_time = results.raw_times[0]
         method_evaluation_dict[key] += (execution_time,)
     return method_evaluation_dict
 
 def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations, num_candidates):
     return optimizer(model, observed_rays, uncompensated_parameters, iterations, num_candidates)
 
-#@staticmethod
-#def significant(label, group_A, group_B, confidence=0.95):
-#    ci = mannwhitneyu(group_A.flatten().cpu(), group_B.flatten().cpu()).confidence_interval(confidence_level=confidence)
-#    confidence_interval = (ci.low.item(), ci.high.item())
-#    return not (confidence_interval[0] < 0. and confidence_interval[1] > 0.)
-    
 @staticmethod
 def significant(label, group_A, group_B, confidence=0.95):
     stat, p = mannwhitneyu(group_A.flatten().cpu(), group_B.flatten().cpu(), alternative="greater")
@@ -158,7 +166,8 @@ def generate_latex_table(data):
     
     return table
 
-def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_trials=10000, fixed_parameters=[8, 14, 20, 21, 27, 28, 34], zeroed_parameters=[34], z_array=[-15., -10., -5., 0., 5., 10., 15., 20., 25., 30.], z_array_label='ImagePlane.translationZerror'):
+def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_trials=10000, fixed_parameters=[8, 14, 20, 21, 27, 28, 34], zeroed_parameters=[34], z_array=[-15., -10., -5., 0., 5., 10., 15., 20., 25., 30.], z_array_label='ImagePlane.translationZerror', seed=42):
+    torch.manual_seed(seed)
     mutable_parameter_count = model.mutable_parameter_count
     assert z_array_label in model.input_parameter_container.keys()
     z_array_min, z_array_max = model.input_parameter_container[z_array_label].value_lims
@@ -402,19 +411,223 @@ def compare_with_reference(reference_ray_outputs, loss_min_ray_outputs):
     distances = torch.concat(distances_list)
     return distances.mean(), distances.std()
 
-def compare_with_reference_bak(reference_ray_outputs, compensated_ray_outputs, output_plane='ImagePlane'):
-    loss_fn = SamplesLoss("sinkhorn", blur=0.1)
-    distances_list = []
-    for repetition in tqdm(compensated_ray_outputs, leave=False):
-        distances_rep_list = []
-        for i in range(len(reference_ray_outputs)):
-            sinkhorn_distance = loss_fn(repetition.contiguous(), reference_ray_outputs[i].contiguous())
-            distances_rep_list.append(sinkhorn_distance)
-        distances_rep = torch.concat(distances_rep_list)
-        distances_list.append(distances_rep)
-    distances = torch.stack(distances_list)
-    return distances.mean().item(), distances.std().item()
+def optimize_sa(
+    model,
+    observed_rays,
+    uncompensated_parameters,
+    iterations=1000,
+    step_size=0.1,
+    T_start=10.,
+    alpha=0.01,
+    verbose=False,
+    num_candidates=None,
+    seed=None,
+):
+    torch.manual_seed(seed)
+    device = model.device
+    dim = uncompensated_parameters.shape[-1]
+    
+    # Initialize offsets in [0, 1]
+    x = torch.rand(dim, device=device)
+    best_x = x.clone()
 
+    def energy_fn(offsets):
+        scaled_offsets = model.rescale_offset(offsets)
+        compensated_rays = model(uncompensated_parameters + scaled_offsets)
+        loss = ((compensated_rays - observed_rays) ** 2).mean()
+        return loss
+
+    best_energy = energy_fn(x)
+
+    def temperature(t):
+        return T_start * (alpha ** t)
+
+    energy_history = []
+
+    for t in trange(iterations, leave=False):
+        T = temperature(t)
+
+        # Propose new candidate within [0, 1] bounds
+        perturbation = torch.randn_like(x) * step_size
+        x_new = (x + perturbation).clamp(0.0, 1.0)
+        energy_new = energy_fn(x_new)
+
+        delta_E = energy_new - energy_fn(x)
+        accept_prob = torch.exp(-delta_E / T).clamp(max=1.0)
+
+        if delta_E < 0 or torch.rand(1).item() < accept_prob.item():
+            x = x_new
+            if energy_new < best_energy:
+                best_energy = energy_new
+                best_x = x_new.clone()
+
+        energy_history.append(best_energy.item())
+
+        if verbose and t % (iterations // 10) == 0:
+            print(f"Step {t}, Energy: {energy_new.item():.6f}, Best: {best_energy.item():.6f}, Temp: {T:.4f}")
+
+    # Final result
+    final_offset = model.rescale_offset(best_x) + uncompensated_parameters
+    return final_offset.squeeze(-2), best_energy.item(), energy_history
+
+
+def optimize_gd(
+    model, observed_rays, uncompensated_parameters, 
+    iterations=1000, learning_rate=0.01, optimizer_type='sgd', 
+    clamp_bounds=True, seed=42
+):
+    torch.manual_seed(seed)
+    device = model.device
+
+    # Initialize parameter tensor in [0, 1], requires grad
+    x = torch.rand((1, model.mutable_parameter_count), device=device, requires_grad=True)
+
+    # Select optimizer
+    if optimizer_type.lower() == 'adam':
+        optimizer = torch.optim.Adam([x], lr=learning_rate)
+    elif optimizer_type.lower() == 'sgd':
+        optimizer = torch.optim.SGD([x], lr=learning_rate)
+    else:
+        raise ValueError("Unsupported optimizer_type. Choose 'adam' or 'sgd'.")
+
+    loss_history = []
+
+    # Define loss function
+    def loss_fn(x_tensor):
+        with torch.enable_grad():
+            x_clamped = x_tensor
+            if clamp_bounds:
+                x_clamped = x_tensor.clamp(0.0, 1.0)
+
+            tensor_sum = model.rescale_offset(x_clamped) + uncompensated_parameters
+            compensated_rays = model(tensor_sum, clone_output=True)
+            loss = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
+            return loss
+
+    # Optimization loop
+    with tqdm(total=iterations, desc="GD Progress", leave=False) as pbar:
+        for i in range(iterations):
+            optimizer.zero_grad()
+            loss = loss_fn(x)
+            loss.backward()
+            optimizer.step()
+
+            if clamp_bounds:
+                with torch.no_grad():
+                    x.clamp_(0.0, 1.0)
+
+            current_loss = loss.item()
+            pbar.update(1)
+            pbar.set_postfix({"loss": current_loss})
+            loss_history.append(current_loss)
+
+    # Final output
+    best_params = model.rescale_offset(x.detach()) + uncompensated_parameters
+    return best_params.squeeze(-2), current_loss, loss_history
+
+
+def optimize_evotorch_ga(
+    model, observed_rays, uncompensated_parameters, iterations=1000, 
+    num_candidates=100, tournament_size=10, mutation_rate=0.1, mutation_scale=0.05, crossover_rate=0.9, eta=None, crossover_points=15, seed=42
+    ):
+    torch.manual_seed(seed)
+    # Define the loss function
+    def loss(x: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            tensor_sum = model.rescale_offset(x) + uncompensated_parameters
+            compensated_rays = model(tensor_sum, clone_output=True)
+            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
+        return loss_orig
+    
+    def constrained_loss(x: torch.Tensor) -> torch.Tensor:
+        penalty = torch.sum((x < 0.) | (x > 1.0), dim=-1).float()
+        total_loss = loss(x) + 1.0 * penalty  # Add large penalty for violations
+        return total_loss
+    logging.getLogger("evotorch").setLevel(logging.WARNING)
+    
+    # Define the problem
+    problem = Problem(
+        "min",
+        constrained_loss,
+        initial_bounds=(0., 1.),
+        solution_length=model.mutable_parameter_count,
+        vectorized=True,
+        device="cuda",  # Enable for GPU support
+    )
+
+    operators=[]
+    if eta==None:
+        operators.append(MultiPointCrossOver(problem, tournament_size=tournament_size, cross_over_rate=crossover_rate, num_points=crossover_points))
+    else:
+        operators.append(SimulatedBinaryCrossOver(problem, tournament_size=tournament_size, eta=eta, cross_over_rate=crossover_rate))
+    
+    operators.append(GaussianMutation(problem, stdev=mutation_scale, mutation_probability=mutation_rate))
+
+    # Create the searcher
+    searcher = GeneticAlgorithm(
+    problem,
+    popsize=num_candidates,
+    operators = operators
+    )
+    # Set up tqdm for progress tracking
+    num_generations = iterations
+    loss_history = []
+    with tqdm(total=num_generations, desc="Evotorch Progress", leave=False) as pbar:
+        for generation in range(num_generations):
+            searcher.step()  # Perform a single optimization step
+            pbar.update(1)  # Update the progress bar
+            best = searcher.status["pop_best"]
+            best_item = best.evals.item()
+            pbar.set_postfix({"loss": best_item})
+            loss_history.append(best_item)
+    best_loss = best.evals.item()
+    loss_min_params = model.rescale_offset(best.values) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), best_loss, loss_history
+    
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations, warm_up_iterations=360, num_candidates=1):
+    db = Broker.named("temp")
+    RE = RunEngine({})
+    RE.subscribe(db.insert)
+
+    dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
+    objectives = [Objective(name="metrixs", description="METRIXS Beamline", target="min")]
+        
+    def objective_function(offsets, model, observed_rays, uncompensated_parameters):
+        # Evaluate the model's loss with these offsets
+        scaled_offsets = model.rescale_offset(offsets)
+        compensated_rays = model(uncompensated_parameters + scaled_offsets)
+        loss = ((compensated_rays - observed_rays) ** 2).mean().item()
+        return loss
+    
+    def objective(param_tens):
+        #param_list = torch.tensor([trial.suggest_float(str(i), 0, 1.) for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+        return objective_function(param_tens, model, observed_rays, uncompensated_parameters)
+
+    def digestion(df):
+        for index, entry in df.iterrows():
+            param_tens = torch.tensor([getattr(entry, f'{i}') for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+            df.loc[index, "metrixs"] = objective(param_tens)
+        return df
+    
+    agent = Agent(
+    dofs=dofs,
+    objectives=objectives,
+    digestion=digestion,
+    db=db,
+    )
+
+    RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
+    RE(agent.learn("ei", iterations=iterations-warm_up_iterations, n=num_candidates))
+    agent.plot_objectives()
+    losses = torch.tensor(agent.table['metrixs'], device=model.device)
+    
+    best_losses = torch.cummin(losses, dim=0).values
+    best_loss_idx = losses.argmin()
+    global_best_offset = torch.tensor([list(agent.table[str(i)])[best_loss_idx] for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+    loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), losses[best_loss_idx], best_losses.tolist()
+
+########## LEGACY METHODS
 def optimize_brute(model, observed_rays, uncompensated_parameters, iterations, num_candidates=1000000):
     loss_min = float('inf')
     pbar = trange(iterations, leave=False)
@@ -484,88 +697,74 @@ def optimize_tpe(model, observed_rays, uncompensated_parameters, iterations, num
     loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
     return loss_min_params.squeeze(-2), study.best_value, best_losses.tolist()
 
-def cus_loss(a, b):
-    x_loss = torch.nn.functional.mse_loss(a[..., :50], b[..., :50], reduction='none').mean(dim=(0, 1, -1)).clone()
-    # compensated rays 19, 10, 1000, 50
-    x_loss_sum_min, _ = a[..., :50].swapaxes(0, 2).swapaxes(1,2)[:, :, 0].sum(dim=-1).min(dim=-1)
-    x_observed_sum_min, _ = b[..., :50].swapaxes(0, 2).swapaxes(1,2)[:, :, 0].sum(dim=-1).min(dim=-1)
-    x_loss += torch.where(x_loss_sum_min < x_observed_sum_min, 1., 0.)
-    
-    y_loss = torch.nn.functional.mse_loss(a[..., 50:], b[..., 50:], reduction='none').mean(dim=(0, 1, -1)).clone()
-    y_observed_sum_min, _ = b[..., 50:].swapaxes(0, 2).swapaxes(1,2)[:, :, 0].sum(dim=-1).min(dim=-1)
-    y_loss_sum_min, _ = a[..., 50:].swapaxes(0, 2).swapaxes(1,2)[:, :, 0].sum(dim=-1).min(dim=-1)
-    
-    y_loss += torch.where(y_loss_sum_min < y_observed_sum_min, 1., 0.)
-    return torch.max(x_loss, y_loss)
+def optimize_evotorch_cmaes(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=100):
+    return optimize_evotorch(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=num_candidates, algorithm=CMAES
+    )
 
-def optimize_pso(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, step_width=0.02, save_plot=False):
-    loss_min = float('inf')
-    loss_min_list = []
+def optimize_evotorch(
+    model, observed_rays, uncompensated_parameters, iterations, 
+    num_candidates=100, algorithm=SNES
+):   
+    # Define the loss function
+    def loss(x: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            tensor_sum = model.rescale_offset(x) + uncompensated_parameters
+            compensated_rays = model(tensor_sum, clone_output=True)
+            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
+        return loss_orig
     
-    # Initialize particles randomly in the parameter space
-    offsets = torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device)
-    velocities = torch.randn_like(offsets) * step_width  # Initialize velocities
+    def constrained_loss(x: torch.Tensor) -> torch.Tensor:
+        penalty = torch.sum((x < 0.) | (x > 1.0), dim=-1).float()
+        total_loss = loss(x) + 1.0 * penalty  # Add large penalty for violations
+        return total_loss
+    logging.getLogger("evotorch").setLevel(logging.WARNING)
     
-    # Initialize personal and global bests
-    personal_best_offsets = offsets.clone()
-    personal_best_loss = torch.full((1, num_candidates), float('inf'), device=model.device)
-    global_best_offset = offsets[:, 0, :].unsqueeze(dim=1)  # Start with first particle
-    global_best_loss = float('inf')
+    # Define the problem
+    problem = Problem(
+        "min",
+        constrained_loss,
+        initial_bounds=(0., 1.),
+        solution_length=model.mutable_parameter_count,
+        vectorized=True,
+        device="cuda",  # Enable for GPU support
+    )
     
-    pbar = trange(iterations, leave=False)
-    loss = torch.nn.MSELoss(reduction='none') # torch.nn.L1Loss(reduction='none')#
-
-    def mse_loss(a, b):
-        return loss(a, b).mean(dim=(0, 1, -1))
-        
-    with torch.no_grad():
-        for i in pbar:
-            # Rescale and evaluate the current offsets
-            scaled_offsets = model.rescale_offset(offsets)
-            compensated_rays = model(uncompensated_parameters + scaled_offsets)
-            #torch.Size([19, 10, 1000, 100]) obsforref torch.Size([19, 10, 1, 100])
-            #print(compensated_rays.shape, "obsforref", observed_rays.shape)
-            if i % 999 == 0 and save_plot:
-                MetrixXYHistSurrogate.plot_data_3(compensated_rays[:5, 0, 0].cpu(), observed_rays[:5, 0,0].cpu())
-                #print("mse", mse_loss(compensated_rays, observed_rays).min())
-                plt.savefig('out.png')
-            losses = cus_loss(compensated_rays , observed_rays)
-            
-            # Update personal bests
-            improved_mask = losses < personal_best_loss
-            personal_best_loss[improved_mask] = losses[improved_mask.flatten()]
-            personal_best_offsets[:, improved_mask.flatten(), :] = offsets[ :,improved_mask.flatten(), :]
-            
-            # Update global best
-            min_loss, min_index = personal_best_loss.min(dim=1)
-            if min_loss < global_best_loss:
-                global_best_loss = min_loss.item()
-                global_best_offset = personal_best_offsets[:, min_index, :]
-                
-            # Update particle velocities and positions
-            inertia = 0.5
-            cognitive = 1.5
-            social = 1.5
-            velocities = (inertia * velocities
-                          + cognitive * torch.rand_like(offsets) * (personal_best_offsets - offsets)
-                          + social * torch.rand_like(offsets) * (global_best_offset - offsets))
-            
-            offsets = offsets + velocities
-            offsets = torch.clamp(offsets, 0, 1)  # Keep within bounds
-            
-            # Track the best loss for progress reporting
-            loss_min_list.append(global_best_loss)
-            pbar.set_postfix({"loss": global_best_loss})
+    # Create the searcher
+    searcher = algorithm(problem, popsize=num_candidates, stdev_init=0.2)
     
-    # Return the best parameters found
-    loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
-    return loss_min_params.squeeze(-2), global_best_loss, loss_min_list
-
+    # Set up tqdm for progress tracking
+    num_generations = iterations
+    loss_history = []
+    with tqdm(total=num_generations, desc="Evotorch Progress", leave=False) as pbar:
+        for generation in range(num_generations):
+            searcher.step()  # Perform a single optimization step
+            pbar.update(1)  # Update the progress bar
+            best = searcher.status["pop_best"]
+            best_item = best.evals.item()
+            pbar.set_postfix({"loss": best_item})
+            loss_history.append(best_item)
+    best_loss = best.evals.item()
+    loss_min_params = model.rescale_offset(best.values) + uncompensated_parameters
+    return loss_min_params.squeeze(-2), best_loss, loss_history
 
 def optimize_ea(
-    model, observed_rays, uncompensated_parameters, iterations, 
-    num_candidates=100, mutation_rate=0.1, crossover_rate=0.7
+    model, observed_rays, uncompensated_parameters, iterations=1000, 
+    num_candidates=100, mutation_rate=0.1, crossover_rate=0.7, tournament_size=3, seed=None
 ):
+    def loss(x: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            tensor_sum = model.rescale_offset(x) + uncompensated_parameters
+            compensated_rays = model(tensor_sum, clone_output=True)
+            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1) 
+        return loss_orig
+    def constrained_loss(x: torch.Tensor) -> torch.Tensor:
+        penalty = torch.sum((x < 0.) | (x > 1.0), dim=-1).float()
+        total_loss = loss(x) + 1.0 * penalty  # Add large penalty for violations
+        return total_loss
     # Initialize population
     population = torch.rand(num_candidates, uncompensated_parameters.shape[-1], device=model.device)
     best_individual = None
@@ -576,12 +775,14 @@ def optimize_ea(
     with torch.no_grad():
         for _ in pbar:
             # Rescale offsets and evaluate fitness
-            scaled_population = model.rescale_offset(population.unsqueeze(0).unsqueeze(0))  # Shape: (1, pop_size, params_dim)
-            compensated_rays = model(uncompensated_parameters + scaled_population)
-            losses = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)  # Shape: (pop_size,)
+            losses = constrained_loss(population)##.unsqueeze(0).unsqueeze(0)
+            #scaled_population = model.rescale_offset()  # Shape: (1, pop_size, params_dim)
+            #compensated_rays = model(uncompensated_parameters + scaled_population)
+            #losses = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)  # Shape: (pop_size,)
             
             # Update best solution
             min_loss, min_idx = losses.min(dim=0)
+            
             if min_loss < best_loss:
                 best_loss = min_loss.item()
                 best_individual = population[min_idx].clone()
@@ -590,7 +791,6 @@ def optimize_ea(
             loss_history.append(best_loss)
 
             # Selection (Tournament Selection)
-            tournament_size = 3
             selected_indices = torch.randint(0, num_candidates, (num_candidates, tournament_size), device=model.device)
             tournament_fitness = losses[selected_indices]  # Shape: (num_candidates, tournament_size)
             best_indices_in_tournaments = torch.argmin(tournament_fitness, dim=1)  # Shape: (num_candidates,)
@@ -630,106 +830,73 @@ def optimize_ea(
             mutation_mask = torch.rand_like(offspring) < mutation_rate
             mutations = torch.randn_like(offspring) * 0.1  # Scale mutations
             offspring = offspring + mutation_mask * mutations
-            offspring = torch.clamp(offspring, 0, 1)  # Ensure valid range
+            #offspring = torch.clamp(offspring, 0, 1)  # Ensure valid range
 
             # Replace population
             population = offspring
     # Return the best solution found
     loss_min_params = model.rescale_offset(best_individual) + uncompensated_parameters
     return loss_min_params.squeeze(-2), best_loss, loss_history
-def optimize_evotorch_cmaes(
-    model, observed_rays, uncompensated_parameters, iterations, 
-    num_candidates=100):
-    return optimize_evotorch(
-    model, observed_rays, uncompensated_parameters, iterations, 
-    num_candidates=num_candidates, algorithm=CMAES
-    )
 
-def optimize_evotorch(
-    model, observed_rays, uncompensated_parameters, iterations, 
-    num_candidates=100, algorithm=SNES
-):   
-    # Define the loss function
-    def loss(x: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            tensor_sum = model.rescale_offset(x) + uncompensated_parameters
-            compensated_rays = model(tensor_sum, clone_output=True)
-            loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1) #cus_loss(compensated_rays, observed_rays) #
-        return loss_orig
+def optimize_pso(model, observed_rays, uncompensated_parameters, iterations, num_candidates=100000, step_width=0.02, save_plot=False):
+    loss_min = float('inf')
+    loss_min_list = []
     
-    def constrained_loss(x: torch.Tensor) -> torch.Tensor:
-        penalty = torch.sum((x < 0.) | (x > 1.0), dim=-1).float()
-        total_loss = loss(x) + 1.0 * penalty  # Add large penalty for violations
-        return total_loss
-    logging.getLogger("evotorch").setLevel(logging.WARNING)
+    # Initialize particles randomly in the parameter space
+    offsets = torch.rand(1, num_candidates, uncompensated_parameters.shape[-1], device=model.device)
+    velocities = torch.randn_like(offsets) * step_width  # Initialize velocities
     
-    # Define the problem
-    problem = Problem(
-        "min",
-        constrained_loss,
-        initial_bounds=(0., 1.),
-        solution_length=model.mutable_parameter_count,
-        vectorized=True,
-        device="cuda",  # Enable for GPU support
-    )
+    # Initialize personal and global bests
+    personal_best_offsets = offsets.clone()
+    personal_best_loss = torch.full((1, num_candidates), float('inf'), device=model.device)
+    global_best_offset = offsets[:, 0, :].unsqueeze(dim=1)  # Start with first particle
+    global_best_loss = float('inf')
     
-    # Create the searcher
-    searcher = algorithm(problem, popsize=num_candidates, stdev_init=0.2)
-    
-    # Set up tqdm for progress tracking
-    num_generations = iterations
-    loss_history = []
-    with tqdm(total=num_generations, desc="Evotorch Progress", leave=False) as pbar:
-        for generation in range(num_generations):
-            searcher.step()  # Perform a single optimization step
-            pbar.update(1)  # Update the progress bar
-            best = searcher.status["pop_best"]
-            best_item = best.evals.item()
-            pbar.set_postfix({"loss": best_item})
-            loss_history.append(best_item)
-    best_loss = best.evals.item()
-    loss_min_params = model.rescale_offset(best.values) + uncompensated_parameters
-    return loss_min_params.squeeze(-2), best_loss, loss_history
+    pbar = trange(iterations, leave=False)
+    loss = torch.nn.MSELoss(reduction='none') # torch.nn.L1Loss(reduction='none')#
 
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations, warm_up_iterations=360, num_candidates=1):
-    db = Broker.named("temp")
-    RE = RunEngine({})
-    RE.subscribe(db.insert)
-
-    dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
-    objectives = [Objective(name="metrixs", description="METRIXS Beamline", target="min")]
+    def mse_loss(a, b):
+        return loss(a, b).mean(dim=(0, 1, -1))
         
-    def objective_function(offsets, model, observed_rays, uncompensated_parameters):
-        # Evaluate the model's loss with these offsets
-        scaled_offsets = model.rescale_offset(offsets)
-        compensated_rays = model(uncompensated_parameters + scaled_offsets)
-        loss = ((compensated_rays - observed_rays) ** 2).mean().item()
-        return loss
+    with torch.no_grad():
+        for i in pbar:
+            # Rescale and evaluate the current offsets
+            scaled_offsets = model.rescale_offset(offsets)
+            compensated_rays = model(uncompensated_parameters + scaled_offsets)
+            #torch.Size([19, 10, 1000, 100]) obsforref torch.Size([19, 10, 1, 100])
+            #print(compensated_rays.shape, "obsforref", observed_rays.shape)
+            if i % 999 == 0 and save_plot:
+                MetrixXYHistSurrogate.plot_data_3(compensated_rays[:5, 0, 0].cpu(), observed_rays[:5, 0,0].cpu())
+                #print("mse", mse_loss(compensated_rays, observed_rays).min())
+                plt.savefig('out.png')
+            losses = mse_loss(compensated_rays , observed_rays)
+            
+            # Update personal bests
+            improved_mask = losses < personal_best_loss
+            personal_best_loss[improved_mask] = losses[improved_mask.flatten()]
+            personal_best_offsets[:, improved_mask.flatten(), :] = offsets[ :,improved_mask.flatten(), :]
+            
+            # Update global best
+            min_loss, min_index = personal_best_loss.min(dim=1)
+            if min_loss < global_best_loss:
+                global_best_loss = min_loss.item()
+                global_best_offset = personal_best_offsets[:, min_index, :]
+                
+            # Update particle velocities and positions
+            inertia = 0.5
+            cognitive = 1.5
+            social = 1.5
+            velocities = (inertia * velocities
+                          + cognitive * torch.rand_like(offsets) * (personal_best_offsets - offsets)
+                          + social * torch.rand_like(offsets) * (global_best_offset - offsets))
+            
+            offsets = offsets + velocities
+            offsets = torch.clamp(offsets, 0, 1)  # Keep within bounds
+            
+            # Track the best loss for progress reporting
+            loss_min_list.append(global_best_loss)
+            pbar.set_postfix({"loss": global_best_loss})
     
-    def objective(param_tens):
-        #param_list = torch.tensor([trial.suggest_float(str(i), 0, 1.) for i in range(uncompensated_parameters.shape[-1])], device=model.device)
-        return objective_function(param_tens, model, observed_rays, uncompensated_parameters)
-
-    def digestion(df):
-        for index, entry in df.iterrows():
-            param_tens = torch.tensor([getattr(entry, f'{i}') for i in range(uncompensated_parameters.shape[-1])], device=model.device)
-            df.loc[index, "metrixs"] = objective(param_tens)
-        return df
-    
-    agent = Agent(
-    dofs=dofs,
-    objectives=objectives,
-    digestion=digestion,
-    db=db,
-    )
-
-    RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
-    RE(agent.learn("ei", iterations=iterations-warm_up_iterations, n=num_candidates))
-    agent.plot_objectives()
-    losses = torch.tensor(agent.table['metrixs'], device=model.device)
-    
-    best_losses = torch.cummin(losses, dim=0).values
-    best_loss_idx = losses.argmin()
-    global_best_offset = torch.tensor([list(agent.table[str(i)])[best_loss_idx] for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+    # Return the best parameters found
     loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
-    return loss_min_params.squeeze(-2), losses[best_loss_idx], best_losses.tolist()
+    return loss_min_params.squeeze(-2), global_best_loss, loss_min_list
