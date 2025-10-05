@@ -101,10 +101,13 @@ def plot_result_dict(result_dict, optimize_dict):
             if "scale" in param_grid[param_name] and param_grid[param_name]["scale"] == "log":
                 ymin = max(ymin*0.8, 1e-8)  # avoid log(0)
                 plt.ylim(bottom=ymin)
-
             
+            if "loc" in param_grid[param_name]:
+                loc = param_grid[param_name]["loc"]
+            else:
+                loc = 'best'
+            plt.legend(fontsize=11, loc=loc)
 
-            plt.legend(fontsize=11)
             plt.grid(True)
             plt.tight_layout()
             plt.savefig(f"outputs/{optimizer_name}_{param_name}.pdf")
@@ -120,7 +123,8 @@ if __name__ == "__main__":
         "SA": (optimize_sa, {
             "step_size": {
                 "values": [0.01, 0.1, 0.2, 0.5, 1.0],
-                "label": r"$\eta$"
+                "label": r"$\eta$",
+                "loc": "lower left"
             },
             "T_start": {
                 "values": [10, 100, 1000, 5000],
@@ -130,6 +134,19 @@ if __name__ == "__main__":
                 "values": [0.9, 0.95, 0.97, 0.99],
                 "label": r"$\alpha$"
             },
+        }),
+    }
+    
+    result_dict = eval_optimizer_iterative(optimize_dict, model, repetitions=10)
+    plot_result_dict(result_dict, optimize_dict)
+    
+    optimize_dict = {
+        "GD": (optimize_gd, {
+             "learning_rate": {
+                 "values": [1e-7, 1e-6, 0.0001, 0.001, 0.01, 0.1],
+                 "label": r"$\eta$",
+                 "scale": "linear",
+             },
         }),
     }
     
@@ -171,18 +188,5 @@ if __name__ == "__main__":
         }),
     }
 
-    result_dict = eval_optimizer_iterative(optimize_dict, model, repetitions=10)
-    plot_result_dict(result_dict, optimize_dict)
-    
-    optimize_dict = {
-        "GD": (optimize_gd, {
-             "learning_rate": {
-                 "values": [1e-7, 1e-6, 0.0001, 0.001, 0.01, 0.1],
-                 "label": r"$\eta$",
-                 "scale": "linear",
-             },
-        }),
-    }
-    
     result_dict = eval_optimizer_iterative(optimize_dict, model, repetitions=10)
     plot_result_dict(result_dict, optimize_dict)
