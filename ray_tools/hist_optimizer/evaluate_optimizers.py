@@ -31,7 +31,7 @@ def eval_optimizer_iterative(optimize_dict, model, repetitions=10):
                 run_progresses = []
 
                 for i in range(repetitions):
-                    offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=i)
+                    offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=i+10000000)
         
                     with torch.no_grad():
                         observed_rays = model(compensated_parameters_selected)
@@ -123,11 +123,11 @@ if __name__ == "__main__":
                 "label": r"$\eta$"
             },
             "T_start": {
-                "values": [0.01, 10, 100, 1000, 5000, 10000],
+                "values": [10, 100, 1000, 5000],
                 "label": r"$t_0$"
             },
             "alpha": {
-                "values": [0.001, 0.005, 0.01, 0.5, 0.99],
+                "values": [0.95, 0.97, 0.99],
                 "label": r"$\alpha$"
             },
         }),

@@ -418,8 +418,8 @@ def optimize_sa(
     iterations=1000,
     step_size=0.2,
     T_start=1000.,
-    alpha=0.5,
-    verbose=False,
+    alpha=0.99,
+    verbose=True,
     num_candidates=None,
     seed=None,
 ):
@@ -464,7 +464,7 @@ def optimize_sa(
         energy_history.append(best_energy.item())
 
         if verbose and t % (iterations // 10) == 0:
-            print(f"Step {t}, Energy: {energy_new.item():.6f}, Best: {best_energy.item():.6f}, Temp: {T:.4f}")
+            print(f"Step {t}, Energy: {energy_new.item():.6f}, Best: {best_energy.item():.20f}, Temp: {T:.4f}")
 
     # Final result
     final_offset = model.rescale_offset(best_x) + uncompensated_parameters
