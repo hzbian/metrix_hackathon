@@ -127,7 +127,7 @@ if __name__ == "__main__":
                 "label": r"$t_0$"
             },
             "alpha": {
-                "values": [0.95, 0.97, 0.99],
+                "values": [0.9, 0.95, 0.97, 0.99],
                 "label": r"$\alpha$"
             },
         }),
