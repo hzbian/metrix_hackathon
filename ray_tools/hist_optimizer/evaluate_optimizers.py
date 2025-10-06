@@ -146,6 +146,7 @@ if __name__ == "__main__":
                  "values": [1e-7, 1e-6, 0.0001, 0.001, 0.01, 0.1],
                  "label": r"$\eta$",
                  "scale": "linear",
+                 "loc": "lower left"
              },
         }),
     }
