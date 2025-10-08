@@ -186,6 +186,16 @@ if __name__ == "__main__":
                  "label": r"$r_c$",
                  "scale": "log",
              },
+             "sbx_eta": {
+                        "values": [1, 5, 10, 15, 20, 30, 50, 100],
+                        "label": r"$\eta$",
+                        "scale": "log",
+                    },
+            "sbx_crossover_rate": {
+                "values": [0.1, 0.3, 0.5, 0.8, 0.9],
+                "label": r"$r_c^\mathrm{SBX}$",
+                "scale": "log",
+            },
         }),
     }
 

@@ -5,6 +5,8 @@ import torch
 import optuna
 from torch.utils import benchmark
 from scipy.stats import mannwhitneyu
+from scipy.optimize import minimize
+import numpy as np
 import matplotlib.pyplot as plt
 from evotorch import Problem
 from evotorch.algorithms import SNES, CMAES, GeneticAlgorithm
@@ -473,7 +475,7 @@ def optimize_sa(
 
 def optimize_gd(
     model, observed_rays, uncompensated_parameters, 
-    iterations=1000, learning_rate=0.01, optimizer_type='sgd', 
+    iterations=1000, learning_rate=0.01, optimizer_type='adam', 
     clamp_bounds=True, seed=42
 ):
     torch.manual_seed(seed)
@@ -500,7 +502,7 @@ def optimize_gd(
                 x_clamped = x_tensor.clamp(0.0, 1.0)
 
             tensor_sum = model.rescale_offset(x_clamped) + uncompensated_parameters
-            compensated_rays = model(tensor_sum, clone_output=True)
+            compensated_rays = model(tensor_sum, clone_output=False)
             loss = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
             return loss
 
@@ -510,6 +512,9 @@ def optimize_gd(
             optimizer.zero_grad()
             loss = loss_fn(x)
             loss.backward()
+            with torch.no_grad():
+                grad_norm = x.grad.norm().item()
+    
             optimizer.step()
 
             if clamp_bounds:
@@ -526,11 +531,86 @@ def optimize_gd(
     return best_params.squeeze(-2), current_loss, loss_history
 
 
-def optimize_evotorch_ga(
-    model, observed_rays, uncompensated_parameters, iterations=1000, 
-    num_candidates=100, tournament_size=10, mutation_rate=0.1, mutation_scale=0.05, crossover_rate=0.9, eta=None, crossover_points=15, seed=42
-    ):
+
+
+def optimize_powell(
+    model, observed_rays, uncompensated_parameters, 
+    max_iterations=1000, clamp_bounds=True, seed=42, xtol=1e-4, ftol=1e-4,
+):
     torch.manual_seed(seed)
+    np.random.seed(seed)
+    device = model.device
+
+    # Initial guess: flat numpy array in [0, 1]
+    x0 = np.random.rand(model.mutable_parameter_count).astype(np.float32)
+
+    # Track loss history
+    loss_history = []
+
+    # Objective function for Powell (input is a flat numpy array)
+    def objective_fn(x_np):
+        # Clamp input if needed
+        if clamp_bounds:
+            x_np = np.clip(x_np, 0.0, 1.0)
+
+        # Convert to PyTorch tensor
+        x_tensor = torch.tensor(x_np, dtype=torch.float32, device=device).unsqueeze(0)
+
+        with torch.no_grad():
+            tensor_sum = model.rescale_offset(x_tensor) + uncompensated_parameters
+            compensated_rays = model(tensor_sum, clone_output=False)
+            loss = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
+
+        loss_val = loss.item()
+        loss_history.append(loss_val)
+        return loss_val
+
+    # Run Powell optimization
+    result = minimize(
+        objective_fn,
+        x0,
+        method='Powell',
+        options={
+            'xtol': 0.,
+            'ftol': 0.,
+            'maxfev': max_iterations,
+            'disp': False,
+        }
+    )
+
+    # Pad loss history to max_iterations
+    if len(loss_history) < max_iterations:
+        last_loss = loss_history[-1] if loss_history else float('inf')
+        loss_history += [last_loss] * (max_iterations - len(loss_history))
+
+    # Final optimized parameters
+    x_optimized = np.clip(result.x, 0.0, 1.0) if clamp_bounds else result.x
+    x_tensor_final = torch.tensor(x_optimized, dtype=torch.float32, device=device).unsqueeze(0)
+    best_params = model.rescale_offset(x_tensor_final) + uncompensated_parameters
+    
+    loss_history_np = np.array(loss_history[:max_iterations])
+    cummin_loss = np.minimum.accumulate(loss_history_np)
+
+    return best_params.squeeze(-2), result.fun, cummin_loss
+
+
+def optimize_evotorch_ga(
+    model,
+    observed_rays,
+    uncompensated_parameters,
+    iterations=1000,
+    num_candidates=100,
+    tournament_size=10,
+    mutation_rate=0.1,
+    mutation_scale=0.05,
+    crossover_rate=0.9,
+    crossover_points=15,
+    seed=42,
+    sbx_eta=15.0,
+    sbx_crossover_rate=None
+):
+    torch.manual_seed(seed)
+
     # Define the loss function
     def loss(x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
@@ -538,13 +618,14 @@ def optimize_evotorch_ga(
             compensated_rays = model(tensor_sum, clone_output=True)
             loss_orig = ((compensated_rays - observed_rays) ** 2).mean(0).mean(0).mean(-1)
         return loss_orig
-    
+
     def constrained_loss(x: torch.Tensor) -> torch.Tensor:
         penalty = torch.sum((x < 0.) | (x > 1.0), dim=-1).float()
         total_loss = loss(x) + 1.0 * penalty  # Add large penalty for violations
         return total_loss
+
     logging.getLogger("evotorch").setLevel(logging.WARNING)
-    
+
     # Define the problem
     problem = Problem(
         "min",
@@ -552,37 +633,58 @@ def optimize_evotorch_ga(
         initial_bounds=(0., 1.),
         solution_length=model.mutable_parameter_count,
         vectorized=True,
-        device="cuda",  # Enable for GPU support
+        device="cuda",
     )
 
-    operators=[]
-    if eta==None:
-        operators.append(MultiPointCrossOver(problem, tournament_size=tournament_size, cross_over_rate=crossover_rate, num_points=crossover_points))
+    # Operator selection
+    operators = []
+    if sbx_eta is not None:
+        # Use SBX (Simulated Binary Crossover)
+        operators.append(SimulatedBinaryCrossOver(
+            problem,
+            tournament_size=tournament_size,
+            eta=sbx_eta,
+            cross_over_rate=sbx_crossover_rate if sbx_crossover_rate is not None else crossover_rate
+        ))
     else:
-        operators.append(SimulatedBinaryCrossOver(problem, tournament_size=tournament_size, eta=eta, cross_over_rate=crossover_rate))
-    
-    operators.append(GaussianMutation(problem, stdev=mutation_scale, mutation_probability=mutation_rate))
+        # Use Multi-point crossover
+        operators.append(MultiPointCrossOver(
+            problem,
+            tournament_size=tournament_size,
+            cross_over_rate=crossover_rate,
+            num_points=crossover_points
+        ))
+
+    # Add Gaussian mutation
+    operators.append(GaussianMutation(
+        problem,
+        stdev=mutation_scale,
+        mutation_probability=mutation_rate
+    ))
 
     # Create the searcher
     searcher = GeneticAlgorithm(
-    problem,
-    popsize=num_candidates,
-    operators = operators
+        problem,
+        popsize=num_candidates,
+        operators=operators
     )
-    # Set up tqdm for progress tracking
-    num_generations = iterations
+
+    # Progress tracking
     loss_history = []
-    with tqdm(total=num_generations, desc="Evotorch Progress", leave=False) as pbar:
-        for generation in range(num_generations):
-            searcher.step()  # Perform a single optimization step
-            pbar.update(1)  # Update the progress bar
+    with tqdm(total=iterations, desc="Evotorch Progress", leave=False) as pbar:
+        for _ in range(iterations):
+            searcher.step()
             best = searcher.status["pop_best"]
             best_item = best.evals.item()
+            pbar.update(1)
             pbar.set_postfix({"loss": best_item})
             loss_history.append(best_item)
+
     best_loss = best.evals.item()
     loss_min_params = model.rescale_offset(best.values) + uncompensated_parameters
+
     return loss_min_params.squeeze(-2), best_loss, loss_history
+
     
 def optimize_blop(model, observed_rays, uncompensated_parameters, iterations, warm_up_iterations=360, num_candidates=1):
     db = Broker.named("temp")
