@@ -603,10 +603,10 @@ def optimize_evotorch_ga(
     tournament_size=10,
     mutation_rate=0.1,
     mutation_scale=0.05,
-    crossover_rate=0.9,
+    crossover_rate=0.5,
     crossover_points=15,
     seed=42,
-    sbx_eta=15.0,
+    sbx_eta=None,
     sbx_crossover_rate=None
 ):
     torch.manual_seed(seed)
@@ -638,7 +638,9 @@ def optimize_evotorch_ga(
 
     # Operator selection
     operators = []
-    if sbx_eta is not None:
+    if sbx_crossover_rate is not None:
+        if sbx_eta is None:
+            sbx_eta = 1
         # Use SBX (Simulated Binary Crossover)
         operators.append(SimulatedBinaryCrossOver(
             problem,

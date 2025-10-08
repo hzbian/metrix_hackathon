@@ -187,14 +187,16 @@ if __name__ == "__main__":
                  "scale": "log",
              },
              "sbx_eta": {
-                        "values": [1, 5, 10, 15, 20, 30, 50, 100],
+                        "values": [1, 5, 10, 50, 100],
                         "label": r"$\eta$",
                         "scale": "log",
+                        "loc": "lower left",
                     },
             "sbx_crossover_rate": {
                 "values": [0.1, 0.3, 0.5, 0.8, 0.9],
-                "label": r"$r_c^\mathrm{SBX}$",
+                "label": r"$r_c$",
                 "scale": "log",
+                "loc": "lower left",
             },
         }),
     }
