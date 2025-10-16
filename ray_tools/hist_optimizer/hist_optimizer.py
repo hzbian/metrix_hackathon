@@ -95,17 +95,19 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
     for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
         loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(entry[0], model, repetitions=repetitions, num_candidates=entry[1], iterations=iterations)
         method_evaluation_dict[key]= (loss_best, mean_progress, std_progress, offset_rmse)
-
     for key, (optimizer, num_candidates) in method_dict.items():
-        t0 = benchmark.Timer(
-            stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
-            setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
-            globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
-            num_threads=1,
-            label='optimize '+key,
-            sub_label=None)
-        results = t0.timeit(benchmark_repetitions)
-        execution_time = results.raw_times[0]
+        if benchmark_repetitions != 0:
+            t0 = benchmark.Timer(
+                stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
+                setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
+                globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
+                num_threads=1,
+                label='optimize '+key,
+                sub_label=None)
+            results = t0.timeit(benchmark_repetitions)
+            execution_time = results.raw_times[0]
+        else:
+            execution_time = None
         method_evaluation_dict[key] += (execution_time,)
     return method_evaluation_dict
 
@@ -603,11 +605,11 @@ def optimize_evotorch_ga(
     tournament_size=10,
     mutation_rate=0.1,
     mutation_scale=0.05,
-    crossover_rate=0.5,
-    crossover_points=15,
+    crossover_rate=None,
+    crossover_points=None,
     seed=42,
-    sbx_eta=None,
-    sbx_crossover_rate=None
+    sbx_eta=1,
+    sbx_crossover_rate=0.5
 ):
     torch.manual_seed(seed)
 
@@ -638,15 +640,14 @@ def optimize_evotorch_ga(
 
     # Operator selection
     operators = []
-    if sbx_crossover_rate is not None:
-        if sbx_eta is None:
-            sbx_eta = 1
+
+    if crossover_rate is None and crossover_points is None:
         # Use SBX (Simulated Binary Crossover)
         operators.append(SimulatedBinaryCrossOver(
             problem,
             tournament_size=tournament_size,
             eta=sbx_eta,
-            cross_over_rate=sbx_crossover_rate if sbx_crossover_rate is not None else crossover_rate
+            cross_over_rate=sbx_crossover_rate
         ))
     else:
         # Use Multi-point crossover
@@ -688,29 +689,35 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations, warm_up_iterations=360, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="ucb", ucb_beta=None, transform=None, warm_up_iterations=100, num_candidates=1):
     db = Broker.named("temp")
     RE = RunEngine({})
     RE.subscribe(db.insert)
 
     dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
-    objectives = [Objective(name="metrixs", description="METRIXS Beamline", target="min")]
+    objectives = [Objective(name="metrixs", transform=None, description="METRIXS Beamline", target="min"),
+                   Objective(name="empty_images_count", constraint=(115, np.inf), transform=None)]
+    progress = tqdm(total=iterations, desc="Objective function calls", leave=False)
         
     def objective_function(offsets, model, observed_rays, uncompensated_parameters):
         # Evaluate the model's loss with these offsets
+        progress.update(1)
         scaled_offsets = model.rescale_offset(offsets)
         compensated_rays = model(uncompensated_parameters + scaled_offsets)
         loss = ((compensated_rays - observed_rays) ** 2).mean().item()
-        return loss
+        sums = compensated_rays.sum(dim=-1)[...,0]
+        sums_count = (sums < 1e-15).sum()
+        #print(loss, f"{sums_count}")
+        #print(sums.shape)
+        return loss, sums.cpu().sum().numpy()
     
     def objective(param_tens):
-        #param_list = torch.tensor([trial.suggest_float(str(i), 0, 1.) for i in range(uncompensated_parameters.shape[-1])], device=model.device)
         return objective_function(param_tens, model, observed_rays, uncompensated_parameters)
 
     def digestion(df):
         for index, entry in df.iterrows():
             param_tens = torch.tensor([getattr(entry, f'{i}') for i in range(uncompensated_parameters.shape[-1])], device=model.device)
-            df.loc[index, "metrixs"] = objective(param_tens)
+            df.loc[index, "metrixs"], df.loc[index, "empty_images_count"] = objective(param_tens)
         return df
     
     agent = Agent(
@@ -721,7 +728,11 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations, wa
     )
 
     RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
-    RE(agent.learn("ei", iterations=iterations-warm_up_iterations, n=num_candidates))
+    if ucb_beta is not None:
+        acq = "ucb"
+        RE(agent.learn(acq, iterations=iterations-warm_up_iterations, n=num_candidates, beta=ucb_beta))
+    else:
+        RE(agent.learn(acq, iterations=iterations-warm_up_iterations, n=num_candidates))
     agent.plot_objectives()
     losses = torch.tensor(agent.table['metrixs'], device=model.device)
     

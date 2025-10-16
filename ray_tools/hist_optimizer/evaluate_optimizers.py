@@ -120,6 +120,40 @@ if __name__ == "__main__":
     model = Model(path=model_path)
 
     optimize_dict = {
+            "BLOP": (optimize_blop, {
+                "acq": {
+                    "values": ["ei", "qei", "ucb", "qucb"],
+                    "label": r"$a$",
+                     "scale": "log",
+                },
+                #"warm_up_iterations": {
+                #    "values": [50, 100, 200, 300, 380],
+                #    "label": r"$l_\mathrm{warm}$",
+                #     "scale": "log",
+                #},
+                # "transform": {
+                #     "values": [None, "log", "normalize", "standardize"],
+                #     "label": r"$t$",
+                #     "scale": "log",
+                # },
+                # "num_candidates": {
+                #     "values": [1, 4, 8, 16, 32],
+                #     "label": r"$k_t$",
+                #     "scale": "log",
+                # },
+                # "ucb_beta": {
+                #     "values": [0.2, 0.4, 1.0, 2.0, 5.0],
+                #     "label": r"$\beta$",
+                #     "scale": "log",
+                # },
+            }),
+        }
+
+    result_dict = eval_optimizer_iterative(optimize_dict, model, repetitions=10)
+    plot_result_dict(result_dict, optimize_dict)
+    exit(0)
+        
+    optimize_dict = {
         "SA": (optimize_sa, {
             "step_size": {
                 "values": [0.01, 0.1, 0.2, 0.5, 1.0],
