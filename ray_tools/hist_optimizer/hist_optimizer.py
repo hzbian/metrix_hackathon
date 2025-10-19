@@ -17,6 +17,8 @@ from blop import DOF, Objective, Agent
 from bluesky import RunEngine
 from databroker import Broker
 
+import pandas as pd
+
 from ray_optim.plot import Plot
 from ray_tools.base.transform import MultiLayer
 from ray_nn.data.lightning_data_module import DefaultDataModule
@@ -545,16 +547,12 @@ def optimize_powell(
 
     # Initial guess: flat numpy array in [0, 1]
     x0 = np.random.rand(model.mutable_parameter_count).astype(np.float32)
-
+    bounds = [(0.0, 1.0)] * model.mutable_parameter_count
     # Track loss history
     loss_history = []
 
     # Objective function for Powell (input is a flat numpy array)
     def objective_fn(x_np):
-        # Clamp input if needed
-        if clamp_bounds:
-            x_np = np.clip(x_np, 0.0, 1.0)
-
         # Convert to PyTorch tensor
         x_tensor = torch.tensor(x_np, dtype=torch.float32, device=device).unsqueeze(0)
 
@@ -572,6 +570,7 @@ def optimize_powell(
         objective_fn,
         x0,
         method='Powell',
+        bounds=bounds,
         options={
             'xtol': 0.,
             'ftol': 0.,
@@ -586,7 +585,7 @@ def optimize_powell(
         loss_history += [last_loss] * (max_iterations - len(loss_history))
 
     # Final optimized parameters
-    x_optimized = np.clip(result.x, 0.0, 1.0) if clamp_bounds else result.x
+    x_optimized = result.x
     x_tensor_final = torch.tensor(x_optimized, dtype=torch.float32, device=device).unsqueeze(0)
     best_params = model.rescale_offset(x_tensor_final) + uncompensated_parameters
     
@@ -689,14 +688,14 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="ucb", ucb_beta=None, transform=None, warm_up_iterations=100, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="qei", ucb_beta=None, transform=None, warm_up_iterations=380, num_candidates=1):
     db = Broker.named("temp")
     RE = RunEngine({})
     RE.subscribe(db.insert)
 
     dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
     objectives = [Objective(name="metrixs", transform=None, description="METRIXS Beamline", target="min"),
-                   Objective(name="empty_images_count", constraint=(115, np.inf), transform=None)]
+                   Objective(name="empty_images_count", constraint=(-torch.inf, 0), transform=None)]
     progress = tqdm(total=iterations, desc="Objective function calls", leave=False)
         
     def objective_function(offsets, model, observed_rays, uncompensated_parameters):
@@ -704,20 +703,19 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=100
         progress.update(1)
         scaled_offsets = model.rescale_offset(offsets)
         compensated_rays = model(uncompensated_parameters + scaled_offsets)
-        loss = ((compensated_rays - observed_rays) ** 2).mean().item()
-        sums = compensated_rays.sum(dim=-1)[...,0]
-        sums_count = (sums < 1e-15).sum()
-        #print(loss, f"{sums_count}")
-        #print(sums.shape)
-        return loss, sums.cpu().sum().numpy()
+        loss = ((compensated_rays - observed_rays) ** 2).mean(dim=[0,1,3]).tolist()
+        loss = loss if isinstance(loss, list) else [loss]
+        sums = compensated_rays.sum(dim=-1)
+        sums_count = (sums < 1e-15).sum(dim=[0,1]).tolist()
+        loss = sums_count if isinstance(sums_count, list) else [sums_count]
+        return loss, sums_count
     
     def objective(param_tens):
-        return objective_function(param_tens, model, observed_rays, uncompensated_parameters)
+        return objective_function(param_tens.T, model, observed_rays, uncompensated_parameters)
 
     def digestion(df):
-        for index, entry in df.iterrows():
-            param_tens = torch.tensor([getattr(entry, f'{i}') for i in range(uncompensated_parameters.shape[-1])], device=model.device)
-            df.loc[index, "metrixs"], df.loc[index, "empty_images_count"] = objective(param_tens)
+        param_tens = torch.tensor([df[f'{i}'] for i in range(uncompensated_parameters.shape[-1])], device=model.device)
+        df["metrixs"], df["empty_images_count"] = objective(param_tens)
         return df
     
     agent = Agent(
@@ -726,8 +724,8 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=100
     digestion=digestion,
     db=db,
     )
-
     RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
+
     if ucb_beta is not None:
         acq = "ucb"
         RE(agent.learn(acq, iterations=iterations-warm_up_iterations, n=num_candidates, beta=ucb_beta))

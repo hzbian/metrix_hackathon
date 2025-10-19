@@ -195,11 +195,6 @@ if __name__ == "__main__":
                 "label": r"$p$",
                  "scale": "log",
             },
-             "crossover_points": {
-                 "values": [1, 5, 10, 15, 20],
-                 "label": r"$k_c$",
-                 "scale": "log",
-             },
              "tournament_size": {
                  "values": [1, 3, 5, 10, 15, 20],
                  "label": r"$k_t$",
@@ -213,11 +208,6 @@ if __name__ == "__main__":
              "mutation_scale": {
                  "values": [0.001, 0.01, 0.05, 0.1, 0.2],
                  "label": r"$s_m$",
-                 "scale": "log",
-             },
-             "crossover_rate": {
-                 "values": [0.1, 0.3, 0.5, 0.8, 0.9],
-                 "label": r"$r_c$",
                  "scale": "log",
              },
              "sbx_eta": {
