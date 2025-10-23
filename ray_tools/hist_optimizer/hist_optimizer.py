@@ -2,12 +2,14 @@ import glob
 import os
 from tqdm.auto import tqdm, trange
 import torch
+import torch.nn.functional as F
 import optuna
 from torch.utils import benchmark
 from scipy.stats import mannwhitneyu
 from scipy.optimize import minimize
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 from evotorch import Problem
 from evotorch.algorithms import SNES, CMAES, GeneticAlgorithm
 from evotorch.operators import OnePointCrossOver, MultiPointCrossOver, GaussianMutation, SimulatedBinaryCrossOver
@@ -688,26 +690,34 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="qei", ucb_beta=None, transform=None, warm_up_iterations=380, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="qei", ucb_beta=None, transform=None, warm_up_iterations=32, bo_iterations=118, empty_image_threshold=1e-15, num_candidates=1):
+    if seed is not None:
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+
     db = Broker.named("temp")
     RE = RunEngine({})
     RE.subscribe(db.insert)
-
+    
     dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
-    objectives = [Objective(name="metrixs", transform=None, description="METRIXS Beamline", target="min"),
+    objectives = [Objective(name="metrixs", transform=transform, description="METRIXS Beamline", target="min"),
                    Objective(name="empty_images_count", constraint=(-torch.inf, 0), transform=None)]
     progress = tqdm(total=iterations, desc="Objective function calls", leave=False)
+    losses_list = []
         
     def objective_function(offsets, model, observed_rays, uncompensated_parameters):
         # Evaluate the model's loss with these offsets
         progress.update(1)
         scaled_offsets = model.rescale_offset(offsets)
         compensated_rays = model(uncompensated_parameters + scaled_offsets)
-        loss = ((compensated_rays - observed_rays) ** 2).mean(dim=[0,1,3]).tolist()
+        loss = ((compensated_rays - observed_rays) ** 2).mean(dim=[0,1,3])
+        losses_list.append(loss)
+        loss = loss.tolist()
         loss = loss if isinstance(loss, list) else [loss]
         sums = compensated_rays.sum(dim=-1)
-        sums_count = (sums < 1e-15).sum(dim=[0,1]).tolist()
-        loss = sums_count if isinstance(sums_count, list) else [sums_count]
+        sums_count = (sums < empty_image_threshold).sum(dim=[0,1]).tolist()
+        sums_count = sums_count if isinstance(sums_count, list) else [sums_count]
         return loss, sums_count
     
     def objective(param_tens):
@@ -725,16 +735,27 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=100
     db=db,
     )
     RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
+    if ucb_beta is not None and acq not in ("qucb", "ucb"):
+        acq = "qucb"
 
+    if num_candidates > 1 and not acq.startswith("q"):
+        acq = "q" + acq
+        print("Switched to quasi-acq, since you picked a num_candidates larger than 1, which only works with quasi-acqs.")
+        
     if ucb_beta is not None:
-        acq = "ucb"
-        RE(agent.learn(acq, iterations=iterations-warm_up_iterations, n=num_candidates, beta=ucb_beta))
+        RE(agent.learn(acq, iterations=bo_iterations, n=num_candidates, beta=ucb_beta))
     else:
-        RE(agent.learn(acq, iterations=iterations-warm_up_iterations, n=num_candidates))
+        RE(agent.learn(acq, iterations=bo_iterations, n=num_candidates))
     agent.plot_objectives()
-    losses = torch.tensor(agent.table['metrixs'], device=model.device)
-    
+
+    losses = torch.tensor(losses_list, device=model.device)
     best_losses = torch.cummin(losses, dim=0).values
+
+    # Now extend best_losses to desired length
+    if best_losses.numel() < iterations:
+        pad_len = iterations - best_losses.numel()
+        best_losses = F.pad(best_losses, (0, pad_len), value=best_losses[-1])
+    
     best_loss_idx = losses.argmin()
     global_best_offset = torch.tensor([list(agent.table[str(i)])[best_loss_idx] for i in range(uncompensated_parameters.shape[-1])], device=model.device)
     loss_min_params = model.rescale_offset(global_best_offset) + uncompensated_parameters
