@@ -7,6 +7,10 @@ from tqdm.auto import tqdm
 sys.path.append("../..")
 from ray_tools.hist_optimizer.hist_optimizer import *
 from ray_nn.nn.xy_hist_data_models import HistSurrogateEngine, Model, StandardizeXYHist
+from matplotlib.ticker import FuncFormatter
+
+def space_thousands(x, pos):
+    return f"{int(x):,}".replace(",", "\u202f")
 
 
 # -----------------------------
@@ -84,7 +88,8 @@ def plot_result_dict(result_dict, optimize_dict):
                 x = range(len(mean_progress))
                 plt.plot(x, mean_progress, label=f"{display_name}={param_value_str}", alpha=0.8)
                 plt.fill_between(x, mean_progress - std_progress, mean_progress + std_progress, alpha=0.2)
-
+            plt.gca().xaxis.set_major_formatter(FuncFormatter(space_thousands))
+            plt.gca().yaxis.set_major_formatter(FuncFormatter(space_thousands))
             plt.tick_params(axis="both", which="major", labelsize=11)
             plt.xlabel("Iteration [#]")
             plt.ylabel(r"$\mathcal{L}_h(\mathbf{x})$")
