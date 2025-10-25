@@ -424,11 +424,12 @@ def optimize_sa(
     observed_rays,
     uncompensated_parameters,
     iterations=1000,
-    step_size=0.2,
-    T_start=1000.,
-    alpha=0.99,
+    step_size=0.1,
+    T_start=1e-4,
+    T_end=0.000001,
     verbose=True,
     num_candidates=None,
+    cooling_schedule='exp',
     seed=None,
 ):
     torch.manual_seed(seed)
@@ -446,9 +447,21 @@ def optimize_sa(
         return loss
 
     best_energy = energy_fn(x)
+    current_energy = best_energy.clone()
+    accepted = 0
+    recent_accepts = 0  # track last-100 acceptance count
+
+    if verbose:
+        print(f"[SA] Initial energy: {current_energy.item():.6f}")
+        print(f"[SA] Running with step_size={step_size}, T_start={T_start}, schedule={cooling_schedule}, iterations={iterations}, seed={seed}")
 
     def temperature(t):
-        return T_start * (alpha ** t)
+        if cooling_schedule == 'exp':
+            return T_start * (T_end / T_start) ** (t / iterations)
+        elif cooling_schedule == 'linear':
+            return T_start - t * (T_start - T_end) / iterations
+        else:
+            raise ValueError("Unknown cooling schedule")
 
     energy_history = []
 
@@ -460,19 +473,42 @@ def optimize_sa(
         x_new = (x + perturbation).clamp(0.0, 1.0)
         energy_new = energy_fn(x_new)
 
-        delta_E = energy_new - energy_fn(x)
+        delta_E = energy_new - current_energy
         accept_prob = torch.exp(-delta_E / T).clamp(max=1.0)
+        rand_val = torch.rand(1, device=device)
 
-        if delta_E < 0 or torch.rand(1).item() < accept_prob.item():
+        accepted_this_step = False
+        if delta_E < 0 or rand_val < accept_prob:
             x = x_new
+            current_energy = energy_new
+            accepted += 1
+            recent_accepts += 1
+            accepted_this_step = True
             if energy_new < best_energy:
                 best_energy = energy_new
                 best_x = x_new.clone()
 
         energy_history.append(best_energy.item())
 
-        if verbose and t % (iterations // 10) == 0:
-            print(f"Step {t}, Energy: {energy_new.item():.6f}, Best: {best_energy.item():.20f}, Temp: {T:.4f}")
+        # Reset every 100 iters to measure local acceptance rate
+        if (t + 1) % 100 == 0:
+            recent_acceptance_rate = recent_accepts / 100
+            recent_accepts = 0  # reset counter
+
+            if verbose:
+                print(
+                    f"[SA] Iter {t+1:4d} | "
+                    f"T={T:.4g} | "
+                    f"Current Energy={current_energy.item():.6f} | "
+                    f"Best={best_energy.item():.6f} | "
+                    f"Recent Acceptance={recent_acceptance_rate * 100:.2f}%"
+                )
+
+    acceptance_rate = accepted / iterations
+
+    if verbose:
+        print(f"[SA] Final best energy: {best_energy.item():.6f}")
+        print(f"[SA] Total acceptance rate: {acceptance_rate * 100:.2f}%")
 
     # Final result
     final_offset = model.rescale_offset(best_x) + uncompensated_parameters
@@ -690,7 +726,7 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="qei", ucb_beta=None, transform=None, warm_up_iterations=32, bo_iterations=118, empty_image_threshold=1e-15, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="qucb", ucb_beta=2.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -735,17 +771,15 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=100
     db=db,
     )
     RE(agent.learn("quasi-random", iterations=warm_up_iterations, n=num_candidates))
-    if ucb_beta is not None and acq not in ("qucb", "ucb"):
-        acq = "qucb"
 
     if num_candidates > 1 and not acq.startswith("q"):
         acq = "q" + acq
         print("Switched to quasi-acq, since you picked a num_candidates larger than 1, which only works with quasi-acqs.")
         
-    if ucb_beta is not None:
-        RE(agent.learn(acq, iterations=bo_iterations, n=num_candidates, beta=ucb_beta))
+    if ucb_beta is not None and acq in ("qucb", "ucb"):
+        RE(agent.learn(acq, iterations=bo_iterations-warm_up_iterations, n=num_candidates, beta=ucb_beta))
     else:
-        RE(agent.learn(acq, iterations=bo_iterations, n=num_candidates))
+        RE(agent.learn(acq, iterations=bo_iterations-warm_up_iterations, n=num_candidates))
     agent.plot_objectives()
 
     losses = torch.tensor(losses_list, device=model.device)

@@ -144,16 +144,15 @@ if __name__ == "__main__":
     optimize_dict = {
         "BLOP": (optimize_blop, {
             "acq": {"values": ["ei", "qei", "ucb", "qucb"], "label": r"$a$", "scale": "log"},
-            "warm_up_iterations": {"values": [32, 50, 100], "label": r"$l_\mathrm{warm}$", "scale": "log"},
-            "transform": {"values": [None, "log", "logit", "arctanh"], "label": r"$t$", "scale": "log"},
-            "num_candidates": {"values": [1, 4, 8, 16], "label": r"$k_t$", "scale": "log"},
+            "warm_up_iterations": {"values": [16, 32, 64], "label": r"$l_\mathrm{warm}$", "scale": "log"},
+            "transform": {"values": [None, "log"], "label": r"$t$", "scale": "log"},
             "ucb_beta": {"values": [0.2, 0.4, 1.0, 2.0, 5.0], "label": r"$\beta$", "scale": "log"},
-            "empty_image_threshold": {"values": [1e-25, 1e-20, 1e-10, 1e-5], "label": r"$\theta$", "scale": "log"},
+            "empty_image_threshold": {"values": [1e-10, 1e-5, 1e-4, 1e-3, 1e-2], "label": r"$\theta$", "scale": "log"},
         }),
         "SA": (optimize_sa, {
-            "step_size": {"values": [0.01, 0.1, 0.2, 0.5, 1.0], "label": r"$\eta$", "loc": "lower left"},
-            "T_start": {"values": [10, 100, 1000, 5000], "label": r"$t_0$"},
-            "alpha": {"values": [0.9, 0.95, 0.97, 0.99], "label": r"$\alpha$"},
+            "step_size": {"values": [0.001, 0.01, 0.1, 0.2, 0.5], "label": r"$\eta$", "loc": "lower left", "scale": "log"},
+            "T_start": {"values": [1e-6,1e-5, 1e-4, 1e-3], "label": r"$t_0$", "scale": "log"},
+            "cooling_schedule": {"values": ["linear", "exp"], "label": r"$t$", "scale": "log"},
         }),
         "GD": (optimize_gd, {
             "learning_rate": {"values": [1e-7, 1e-6, 0.0001, 0.001, 0.01, 0.1], "label": r"$\eta$", "scale": "linear", "loc": "lower left"},
