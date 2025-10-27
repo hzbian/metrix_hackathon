@@ -72,11 +72,15 @@ def eval_optimizer_iterative(optimize_dict, model, repetitions=10):
 
 def plot_result_dict(result_dict, optimize_dict):
     os.makedirs("outputs", exist_ok=True)
+    default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    no_red_colors = [c for c in default_colors if not plt.colors.to_rgba(c)[:3] == plt.colors.to_rgba('red')[:3]]
+    
     for optimizer_name, param_results in result_dict.items():
         _, param_grid = optimize_dict[optimizer_name]
 
         for param_name, param_values in param_results.items():
             plt.figure(figsize=(8, 3))
+            plt.gca().set_prop_cycle(color=no_red_colors)
             display_name = param_grid[param_name].get("label", param_name)
             all_means = []
 
@@ -143,11 +147,11 @@ if __name__ == "__main__":
     # Full optimize_dict
     optimize_dict = {
         "BLOP": (optimize_blop, {
-            "acq": {"values": ["ei", "qei", "ucb", "qucb"], "label": r"$a$", "scale": "log"},
+            "acq": {"values": ["ei", "ucb"], "label": r"$a$", "scale": "log"},
             "warm_up_iterations": {"values": [16, 32, 64], "label": r"$l_\mathrm{warm}$", "scale": "log"},
             "transform": {"values": [None, "log"], "label": r"$t$", "scale": "log"},
             "ucb_beta": {"values": [0.2, 0.4, 1.0, 2.0, 5.0], "label": r"$\beta$", "scale": "log"},
-            "empty_image_threshold": {"values": [1e-10, 1e-5, 1e-4, 1e-3, 1e-2], "label": r"$\theta$", "scale": "log"},
+            "empty_image_threshold": {"values": [1e-10, 1e-5, 1e-4, 1e-3], "label": r"$\theta$", "scale": "log"},
         }),
         "SA": (optimize_sa, {
             "step_size": {"values": [0.001, 0.01, 0.1, 0.2, 0.5], "label": r"$\eta$", "loc": "lower left", "scale": "log"},
