@@ -726,7 +726,7 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="ucb", ucb_beta=2.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=2.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -735,6 +735,10 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=100
     db = Broker.named("temp")
     RE = RunEngine({})
     RE.subscribe(db.insert)
+    if acq == "lcb":
+        acq = "ucb"
+    if acq == "qlcb":
+        acq = "qucb"
     
     dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
     objectives = [Objective(name="metrixs", transform=transform, description="METRIXS Beamline", target="min"),

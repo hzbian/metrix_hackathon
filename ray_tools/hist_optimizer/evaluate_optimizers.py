@@ -147,7 +147,7 @@ if __name__ == "__main__":
     # Full optimize_dict
     optimize_dict = {
         "BLOP": (optimize_blop, {
-            "acq": {"values": ["ei", "ucb"], "label": r"$a$", "scale": "log"},
+            "acq": {"values": ["ei", "lcb"], "label": r"$a$", "scale": "log"},
             "warm_up_iterations": {"values": [16, 32, 64], "label": r"$l_\mathrm{warm}$", "scale": "log"},
             "transform": {"values": [None, "log"], "label": r"$t$", "scale": "log"},
             "ucb_beta": {"values": [0.2, 0.4, 1.0, 2.0, 5.0], "label": r"$\beta$", "scale": "log"},
@@ -159,7 +159,7 @@ if __name__ == "__main__":
             "cooling_schedule": {"values": ["linear", "exp"], "label": r"$t$", "scale": "log"},
         }),
         "GD": (optimize_gd, {
-            "learning_rate": {"values": [1e-7, 1e-6, 0.0001, 0.001, 0.01, 0.1], "label": r"$\eta$", "scale": "linear", "loc": "lower left"},
+            "learning_rate": {"values": [0.0001, 0.001, 0.01], "label": r"$\eta$", "scale": "linear", "loc": "lower left"},
         }),
         "GA": (optimize_evotorch_ga, {
             "num_candidates": {"values": [10, 100, 200, 500], "label": r"$p$", "scale": "log"},
