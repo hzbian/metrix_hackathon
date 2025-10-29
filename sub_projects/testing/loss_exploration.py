@@ -93,18 +93,18 @@ def plot_investigated_var(offsets, distances, loss_string):
     plt.scatter(np.array(offsets), np.array(distances), s=0.5, alpha=0.7, label=loss_string)
 
 def save_plot(var_name: str, output_directory: str='plots/'):
-    ax = plt.gca()
-    plt.rcParams["figure.figsize"] = (4, 2)
+    fig = plt.gcf()                # get current figure
+    fig.set_size_inches(4.3, 2.5)
     #ax.set_yscale('log')
     #ax.set_xscale('log')
-    plt.xlabel('Absolute error [a.u.]')
-    plt.ylabel('Loss distance [a.u.]')
+    plt.xlabel('Absolute error')
+    plt.ylabel('Loss distance')
     plt.tight_layout()
     plt.legend( markerscale=2, scatterpoints=3)
 
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    plt.savefig(os.path.join(output_directory, var_name + '.png'), dpi=300)
+    plt.savefig(os.path.join(output_directory, var_name + '.pdf'), dpi=300)
     plt.clf()
 
 def investigate_and_plot_var(var_name, value_lims, loss, loss_string): 
