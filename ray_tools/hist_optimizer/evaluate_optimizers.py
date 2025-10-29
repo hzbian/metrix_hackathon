@@ -8,6 +8,7 @@ sys.path.append("../..")
 from ray_tools.hist_optimizer.hist_optimizer import *
 from ray_nn.nn.xy_hist_data_models import HistSurrogateEngine, Model, StandardizeXYHist
 from matplotlib.ticker import FuncFormatter
+import matplotlib.colors as mcolors
 
 def space_thousands(x, pos):
     return f"{int(x):,}".replace(",", "\u202f")
@@ -73,7 +74,7 @@ def eval_optimizer_iterative(optimize_dict, model, repetitions=10):
 def plot_result_dict(result_dict, optimize_dict):
     os.makedirs("outputs", exist_ok=True)
     default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    no_red_colors = [c for c in default_colors if not plt.colors.to_rgba(c)[:3] == plt.colors.to_rgba('red')[:3]]
+    no_red_colors = [c for c in default_colors if not mcolors.to_rgba(c)[:3] == mcolors.to_rgba('red')[:3]]
     
     for optimizer_name, param_results in result_dict.items():
         _, param_grid = optimize_dict[optimizer_name]
@@ -155,7 +156,7 @@ if __name__ == "__main__":
         }),
         "SA": (optimize_sa, {
             "step_size": {"values": [0.001, 0.01, 0.1, 0.2, 0.5], "label": r"$\eta$", "loc": "lower left", "scale": "log"},
-            "T_start": {"values": [1e-6,1e-5, 1e-4, 1e-3], "label": r"$t_0$", "scale": "log"},
+            "T_start": {"values": [1e-6,1e-5, 1e-4, 1e-3], "label": r"$t_\mathrm{start}$", "scale": "log"},
             "cooling_schedule": {"values": ["linear", "exp"], "label": r"$t$", "scale": "log"},
         }),
         "GD": (optimize_gd, {
