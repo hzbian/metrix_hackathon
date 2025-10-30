@@ -8,7 +8,7 @@ sys.path.append("../..")
 from ray_tools.hist_optimizer.hist_optimizer import *
 from ray_nn.nn.xy_hist_data_models import HistSurrogateEngine, Model, StandardizeXYHist
 from matplotlib.ticker import FuncFormatter
-import matplotlib.colors as mcolors
+from matplotlib.pylab import cycler
 
 def space_thousands(x, pos):
     return f"{int(x):,}".replace(",", "\u202f")
@@ -74,14 +74,14 @@ def eval_optimizer_iterative(optimize_dict, model, repetitions=10):
 def plot_result_dict(result_dict, optimize_dict):
     os.makedirs("outputs", exist_ok=True)
     default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    no_red_colors = [c for c in default_colors if not mcolors.to_rgba(c)[:3] == mcolors.to_rgba('red')[:3]]
+    custom_colors = default_colors[:2] + default_colors[3:]
     
     for optimizer_name, param_results in result_dict.items():
         _, param_grid = optimize_dict[optimizer_name]
 
         for param_name, param_values in param_results.items():
             plt.figure(figsize=(8, 3))
-            plt.gca().set_prop_cycle(color=no_red_colors)
+            plt.rcParams['axes.prop_cycle'] = cycler(color=custom_colors)
             display_name = param_grid[param_name].get("label", param_name)
             all_means = []
 
