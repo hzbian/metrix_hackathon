@@ -151,7 +151,7 @@ if __name__ == "__main__":
             "acq": {"values": ["ei", "lcb"], "label": r"$a$", "scale": "log"},
             "warm_up_iterations": {"values": [16, 32, 64], "label": r"$l_\mathrm{warm}$", "scale": "log"},
             "transform": {"values": [None, "log"], "label": r"$t$", "scale": "log"},
-            "ucb_beta": {"values": [0.2, 0.4, 1.0, 2.0, 5.0], "label": r"$\beta$", "scale": "log"},
+            "ucb_beta": {"values": [0.4, 1.0, 5.0, 10.0, 15.0], "label": r"$\beta$", "scale": "log"},
             "empty_image_threshold": {"values": [1e-10, 1e-5, 1e-4, 1e-3], "label": r"$\theta$", "scale": "log"},
         }),
         "SA": (optimize_sa, {
