@@ -160,7 +160,7 @@ if __name__ == "__main__":
             "cooling_schedule": {"values": ["linear", "exp"], "label": r"$t$", "scale": "log"},
         }),
         "GD": (optimize_gd, {
-            "learning_rate": {"values": [0.0001, 0.001, 0.01, 0.1], "label": r"$\eta$", "scale": "log", "loc": "lower left"},
+            "learning_rate": {"values": [0.0001, 0.001, 0.01, 0.1], "label": r"$\eta$", "scale": "log", "loc": "upper right"},
         }),
         "GA": (optimize_evotorch_ga, {
             "num_candidates": {"values": [10, 100, 200, 500], "label": r"$p$", "scale": "log"},
