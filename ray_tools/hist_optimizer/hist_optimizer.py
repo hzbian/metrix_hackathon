@@ -9,6 +9,7 @@ from scipy.stats import mannwhitneyu
 from scipy.optimize import minimize
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import random
 from evotorch import Problem
 from evotorch.algorithms import SNES, CMAES, GeneticAlgorithm
@@ -96,24 +97,61 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
 
 def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions):
     method_evaluation_dict = {}
+    
     for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
-        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(entry[0], model, repetitions=repetitions, num_candidates=entry[1], iterations=iterations)
-        method_evaluation_dict[key]= (loss_best, mean_progress, std_progress, offset_rmse)
-    for key, (optimizer, num_candidates) in method_dict.items():
+        # Support both 2- and 3-element tuples
+        if len(entry) == 3:
+            optimizer_fn, num_candidates, extra_kwargs = entry
+        else:
+            optimizer_fn, num_candidates = entry
+            extra_kwargs = {}
+
+        # Pass any extra kwargs into the evaluation
+        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(
+            optimizer_fn,
+            model,
+            repetitions=repetitions,
+            num_candidates=num_candidates,
+            iterations=iterations,
+            **extra_kwargs
+        )
+        
+        method_evaluation_dict[key] = (loss_best, mean_progress, std_progress, offset_rmse)
+
+    # Benchmarking section
+    for key, entry in method_dict.items():
+        if len(entry) == 3:
+            optimizer_fn, num_candidates, extra_kwargs = entry
+        else:
+            optimizer_fn, num_candidates = entry
+            extra_kwargs = {}
+
         if benchmark_repetitions != 0:
             t0 = benchmark.Timer(
-                stmt='run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)',
+                stmt='run_optimizer(optimizer_fn, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, **extra_kwargs)',
                 setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
-                globals={'optimizer': optimizer, 'model': model, 'observed_rays': observed_rays, 'iterations': iterations, 'uncompensated_parameters': uncompensated_parameters, 'num_candidates': num_candidates},
+                globals={
+                    'optimizer_fn': optimizer_fn,
+                    'model': model,
+                    'observed_rays': observed_rays,
+                    'uncompensated_parameters': uncompensated_parameters,
+                    'iterations': iterations,
+                    'num_candidates': num_candidates,
+                    'extra_kwargs': extra_kwargs,
+                },
                 num_threads=1,
-                label='optimize '+key,
-                sub_label=None)
+                label='optimize ' + key,
+                sub_label=None
+            )
             results = t0.timeit(benchmark_repetitions)
             execution_time = results.raw_times[0]
         else:
             execution_time = None
+        
         method_evaluation_dict[key] += (execution_time,)
+
     return method_evaluation_dict
+
 
 def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations, num_candidates):
     return optimizer(model, observed_rays, uncompensated_parameters, iterations, num_candidates)
@@ -217,12 +255,12 @@ def find_good_offset_problem(model, iterations=10000, offset_trials=1, beamline_
     compensated_parameters_selected = uncompensated_parameters_selected+scaled_offsets_selected
     return offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected
 
-def generate_n_offset_problems(model, n=10000):
+def generate_n_offset_problems(model, n=10000, initial_seed=10000):
     offsets_list = []
     uncompensated_parameters_list = []
     compensated_parameters_list = []
     for i in trange(n):
-        offsets_trial, uncompensated_parameters_trial, compensated_parameters_trial = find_good_offset_problem(model)
+        offsets_trial, uncompensated_parameters_trial, compensated_parameters_trial = find_good_offset_problem(model, seed=i+initial_seed)
         offsets_list.append(offsets_trial)
         uncompensated_parameters_list.append(uncompensated_parameters_trial)
         compensated_parameters_list.append(compensated_parameters_trial)
@@ -243,20 +281,24 @@ def correlation_matrix(data, labels, label, outputs_dir):
     print("min-entry", correlation_matrix.min(), "max-entry", (correlation_matrix-torch.eye(correlation_matrix.shape[0])).max())
     # Plot the heatmap using matplotlib
     plt.figure(figsize=(10, 8))  # Adjust the figure size as needed
-    cax = plt.imshow(correlation_matrix_np, cmap='RdYlBu_r', vmin=-1, vmax=1)
+    cax = plt.imshow(correlation_matrix_np, cmap='RdYlBu_r', vmin=-1, vmax=1, aspect='auto')
     
     # Add color bar
-    plt.colorbar(cax, label="Correlation")
+    cbar = plt.colorbar(cax)
+    cbar.ax.tick_params(labelsize=12)  # tick labels
+    cbar.set_label("Correlation", fontsize=20)
+
     
     # Set title and labels
-    plt.title("Correlation matrix "+label)
-    plt.xlabel("Features")
-    plt.ylabel("Features")
+    #plt.title("Correlation matrix "+label)
+    plt.xlabel("Features", fontsize=20)
+    plt.ylabel("Features", fontsize=20)
     plt.grid(True, alpha=0.3)
     
     # Disable the axis ticks (both x and y)
-    plt.yticks(ticks = torch.arange(len(labels)), labels=labels)  # Round bin edges for readability
-    plt.xticks(ticks = torch.arange(len(labels)), labels=labels, rotation=90)  # Round bin edges for readability
+    
+    plt.yticks(ticks = torch.arange(len(labels)), labels=labels, fontsize=12)  # Round bin edges for readability
+    plt.xticks(ticks = torch.arange(len(labels)), labels=labels, rotation=90, fontsize=12)  # Round bin edges for readability
     
     # Show the plot
     plt.savefig(os.path.join(outputs_dir,'cor_mat_'+label.replace(" ", "_")+'.pdf'), bbox_inches='tight')
@@ -280,24 +322,29 @@ def correlation_plot(data, labels, label, outputs_dir, n_bins=15):
     # Convert the list of histograms to a NumPy array and transpose it (features as columns)
     
     # Plot the 2D histogram using imshow
-    plt.figure(figsize=(8, 8))
-    plt.imshow(hist_matrix, aspect='auto', vmin=0, cmap='hot', interpolation='none')
+    plt.figure(figsize=(10, 8))
+    cax = plt.imshow(hist_matrix, vmin=0, aspect='auto', cmap='hot', interpolation='none')
     
     # Add color bar
-    plt.colorbar(label='Count [#]')
+    cbar = plt.colorbar(cax)
+    cbar.ax.tick_params(labelsize=12)  # tick labels
+    cbar.set_label("Count [#]", fontsize=20)
+    cbar.ax.yaxis.set_major_formatter(
+    ticker.FuncFormatter(lambda x, _: f'{int(x):,}'.replace(',', '\u202F'))
+    )
     
     # Label axes
-    plt.ylabel('Parameter')
-    plt.xlabel('Bin value [normalized]')
-    plt.title(label+' distribution')
-    plt.yticks(ticks = torch.arange(len(labels)), labels=labels)  # Round bin edges for readability
-    plt.xticks(ticks=torch.arange(n_bins), labels=torch.round(bin_edges[:-1], decimals=2).numpy())  # Round bin edges for readability
+    plt.ylabel('Parameter', fontsize=20)
+    plt.xlabel('Bin value [normalized]', fontsize=20)
+    plt.title(label+' distribution', fontsize=20)
+    plt.yticks(ticks = torch.arange(len(labels)), labels=labels, fontsize=12)  # Round bin edges for readability
+    plt.xticks(ticks=torch.arange(n_bins), labels=torch.round(bin_edges[:-1], decimals=2).numpy(), fontsize=12)  # Round bin edges for readability
     
     # Show the plot
     plt.savefig(os.path.join(outputs_dir,'hist_'+label.replace(" ", "_")+'.pdf'), bbox_inches='tight')
     return plt.gcf()
 
-def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10):
+def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10, **kwargs):
     loss_list = []
     loss_min_tens_list = []
     _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34]) # only for getting the shape
@@ -307,7 +354,7 @@ def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations
         offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
         with torch.no_grad():
             observed_rays = model(compensated_parameters)
-        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates)
+        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, **kwargs)
         predicted_offsets = loss_min_params[0, 0] - uncompensated_parameters[0, 0, 0]
         normalized_predicted_offsets = model.unscale_offset(predicted_offsets)
         offset_rmse = ((offsets-normalized_predicted_offsets)**2).mean().sqrt()
