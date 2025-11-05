@@ -625,7 +625,7 @@ def optimize_gd(
 
 def optimize_powell(
     model, observed_rays, uncompensated_parameters, 
-    max_iterations=1000, clamp_bounds=True, seed=42, xtol=1e-4, ftol=1e-4,
+    iterations=1000, clamp_bounds=True, seed=42, xtol=0., ftol=0.,
 ):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -658,24 +658,24 @@ def optimize_powell(
         method='Powell',
         bounds=bounds,
         options={
-            'xtol': 0.,
-            'ftol': 0.,
-            'maxfev': max_iterations,
+            'xtol': xtol,
+            'ftol': ftol,
+            'maxfev': iterations,
             'disp': False,
         }
     )
 
     # Pad loss history to max_iterations
-    if len(loss_history) < max_iterations:
+    if len(loss_history) < iterations:
         last_loss = loss_history[-1] if loss_history else float('inf')
-        loss_history += [last_loss] * (max_iterations - len(loss_history))
+        loss_history += [last_loss] * (iterations - len(loss_history))
 
     # Final optimized parameters
     x_optimized = result.x
     x_tensor_final = torch.tensor(x_optimized, dtype=torch.float32, device=device).unsqueeze(0)
     best_params = model.rescale_offset(x_tensor_final) + uncompensated_parameters
     
-    loss_history_np = np.array(loss_history[:max_iterations])
+    loss_history_np = np.array(loss_history[:iterations])
     cummin_loss = np.minimum.accumulate(loss_history_np)
 
     return best_params.squeeze(-2), result.fun, cummin_loss
