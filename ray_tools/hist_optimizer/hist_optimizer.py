@@ -136,6 +136,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
                     'observed_rays': observed_rays,
                     'uncompensated_parameters': uncompensated_parameters,
                     'iterations': iterations,
+                    'seed': seed,
                     'extra_kwargs': extra_kwargs,
                 },
                 num_threads=1,
@@ -475,7 +476,7 @@ def optimize_sa(
     T_end=0.000001,
     verbose=True,
     cooling_schedule='exp',
-    seed=None,
+    seed=42,
 ):
     torch.manual_seed(seed)
     device = model.device
@@ -771,7 +772,7 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=42, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -784,7 +785,7 @@ def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=100
         acq = "ucb"
     if acq == "qlcb":
         acq = "qucb"
-    
+
     dofs = [DOF(name=str(i), search_domain=(0., 1.)) for i in range(uncompensated_parameters.shape[-1])]
     objectives = [Objective(name="metrixs", transform=transform, description="METRIXS Beamline", target="min"),
                    Objective(name="empty_images_count", constraint=(-torch.inf, 0), transform=None)]
@@ -970,7 +971,7 @@ def optimize_evotorch(
 
 def optimize_ea(
     model, observed_rays, uncompensated_parameters, iterations=1000, 
-    num_candidates=100, mutation_rate=0.1, crossover_rate=0.7, tournament_size=3, seed=None
+    num_candidates=100, mutation_rate=0.1, crossover_rate=0.7, tournament_size=3, seed=42
 ):
     def loss(x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
