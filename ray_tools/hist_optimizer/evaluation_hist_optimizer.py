@@ -27,6 +27,37 @@ torch.manual_seed(seed)
 
 
 
+# In[2]:
+
+
+file_root = '../../'
+outputs_dir = os.path.join(file_root, 'outputs/')
+engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml'),
+                                exported_planes=["ImagePlane"],
+                                ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
+                                                                  docker_container_name='ray-ui-service-test',
+                                                                  dockerfile_path=os.path.join(file_root, 'ray_docker/rayui'),
+                                                                  ray_workdir='/dev/shm/ray-workdir',
+                                                                  verbose=False),
+                                num_workers=-1,
+                                as_generator=False)
+
+
+model_path = os.path.join(file_root, "outputs/xy_hist/s021yw7n/checkpoints/epoch=235-step=70000000.ckpt")
+surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
+
+model = Model(path=model_path)
+
+
+# In[3]:
+
+
+offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed)
+
+with torch.no_grad():
+    observed_rays = model(compensated_parameters_selected)
+
+
 # # Examine best optimizer
 
 # In[4]:
