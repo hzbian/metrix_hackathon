@@ -163,22 +163,18 @@ correlation_plot(stacked_uncompensated_parameters_except_intensity_scale_z, labe
 method_dict = {
     "Powell’s": (
         optimize_powell,
-        1000,
         {}
     ),
     "SA": (
         optimize_sa,
-        1000,
         {}
     ),
     "GD": (
         optimize_gd,
-        1000,
         {"learning_rate": 0.001}
     ),
     "GA_100": (
         optimize_evotorch_ga,
-        1000,
         {
             "tournament_size": 3,
             "sbx_crossover_rate": 0.8,
@@ -188,7 +184,6 @@ method_dict = {
     ),
     "GA_500": (
         optimize_evotorch_ga,
-        1000,
         {
             "tournament_size": 3,
             "sbx_crossover_rate": 0.8,
@@ -198,7 +193,6 @@ method_dict = {
     ),
     "BLOP": (
         optimize_blop,
-        1000,
         {"ucb_beta": 10.}
     ),
 }

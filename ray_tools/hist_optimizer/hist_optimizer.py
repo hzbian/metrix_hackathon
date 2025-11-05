@@ -101,9 +101,9 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
     for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
         # Support both 2- and 3-element tuples
         if len(entry) == 3:
-            optimizer_fn, num_candidates, extra_kwargs = entry
+            optimizer_fn, extra_kwargs = entry
         else:
-            optimizer_fn, num_candidates = entry
+            optimizer_fn = entry
             extra_kwargs = {}
 
         # Pass any extra kwargs into the evaluation
@@ -111,7 +111,6 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
             optimizer_fn,
             model,
             repetitions=repetitions,
-            num_candidates=num_candidates,
             iterations=iterations,
             seed=seed,
             **extra_kwargs
@@ -122,14 +121,14 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
     # Benchmarking section
     for key, entry in method_dict.items():
         if len(entry) == 3:
-            optimizer_fn, num_candidates, extra_kwargs = entry
+            optimizer_fn, extra_kwargs = entry
         else:
-            optimizer_fn, num_candidates = entry
+            optimizer_fn = entry
             extra_kwargs = {}
 
         if benchmark_repetitions != 0:
             t0 = benchmark.Timer(
-                stmt='run_optimizer(optimizer_fn, model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, **extra_kwargs)',
+                stmt='run_optimizer(optimizer_fn, model, observed_rays, uncompensated_parameters, iterations=iterations, **extra_kwargs)',
                 setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
                 globals={
                     'optimizer_fn': optimizer_fn,
@@ -137,7 +136,6 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
                     'observed_rays': observed_rays,
                     'uncompensated_parameters': uncompensated_parameters,
                     'iterations': iterations,
-                    'num_candidates': num_candidates,
                     'extra_kwargs': extra_kwargs,
                 },
                 num_threads=1,
@@ -154,8 +152,8 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
     return method_evaluation_dict
 
 
-def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations, num_candidates):
-    return optimizer(model, observed_rays, uncompensated_parameters, iterations, num_candidates)
+def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations):
+    return optimizer(model, observed_rays, uncompensated_parameters, iterations)
 
 @staticmethod
 def significant(label, group_A, group_B, confidence=0.95):
@@ -625,7 +623,7 @@ def optimize_gd(
 
 def optimize_powell(
     model, observed_rays, uncompensated_parameters, 
-    iterations=1000, clamp_bounds=True, seed=42, xtol=0., ftol=0.,
+    iterations=1000, num_candidates=None, clamp_bounds=True, seed=42, xtol=0., ftol=0.,
 ):
     torch.manual_seed(seed)
     np.random.seed(seed)
