@@ -12,7 +12,7 @@ H5_IDX_RANGE = range(50)
 H5_DATADIR = os.path.join(ROOT_DIR, 'datasets', 'metrix_simulation', DATASET_NAME)
 
 RML_BASEFILE = os.path.join(ROOT_DIR, 'rml_src', 'METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml')
-RAY_WORKDIR = os.path.join(ROOT_DIR, 'ray_workdir', DATASET_NAME)
+RAY_WORKDIR = os.path.join('/dev/shm', 'ray_workdir', DATASET_NAME)
 
 N_RAYS = ['1e5']
 
