@@ -97,14 +97,15 @@ def save_plot(var_name: str, output_directory: str='plots/'):
     fig.set_size_inches(4.3, 2.5)
     #ax.set_yscale('log')
     #ax.set_xscale('log')
-    plt.xlabel('Absolute error')
-    plt.ylabel('Loss distance')
+    plt.xlabel('Absolute error', fontsize=12)
+    plt.ylabel('Loss distance', fontsize=12)
+    plt.tick_params(axis='both', which='major', labelsize=9)
     plt.tight_layout()
     plt.legend( markerscale=2, scatterpoints=3)
 
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    plt.savefig(os.path.join(output_directory, var_name + '.pdf'), dpi=300)
+    plt.savefig(os.path.join(output_directory, var_name + '.png'), dpi=300)
     plt.clf()
 
 def investigate_and_plot_var(var_name, value_lims, loss, loss_string): 
