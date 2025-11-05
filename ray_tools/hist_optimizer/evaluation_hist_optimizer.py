@@ -26,40 +26,10 @@ seed = 1000042
 torch.manual_seed(seed)
 
 
-# In[2]:
-
-
-file_root = '../../'
-outputs_dir = os.path.join(file_root, 'outputs/')
-engine = RayEngine(rml_basefile=os.path.join(file_root,'rml_src/METRIX_U41_G1_H1_318eV_PS_MLearn_1.15.rml'),
-                                exported_planes=["ImagePlane"],
-                                ray_backend=RayBackendDockerRAYUI(docker_image='ray-ui-service',
-                                                                  docker_container_name='ray-ui-service-test',
-                                                                  dockerfile_path=os.path.join(file_root, 'ray_docker/rayui'),
-                                                                  ray_workdir='/dev/shm/ray-workdir',
-                                                                  verbose=False),
-                                num_workers=-1,
-                                as_generator=False)
-
-
-model_path = os.path.join(file_root, "outputs/xy_hist/s021yw7n/checkpoints/epoch=235-step=70000000.ckpt")
-surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
-
-model = Model(path=model_path)
-
-
-# In[3]:
-
-
-offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed)
-
-with torch.no_grad():
-    observed_rays = model(compensated_parameters_selected)
-
 
 # # Examine best optimizer
 
-# In[19]:
+# In[4]:
 
 
 loss_min_params, loss, loss_min_list = optimize_evotorch_ga(model, observed_rays, uncompensated_parameters_selected, iterations=1000, num_candidates=500, mutation_scale=0.2, sbx_crossover_rate=0.8, tournament_size=3, seed=seed)
@@ -85,11 +55,11 @@ out = compare_with_reference(reference_ray_outputs, reference_ray_outputs_2)
 print("deviation ref to ref", out[0].item(), "±", out[1].item())
 
 
-# In[22]:
+# In[6]:
 
 
 fig = plot_param_tensors(loss_min_params[:5, :1], uncompensated_parameters_selected[:5, :1].squeeze(-2), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:5, :1].squeeze(-2))
-plt.savefig(os.path.join(outputs_dir,'fixed_plot.png'), bbox_inches='tight', pad_inches = 0)
+plt.savefig(os.path.join(outputs_dir,'fixed_plot.png'), bbox_inches='tight', pad_inches = 0.1)
 
 
 # In[23]:
