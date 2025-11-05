@@ -22,11 +22,8 @@ from ray_tools.base.parameter import MutableParameter
 from ray_nn.nn.xy_hist_data_models import HistSurrogateEngine, Model, StandardizeXYHist
 from ray_tools.base.backend import RayBackendDockerRAYUI
 
-torch.manual_seed(42)
-
-get_ipython().run_line_magic('load_ext', 'autoreload')
-get_ipython().run_line_magic('autoreload', '2')
-get_ipython().run_line_magic('matplotlib', 'inline')
+seed = 1000042
+torch.manual_seed(seed)
 
 
 # In[2]:
@@ -54,7 +51,7 @@ model = Model(path=model_path)
 # In[3]:
 
 
-offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
+offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed)
 
 with torch.no_grad():
     observed_rays = model(compensated_parameters_selected)
@@ -65,7 +62,7 @@ with torch.no_grad():
 # In[19]:
 
 
-loss_min_params, loss, loss_min_list = optimize_evotorch_ga(model, observed_rays, uncompensated_parameters_selected, iterations=1000, num_candidates=500, mutation_scale=0.2, sbx_crossover_rate=0.8, tournament_size=3)
+loss_min_params, loss, loss_min_list = optimize_evotorch_ga(model, observed_rays, uncompensated_parameters_selected, iterations=1000, num_candidates=500, mutation_scale=0.2, sbx_crossover_rate=0.8, tournament_size=3, seed=seed)
 
 
 # In[20]:
@@ -115,7 +112,7 @@ plt.savefig(os.path.join(outputs_dir,'parameters_comparison.pdf'), bbox_inches='
 # In[23]:
 
 
-offsets_list, uncompensated_parameters_list, compensated_parameters_list = generate_n_offset_problems(model, 10000)
+offsets_list, uncompensated_parameters_list, compensated_parameters_list = generate_n_offset_problems(model, 10000, initial_seed=seed)
 
 
 # In[84]:
@@ -205,7 +202,7 @@ method_dict = {
     ),
 }
 
-method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=2000, repetitions=30, benchmark_repetitions=10)
+method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=30, benchmark_repetitions=10, seed=seed)
 with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:
     pickle.dump(method_evaluation_dict, f)
 

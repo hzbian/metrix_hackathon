@@ -95,7 +95,7 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
         mse_list.append(mse)
     return torch.stack(mse_list), x_simulation_hist_list, y_simulation_hist_list
 
-def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions):
+def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions, seed=42):
     method_evaluation_dict = {}
     
     for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
@@ -113,6 +113,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
             repetitions=repetitions,
             num_candidates=num_candidates,
             iterations=iterations,
+            seed=seed,
             **extra_kwargs
         )
         
@@ -344,7 +345,7 @@ def correlation_plot(data, labels, label, outputs_dir, n_bins=15):
     plt.savefig(os.path.join(outputs_dir,'hist_'+label.replace(" ", "_")+'.pdf'), bbox_inches='tight')
     return plt.gcf()
 
-def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10, **kwargs):
+def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10, seed=42, **kwargs):
     loss_list = []
     loss_min_tens_list = []
     _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34]) # only for getting the shape
@@ -354,7 +355,7 @@ def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations
         offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
         with torch.no_grad():
             observed_rays = model(compensated_parameters)
-        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, **kwargs)
+        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, seed=seed, **kwargs)
         predicted_offsets = loss_min_params[0, 0] - uncompensated_parameters[0, 0, 0]
         normalized_predicted_offsets = model.unscale_offset(predicted_offsets)
         offset_rmse = ((offsets-normalized_predicted_offsets)**2).mean().sqrt()
@@ -773,7 +774,7 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=15.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
