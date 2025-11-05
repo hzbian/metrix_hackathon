@@ -91,12 +91,12 @@ class Plot:
         
         fig.update_layout(
             scene=dict(
-                xaxis_title='z',
-                yaxis_title='x',
-                zaxis_title='y',
-                xaxis=dict(title_font=dict(size=20)),  # Double font size (from default 10 to 20)
-                yaxis=dict(title_font=dict(size=20)),  # Double font size
-                zaxis=dict(title_font=dict(size=20)),  # Double font size
+                xaxis_title='z [mm]',
+                yaxis_title='x [mm]',
+                zaxis_title='y [mm]',
+                xaxis=dict(title_font=dict(size=29)),  # Double font size (from default 10 to 20)
+                yaxis=dict(title_font=dict(size=29)),  # Double font size
+                zaxis=dict(title_font=dict(size=29)),  # Double font size
             ),
             font=dict(size=16),  # Double font size for other texts
         )
