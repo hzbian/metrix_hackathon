@@ -99,8 +99,8 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
     method_evaluation_dict = {}
     
     for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
-        # Support both 2- and 3-element tuples
-        if len(entry) == 3:
+        # Support both 1- and 2-element tuples
+        if len(entry) == 2:
             optimizer_fn, extra_kwargs = entry
         else:
             optimizer_fn = entry
@@ -343,7 +343,7 @@ def correlation_plot(data, labels, label, outputs_dir, n_bins=15):
     plt.savefig(os.path.join(outputs_dir,'hist_'+label.replace(" ", "_")+'.pdf'), bbox_inches='tight')
     return plt.gcf()
 
-def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations=1000, repetitions=10, seed=42, **kwargs):
+def evaluate_evaluation_method(method, model, iterations=1000, repetitions=10, seed=42, **kwargs):
     loss_list = []
     loss_min_tens_list = []
     _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34]) # only for getting the shape
@@ -353,7 +353,7 @@ def evaluate_evaluation_method(method, model, num_candidates=1000000, iterations
         offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
         with torch.no_grad():
             observed_rays = model(compensated_parameters)
-        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, num_candidates=num_candidates, seed=seed, **kwargs)
+        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, seed=seed, **kwargs)
         predicted_offsets = loss_min_params[0, 0] - uncompensated_parameters[0, 0, 0]
         normalized_predicted_offsets = model.unscale_offset(predicted_offsets)
         offset_rmse = ((offsets-normalized_predicted_offsets)**2).mean().sqrt()
@@ -474,7 +474,6 @@ def optimize_sa(
     T_start=1e-4,
     T_end=0.000001,
     verbose=True,
-    num_candidates=None,
     cooling_schedule='exp',
     seed=None,
 ):
@@ -623,7 +622,7 @@ def optimize_gd(
 
 def optimize_powell(
     model, observed_rays, uncompensated_parameters, 
-    iterations=1000, num_candidates=None, clamp_bounds=True, seed=42, xtol=0., ftol=0.,
+    iterations=1000, clamp_bounds=True, seed=42, xtol=0., ftol=0.,
 ):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -891,7 +890,7 @@ def optimize_smart_walker(model, observed_rays, uncompensated_parameters, iterat
             loss_min_list.append(loss_min)
     return loss_min_params, loss_min, loss_min_list
 
-def optimize_tpe(model, observed_rays, uncompensated_parameters, iterations, num_candidates=None):
+def optimize_tpe(model, observed_rays, uncompensated_parameters, iterations):
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     
     def objective_function(offsets, model, observed_rays, uncompensated_parameters):
