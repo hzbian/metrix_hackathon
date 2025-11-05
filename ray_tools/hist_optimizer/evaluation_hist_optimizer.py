@@ -25,6 +25,9 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 seed = 1000042
 torch.manual_seed(seed)
 
+get_ipython().run_line_magic('load_ext', 'autoreload')
+get_ipython().run_line_magic('autoreload', '2')
+get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 # In[2]:
@@ -157,7 +160,7 @@ correlation_plot(stacked_uncompensated_parameters_except_intensity_scale_z, labe
 
 # # Compare optimizers
 
-# In[ ]:
+# In[16]:
 
 
 method_dict = {
@@ -197,7 +200,15 @@ method_dict = {
     ),
 }
 
-method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=30, benchmark_repetitions=10, seed=seed)
+method_dict = {
+    "BLOP": (
+        optimize_blop,
+        {"ucb_beta": 10.}
+    ),
+}
+
+
+method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=2, benchmark_repetitions=2, seed=seed)
 with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:
     pickle.dump(method_evaluation_dict, f)
 
@@ -209,13 +220,13 @@ with open('../../outputs/compare_optimizers.pkl', 'rb') as file:
     method_evaluation_dict = pickle.load(file) 
 
 
-# In[ ]:
+# In[17]:
 
 
 plot_optimizer_iterations(method_evaluation_dict, outputs_dir)
 
 
-# In[ ]:
+# In[18]:
 
 
 statistics_dict = statistics(method_evaluation_dict)
