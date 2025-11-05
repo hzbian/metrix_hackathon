@@ -120,7 +120,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
 
     # Benchmarking section
     for key, entry in method_dict.items():
-        if len(entry) == 3:
+        if len(entry) == 2:
             optimizer_fn, extra_kwargs = entry
         else:
             optimizer_fn = entry
@@ -152,8 +152,8 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
     return method_evaluation_dict
 
 
-def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations):
-    return optimizer(model, observed_rays, uncompensated_parameters, iterations)
+def run_optimizer(optimizer, model, observed_rays, uncompensated_parameters, iterations, **kwargs):
+    return optimizer(model, observed_rays, uncompensated_parameters, iterations, **kwargs)
 
 @staticmethod
 def significant(label, group_A, group_B, confidence=0.95):
@@ -346,14 +346,14 @@ def correlation_plot(data, labels, label, outputs_dir, n_bins=15):
 def evaluate_evaluation_method(method, model, iterations=1000, repetitions=10, seed=42, **kwargs):
     loss_list = []
     loss_min_tens_list = []
-    _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34]) # only for getting the shape
+    _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed) # only for getting the shape
     loss_min_params_tens = torch.full((repetitions, uncompensated_parameters.shape[1], uncompensated_parameters.shape[-1]), float('nan'), device=model.device)
     offset_rmse_tens = torch.full((repetitions,), float('nan'), device=model.device)
     for i in range(repetitions):
-        offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34])
+        offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed+i)
         with torch.no_grad():
             observed_rays = model(compensated_parameters)
-        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, seed=seed, **kwargs)
+        loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, seed=seed+i, **kwargs)
         predicted_offsets = loss_min_params[0, 0] - uncompensated_parameters[0, 0, 0]
         normalized_predicted_offsets = model.unscale_offset(predicted_offsets)
         offset_rmse = ((offsets-normalized_predicted_offsets)**2).mean().sqrt()
@@ -771,7 +771,7 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=10, bo_iterations=10, empty_image_threshold=1e-5, num_candidates=1):
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
