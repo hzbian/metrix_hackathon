@@ -182,7 +182,7 @@ class MetrixXYHistSurrogate(L.LightningModule):
     @staticmethod
     def plot_data_3(prediction, ground_truth, label_list=['Simulation', 'Surrogate']):
         fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, 
-                               layout='constrained', figsize=(7.08, 1.97)) ##figsize=(4.905, 4.434)
+                               layout='constrained', figsize=(4.905, 4.434))
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         
         # Create lists to keep track of the secondary axes for setting shared limits
@@ -199,9 +199,9 @@ class MetrixXYHistSurrogate(L.LightningModule):
             c2 = colors[4]
         for i, y_element in enumerate(ground_truth):
             # Plot simulation and surrogate data
-            sim_line_0, = ax[i, 0].plot(y_element[:50], label=label_list[0], c=c1,)
+            sim_line_0, = ax[i, 0].plot(y_element[:50], label=label_list[0], c=c1,linewidth=3.5)
             sur_line_0, = ax[i, 0].plot(prediction[i, :50], label=label_list[1], c=c2)
-            sim_line_1, = ax[i, 1].plot(y_element[50:], label=label_list[0], c=c1)
+            sim_line_1, = ax[i, 1].plot(y_element[50:], label=label_list[0], c=c1, linewidth=3.5)
             sur_line_1, = ax[i, 1].plot(prediction[i, 50:], label=label_list[1], c=c2)
             
             # Error computation
@@ -243,9 +243,17 @@ class MetrixXYHistSurrogate(L.LightningModule):
             a.set_xlim(shared_xlim)
         
         # Shared labels
-        ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$ histogram')
-        ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$ histogram')
-        ##fig.supylabel('Normalized ray counts')
+        ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$-histogram')
+        ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$-histogram')
+        fig.supylabel('Normalized ray counts', fontsize=16)
+        
+        fig.text(
+            1.02, 0.5, 'Absolute error',   # (x, y) position in figure coordinates
+            va='center', ha='left',
+            color=error_color,
+            rotation='vertical',
+            fontsize=16
+        )
         
         # Add legend to the bottom-right subplot
         lines = [sim_line_0, sur_line_0, err_line_0]
