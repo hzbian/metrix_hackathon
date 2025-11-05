@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 import sys
@@ -25,12 +25,8 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 seed = 1000042
 torch.manual_seed(seed)
 
-get_ipython().run_line_magic('load_ext', 'autoreload')
-get_ipython().run_line_magic('autoreload', '2')
-get_ipython().run_line_magic('matplotlib', 'inline')
 
-
-# In[2]:
+# In[ ]:
 
 
 file_root = '../../'
@@ -52,7 +48,7 @@ surrogate_engine = HistSurrogateEngine(checkpoint_path=model_path)
 model = Model(path=model_path)
 
 
-# In[3]:
+# In[ ]:
 
 
 offsets_selected, uncompensated_parameters_selected, compensated_parameters_selected = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed)
@@ -63,20 +59,20 @@ with torch.no_grad():
 
 # # Examine best optimizer
 
-# In[4]:
+# In[ ]:
 
 
 loss_min_params, loss, loss_min_list = optimize_evotorch_ga(model, observed_rays, uncompensated_parameters_selected, iterations=1000, num_candidates=500, mutation_scale=0.2, sbx_crossover_rate=0.8, tournament_size=3, seed=seed)
 
 
-# In[20]:
+# In[ ]:
 
 
 fig = fancy_plot_param_tensors(loss_min_params[:], uncompensated_parameters_selected[:].squeeze(), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:].squeeze())
 pio.write_html(fig, os.path.join(outputs_dir,'fancy.html'))
 
 
-# In[21]:
+# In[ ]:
 
 
 loss_min_ray_outputs = simulate_param_tensor(loss_min_params[:, :], engine, model.input_parameter_container, exported_plane='ImagePlane')
@@ -89,14 +85,14 @@ out = compare_with_reference(reference_ray_outputs, reference_ray_outputs_2)
 print("deviation ref to ref", out[0].item(), "±", out[1].item())
 
 
-# In[6]:
+# In[ ]:
 
 
 fig = plot_param_tensors(loss_min_params[:5, :1], uncompensated_parameters_selected[:5, :1].squeeze(-2), engine = engine, ray_parameter_container=model.input_parameter_container, compensated_parameters=compensated_parameters_selected[:5, :1].squeeze(-2))
 plt.savefig(os.path.join(outputs_dir,'fixed_plot.png'), bbox_inches='tight', pad_inches = 0.1)
 
 
-# In[23]:
+# In[ ]:
 
 
 predicted_params = model.unscale_offset((loss_min_params - uncompensated_parameters_selected.squeeze()))[0, 0]#(loss_min_params - compensated_parameters_selected.squeeze())[0][0]
@@ -108,18 +104,18 @@ Plot.plot_normalized_param_comparison(
     labels= labels,
     real_params=real_params,
 )
-plt.savefig(os.path.join(outputs_dir,'parameters_comparison.pdf'), bbox_inches='tight', pad_inches = 0)
+plt.savefig(os.path.join(outputs_dir,'parameters_comparison.pdf'), bbox_inches='tight', pad_inches = 0.1)
 
 
 # # Examine 10000 problems
 
-# In[23]:
+# In[ ]:
 
 
 offsets_list, uncompensated_parameters_list, compensated_parameters_list = generate_n_offset_problems(model, 10000, initial_seed=seed)
 
 
-# In[84]:
+# In[ ]:
 
 
 labels = [key for key, value in model.input_parameter_container.items() if isinstance(value, MutableParameter)]
@@ -129,7 +125,7 @@ labels = [str(i+1) for i in range(len(labels))]
 correlation_matrix(offsets_list, labels, "offsets", outputs_dir=outputs_dir)
 
 
-# In[85]:
+# In[ ]:
 
 
 stacked_uncompensated_parameters = torch.vstack([entry[:, 0, 0, :] for entry in uncompensated_parameters_list])
@@ -140,7 +136,7 @@ labels_except_intensity_scale = labels[:34]+labels[35:]
 correlation_matrix(stacked_uncompensated_parameters_except_intensity_scale, labels_except_intensity_scale, "uncompensated parameters", outputs_dir=outputs_dir)
 
 
-# In[99]:
+# In[ ]:
 
 
 #labels = [key for key, value in model.input_parameter_container.items() if isinstance(value, MutableParameter)]
@@ -148,7 +144,7 @@ correlation_matrix(stacked_uncompensated_parameters_except_intensity_scale, labe
 correlation_plot(offsets_list, labels, label="Offsets", outputs_dir=outputs_dir)
 
 
-# In[100]:
+# In[ ]:
 
 
 uncompensated_parameters_stack = torch.vstack([entry[:, 0, 0, :] for entry in uncompensated_parameters_list])
@@ -160,7 +156,7 @@ correlation_plot(stacked_uncompensated_parameters_except_intensity_scale_z, labe
 
 # # Compare optimizers
 
-# In[16]:
+# In[ ]:
 
 
 method_dict = {
@@ -200,15 +196,7 @@ method_dict = {
     ),
 }
 
-method_dict = {
-    "BLOP": (
-        optimize_blop,
-        {"ucb_beta": 10.}
-    ),
-}
-
-
-method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=2, benchmark_repetitions=2, seed=seed)
+method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=30, benchmark_repetitions=10, seed=seed)
 with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:
     pickle.dump(method_evaluation_dict, f)
 
@@ -216,17 +204,17 @@ with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:
 # In[ ]:
 
 
-with open('../../outputs/compare_optimizers.pkl', 'rb') as file: 
+with open(os.path.join(outputs_dir,'compare_optimizers.pkl'), 'rb') as file: 
     method_evaluation_dict = pickle.load(file) 
 
 
-# In[17]:
+# In[ ]:
 
 
 plot_optimizer_iterations(method_evaluation_dict, outputs_dir)
 
 
-# In[18]:
+# In[ ]:
 
 
 statistics_dict = statistics(method_evaluation_dict)

@@ -771,7 +771,7 @@ def optimize_evotorch_ga(
     return loss_min_params.squeeze(-2), best_loss, loss_history
 
     
-def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=10, bo_iterations=10, empty_image_threshold=1e-5, num_candidates=1):
+def optimize_blop(model, observed_rays, uncompensated_parameters, iterations=1000, seed=None, acq="lcb", ucb_beta=10.0, transform=None, warm_up_iterations=32, bo_iterations=150, empty_image_threshold=1e-5, num_candidates=1):
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
