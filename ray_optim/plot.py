@@ -564,14 +564,14 @@ class Plot:
             ax2.tick_params(axis="x", labelcolor="#d6272880", color="#d6272880")
             ax.stem([i for i in range(len_params)],
                 normalized_real_params,
-                label="Real Parameters",
+                label="Real parameters",
                  orientation='horizontal',
             )
         ax.stem(
             normalized_predicted_params,
             linefmt="orange",
             markerfmt="o",
-            label="Predicted Parameters",
+            label="Predicted parameters",
             orientation='horizontal',
         )
         param_labels = labels
@@ -580,6 +580,15 @@ class Plot:
         fig.legend(loc='upper left')
         ax.set_ylim([-1, len_params])
         ax.set_xlabel("Normalized Compensation")
+        ax.text(
+            0.5, -0.09,  # x, y in axis coordinates (adjust if needed)
+            "(real and predicted parameters)",
+            transform=ax.transAxes,
+            fontsize=10,   # smaller text
+            ha="center",
+            va="top",
+            #color="gray"
+        )
         ax.set_ylabel("Parameter")
         if epoch is not None:
             suptitle = "Epoch " + str(epoch)
