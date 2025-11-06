@@ -5,7 +5,6 @@ import matplotlib.ticker as ticker
 import torch
 import torch.nn.functional as F
 import optuna
-from torch.utils import benchmark
 from scipy.stats import mannwhitneyu
 from scipy.optimize import minimize
 import numpy as np
@@ -20,7 +19,7 @@ import logging
 from blop import DOF, Objective, Agent
 from bluesky import RunEngine
 from databroker import Broker
-
+import time
 import pandas as pd
 
 from ray_optim.plot import Plot
@@ -104,7 +103,14 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
         mse_list.append(mse)
     return torch.stack(mse_list), x_simulation_hist_list, y_simulation_hist_list
 
-def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions, seed=42):
+def warmup_gpu(device):
+    a = torch.randn(3000, 3000, device=device)
+    b = torch.randn(3000, 3000, device=device)
+    torch.cuda.synchronize()
+    _ = torch.mm(a, b)
+    torch.cuda.synchronize()
+
+def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, seed=42):
     method_evaluation_dict = {}
     
     for i, (key, entry) in enumerate(tqdm(method_dict.items(), desc="Evaluating methods")):
@@ -116,7 +122,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
             extra_kwargs = {}
 
         # Pass any extra kwargs into the evaluation
-        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse = evaluate_evaluation_method(
+        loss_best, mean_progress, std_progress, loss_min_params_tens, offset_rmse, times = evaluate_evaluation_method(
             optimizer_fn,
             model,
             repetitions=repetitions,
@@ -125,39 +131,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
             **extra_kwargs
         )
         
-        method_evaluation_dict[key] = (loss_best, mean_progress, std_progress, offset_rmse)
-
-    # Benchmarking section
-    for key, entry in method_dict.items():
-        if len(entry) == 2:
-            optimizer_fn, extra_kwargs = entry
-        else:
-            optimizer_fn = entry
-            extra_kwargs = {}
-
-        if benchmark_repetitions != 0:
-            t0 = benchmark.Timer(
-                stmt='run_optimizer(optimizer_fn, model, observed_rays, uncompensated_parameters, iterations=iterations, **extra_kwargs)',
-                setup='from ray_tools.hist_optimizer.hist_optimizer import run_optimizer',
-                globals={
-                    'optimizer_fn': optimizer_fn,
-                    'model': model,
-                    'observed_rays': observed_rays,
-                    'uncompensated_parameters': uncompensated_parameters,
-                    'iterations': iterations,
-                    'seed': seed,
-                    'extra_kwargs': extra_kwargs,
-                },
-                num_threads=1,
-                label='optimize ' + key,
-                sub_label=None
-            )
-            results = t0.timeit(benchmark_repetitions)
-            execution_time = results.raw_times[0]
-        else:
-            execution_time = None
-        
-        method_evaluation_dict[key] += (execution_time,)
+        method_evaluation_dict[key] = (loss_best, mean_progress, std_progress, offset_rmse, times)
 
     return method_evaluation_dict
 
@@ -198,7 +172,9 @@ def generate_latex_table(data):
         # Format the mean and standard deviation in scientific notation
         mean_str = f"{mean:.2e}".replace("e+0", "e+").replace("e-0", "e-")
         std_dev_str = f"$\\pm${std_dev:.2e}".replace("e+0", "e+").replace("e-0", "e-")
-        
+
+        execution_time_mean = execution_time.mean()
+        execution_time_std = execution_time.std()
         # If the method is the best, make the mean bold
         if is_best:
             mean_str = "\\textbf{" + mean_str + "}"
@@ -214,7 +190,7 @@ def generate_latex_table(data):
         
         
         # Add the row to the table
-        table += f"{method} & {mean_with_std_dev} & {offset_rmse:.2f} \\pm{offset_rmse_std:.2f} & {execution_time:.2f} \\\\ \n"
+        table += f"{method} & {mean_with_std_dev} & ${offset_rmse:.2f} \\pm{offset_rmse_std:.2f}$ & ${execution_time_mean:.2f} \\pm  {execution_time_std:.2f}$ \\\\ \n"
     
     table += "\\hline\n"
     table += "\\end{tabularx}\n"
@@ -356,13 +332,22 @@ def correlation_plot(data, labels, label, outputs_dir, n_bins=15):
 def evaluate_evaluation_method(method, model, iterations=1000, repetitions=10, seed=42, **kwargs):
     loss_list = []
     loss_min_tens_list = []
+    times_list = []
     _, uncompensated_parameters, _ = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed) # only for getting the shape
     loss_min_params_tens = torch.full((repetitions, uncompensated_parameters.shape[1], uncompensated_parameters.shape[-1]), float('nan'), device=model.device)
     offset_rmse_tens = torch.full((repetitions,), float('nan'), device=model.device)
+    
+    if model.device.type == "cuda":
+        warmup_gpu(model.device)
+            
     for i in range(repetitions):
         offsets, uncompensated_parameters, compensated_parameters = find_good_offset_problem(model, fixed_parameters = [8, 14, 20, 21, 27, 28, 34], seed=seed+i)
         with torch.no_grad():
             observed_rays = model(compensated_parameters)
+        if model.device.type == "cuda":
+            torch.cuda.synchronize()
+        start_time = time.time()
+            
         loss_min_params, loss, loss_min_list = method(model, observed_rays, uncompensated_parameters, iterations=iterations, seed=seed+i, **kwargs)
         predicted_offsets = loss_min_params[0, 0] - uncompensated_parameters[0, 0, 0]
         normalized_predicted_offsets = model.unscale_offset(predicted_offsets)
@@ -371,9 +356,13 @@ def evaluate_evaluation_method(method, model, iterations=1000, repetitions=10, s
         loss_min_tens_list.append(torch.tensor(loss_min_list, device=model.device))
         loss_min_params_tens[i] = loss_min_params[0]
         loss_list.append(loss)
+        if model.device.type == "cuda":
+            torch.cuda.synchronize()
+        times_list.append(time.time() - start_time)
     losses = torch.tensor(loss_list)
+    times = torch.tensor(times_list)
     loss_min_tens_tens = torch.vstack(loss_min_tens_list)
-    return losses, loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens, offset_rmse_tens
+    return losses, loss_min_tens_tens.mean(dim=0), loss_min_tens_tens.std(dim=0), loss_min_params_tens, offset_rmse_tens, times
 
 def plot_optimizer_iterations(method_evaluation_dict, outputs_dir):
     plt.figure(figsize = (6.905, 4.434))
