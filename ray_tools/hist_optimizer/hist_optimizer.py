@@ -1,6 +1,7 @@
 import glob
 import os
 from tqdm.auto import tqdm, trange
+import matplotlib.ticker as ticker
 import torch
 import torch.nn.functional as F
 import optuna
@@ -39,6 +40,14 @@ from ray_tools.base.utils import RandomGenerator
 from sub_projects.ray_optimization.real_data import import_data
 from ray_tools.base.transform import XYHistogram
 from ray_nn.data.transform import Select
+
+
+# Custom tick formatter: adds thin space for thousands
+def format_tick(x, pos=None):
+    if x == 1000:
+        return r"$1\,000$"  # LaTeX math mode thin space
+    else:
+        return int(x) if x == int(x) else x
 
 def new_label_names(labels):
     replacements = {
@@ -98,7 +107,7 @@ def mse_engines_comparison(engine, surrogate_engine, param_container_list: list[
 def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters, iterations, repetitions, benchmark_repetitions, seed=42):
     method_evaluation_dict = {}
     
-    for key, entry in tqdm(method_dict.items(), desc="Evaluating methods"):
+    for i, (key, entry) in enumerate(tqdm(method_dict.items(), desc="Evaluating methods")):
         # Support both 1- and 2-element tuples
         if len(entry) == 2:
             optimizer_fn, extra_kwargs = entry
@@ -112,7 +121,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
             model,
             repetitions=repetitions,
             iterations=iterations,
-            seed=seed,
+            seed=seed+(i*1000000),
             **extra_kwargs
         )
         
@@ -371,6 +380,8 @@ def plot_optimizer_iterations(method_evaluation_dict, outputs_dir):
     ax = plt.gca()
     i = 0
     plot_list = []
+    global_min = float('inf')
+    
     for key, (_, mean_progress, std_progress, _, _) in method_evaluation_dict.items():
         if i == 2:
             i +=1 # omit red
@@ -379,6 +390,16 @@ def plot_optimizer_iterations(method_evaluation_dict, outputs_dir):
         plot, = plt.plot(torch.arange(len(mean_progress)), mean_progress.cpu(), alpha = 1., c = color)
         plot_list.append(plot)
         i = i+1
+        global_min = min(global_min, mean_progress.cpu().min())
+    
+        # Set lower y-limit based on global_min (ignore std)
+    if global_min < float('inf'):
+        padding_factor = 0.9  # 10% padding below
+        ax.set_ylim(bottom=global_min * padding_factor)
+
+    formatter = ticker.FuncFormatter(lambda x, pos: f"{int(x):,}".replace(",", "\u202F"))
+    ax.xaxis.set_major_formatter(formatter)
+    
     ax.legend(plot_list, [key for key in method_evaluation_dict.keys()], prop={'size': 11})
     ax.tick_params(axis='both', which='major', labelsize=11)
     plt.xlabel('Iteration [#]', fontsize=16)
