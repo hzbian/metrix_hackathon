@@ -25,7 +25,6 @@ from ray_tools.base.backend import RayBackendDockerRAYUI
 seed = 1000042
 torch.manual_seed(seed)
 
-
 # In[ ]:
 
 
@@ -172,7 +171,7 @@ method_dict = {
         optimize_gd,
         {"learning_rate": 0.001}
     ),
-    "GA_100": (
+    "$\\mathrm{GA}_{100}$": (
         optimize_evotorch_ga,
         {
             "tournament_size": 3,
@@ -181,7 +180,7 @@ method_dict = {
             "mutation_scale": 0.2,
         }
     ),
-    "GA_500": (
+    "$\\mathrm{GA}_{500}$": (
         optimize_evotorch_ga,
         {
             "tournament_size": 3,
@@ -196,9 +195,9 @@ method_dict = {
     ),
 }
 
-method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=30, benchmark_repetitions=10, seed=seed)
+method_evaluation_dict = evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parameters_selected, iterations=1000, repetitions=30, seed=seed)
 with open(os.path.join(outputs_dir, "compare_optimizers.pkl"), "wb") as f:
-    pickle.dump(method_evaluation_dict, f)
+    pickle.dump(method_evaluation_dict, f)#
 
 
 # In[ ]:
@@ -224,10 +223,4 @@ latex_table = generate_latex_table(statistics_dict)
 
 # Output the LaTeX table
 print(latex_table)
-
-
-# In[ ]:
-
-
-
 
