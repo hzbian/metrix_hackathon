@@ -564,14 +564,14 @@ class Plot:
             ax2.tick_params(axis="x", labelcolor="#d6272880", color="#d6272880")
             ax.stem([i for i in range(len_params)],
                 normalized_real_params,
-                label="Real parameters",
+                label="Real offsets",
                  orientation='horizontal',
             )
         ax.stem(
             normalized_predicted_params,
             linefmt="orange",
             markerfmt="o",
-            label="Predicted parameters",
+            label="Predicted offsets",
             orientation='horizontal',
         )
         param_labels = labels
@@ -579,23 +579,23 @@ class Plot:
         ax.set_yticklabels(param_labels)
         fig.legend(loc='upper left')
         ax.set_ylim([-1, len_params])
-        ax.set_xlabel("Normalized Compensation")
+        ax.set_xlabel("Normalized compensation")
         ax.text(
             0.5, -0.09,  # x, y in axis coordinates (adjust if needed)
-            "(real and predicted parameters)",
+            "(real and predicted offsets)",
             transform=ax.transAxes,
             fontsize=10,   # smaller text
             ha="center",
             va="top",
             #color="gray"
         )
-        ax.set_ylabel("Parameter")
+        ax.set_ylabel("Offset")
         if epoch is not None:
             suptitle = "Epoch " + str(epoch)
         else:
             suptitle = ""
         if training_samples_count is not None:
-            suptitle += ", " + str(training_samples_count) + " Training Samples"
+            suptitle += ", " + str(training_samples_count) + " Training samples"
         if suptitle != "":
             fig.suptitle(suptitle)
         return fig
