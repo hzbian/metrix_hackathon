@@ -3,11 +3,10 @@
 
 An offset finding method based on a deep learning surrogate model and a Genetic Algorithm at the METRIXS beamline at BESSY II, Helmholtz-Zentrum Berlin.
 
-## Examples
-### Offset finding of a simulated real-world beamline
+## Offset finding of a simulated real-world beamline
 ![Offset finding of a simulated real-world beamline image](testing/images/fixed_plot.png)
 
-# Quick Start
+## Quick Start
 
 ```py
 import torch
@@ -28,7 +27,7 @@ with torch.no_grad():
 loss_min_params, loss, loss_min_list = optimize_evotorch_ga(model, observed_rays, uncompensated_parameters_selected, iterations=1000, num_candidates=500, mutation_scale=0.2, sbx_crossover_rate=0.8, tournament_size=3)
 ```
 
-# Citation
+## Citation
 
 If you find this useful in your research, please consider citing:
 
