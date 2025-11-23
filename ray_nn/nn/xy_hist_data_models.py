@@ -181,28 +181,37 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
     @staticmethod
     def plot_data_3(prediction, ground_truth, label_list=['Simulation', 'Surrogate']):
-        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=True, sharey=True, 
+        fig, ax = plt.subplots(len(ground_truth), 2, squeeze=False, sharex=False, sharey=True, 
                                layout='constrained', figsize=(4.905, 4.434))
         colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        
+        x_coords = torch.linspace(-10, 10, 50)
+        y_coords = torch.linspace(-3, 3, 50)
         
         # Create lists to keep track of the secondary axes for setting shared limits
         ax2_left = []
         ax2_right = []
         if label_list[0] == "Compensated":
-            c1 = colors[2]
-        else:
             c1 = colors[1]
+        else:
+            c1 = colors[4]
 
         if label_list[1] == "Experiment":
-            c2 = colors[1]
+            c2 = colors[2]
         else:
-            c2 = colors[4]
+            c2 = colors[1]
         for i, y_element in enumerate(ground_truth):
             # Plot simulation and surrogate data
-            sim_line_0, = ax[i, 0].plot(y_element[:50], label=label_list[0], c=c1,linewidth=3.5)
-            sur_line_0, = ax[i, 0].plot(prediction[i, :50], label=label_list[1], c=c2)
-            sim_line_1, = ax[i, 1].plot(y_element[50:], label=label_list[0], c=c1, linewidth=3.5)
-            sur_line_1, = ax[i, 1].plot(prediction[i, 50:], label=label_list[1], c=c2)
+            sim_line_0, = ax[i, 0].plot(x_coords, y_element[:50], label=label_list[1], c=c1,linewidth=3.5)
+            sur_line_0, = ax[i, 0].plot(x_coords, prediction[i, :50], label=label_list[0], c=c2)
+            sim_line_1, = ax[i, 1].plot(y_coords, y_element[50:], label=label_list[1], c=c1, linewidth=3.5)
+            sur_line_1, = ax[i, 1].plot(y_coords, prediction[i, 50:], label=label_list[0], c=c2)
+            ax[i, 1].set_xticks([-3,0,3])
+            ax_max = max(ax[i, 1].get_ylim()[1], 0.1)  # Ensure max at least 0.1
+            y_ticks = torch.arange(0, ax_max + 0.1, 0.1)  # 0.0, 0.1, 0.2, ..., up to max
+            ax[i, 1].set_yticks(y_ticks)
+    
+            #ax[i, 1].set_yticks([0.0,0.1,0.2, 0.3])
             
             # Error computation
             error_first_half = abs(y_element[:50] - prediction[i, :50])
@@ -214,8 +223,8 @@ class MetrixXYHistSurrogate(L.LightningModule):
 
             error_color = colors[3]
             # Plot error in log scale
-            err_line_0, = ax2_0.plot(error_first_half, label='Error', c=error_color, linestyle='dotted')
-            err_line_1, = ax2_1.plot(error_second_half, label='Error', c=error_color, linestyle='dotted')
+            err_line_0, = ax2_0.plot(x_coords, error_first_half, label='Error', c=error_color, linestyle='dotted')
+            err_line_1, = ax2_1.plot(y_coords, error_second_half, label='Error', c=error_color, linestyle='dotted')
 
             
             # Set color for the second y-axis
@@ -235,18 +244,12 @@ class MetrixXYHistSurrogate(L.LightningModule):
             shared_ylim = (min(ax2_left[i].get_ylim()[0], ax2_right[i].get_ylim()[0]), max(ax2_left[i].get_ylim()[1], ax2_right[i].get_ylim()[1]))
             ax2_left[i].set_ylim(shared_ylim)
             ax2_right[i].set_ylim(shared_ylim)
-        
-        # Synchronize x-axis limits across both histogram types
-        x_lims = [a.get_xlim() for a in ax.flat]
-        shared_xlim = (min(l[0] for l in x_lims), max(l[1] for l in x_lims))
-        for a in ax.flat:
-            a.set_xlim(shared_xlim)
-        
+                
         # Shared labels
-        ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$-histogram')
-        ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$-histogram')
+        ax[ground_truth.shape[0]-1, 0].set_xlabel('$x$-histogram [mm]', fontsize=14)
+        ax[ground_truth.shape[0]-1, 1].set_xlabel('$y$-histogram [mm]', fontsize=14)
         fig.supylabel('Normalized ray counts', fontsize=16)
-        
+    
         fig.text(
             1.02, 0.5, 'Absolute error',   # (x, y) position in figure coordinates
             va='center', ha='left',
