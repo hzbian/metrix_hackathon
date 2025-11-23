@@ -9,11 +9,11 @@ from ray_tools.simulation.torch_datasets import (
 )
 import glob
 
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_rel
 
 @staticmethod
 def significant_confidence_levels(group_A, group_B, confidence=0.95):
-    ci = ttest_ind(group_A.flatten().cpu(), group_B.flatten().cpu(), equal_var=False).confidence_interval(confidence_level=confidence)
+    ci = ttest_rel(group_A.flatten().cpu(), group_B.flatten().cpu()).confidence_interval(confidence_level=confidence)
     confidence_interval = (ci.low.item(), ci.high.item())
     return not (confidence_interval[0] < 0. and confidence_interval[1] > 0.), confidence_interval
 
@@ -68,13 +68,6 @@ def evaluate_model_dict_to_result_dict(model_dict):
     for scenario_name, scenario_subset in metrics_dict.items():
         result_dict[scenario_name] = {model_key: evaluate(model, scenario_subset) for model_key, model in model_dict.items()}
     return result_dict
-
-@staticmethod
-def significant_confidence_levels(group_A, group_B, confidence=0.99):
-    ci = ttest_ind(group_A.flatten().cpu(), group_B.flatten().cpu(), equal_var=False).confidence_interval(confidence_level=confidence)
-    confidence_interval = (ci.low.item(), ci.high.item())
-    return not (confidence_interval[0] < 0. and confidence_interval[1] > 0.), confidence_interval
-
 
 def statistics(result_dict):
     min_mean = float('inf')

@@ -127,7 +127,7 @@ def evaluate_method_dict(method_dict, model, observed_rays, uncompensated_parame
             model,
             repetitions=repetitions,
             iterations=iterations,
-            seed=seed+(i*1000000),
+            seed=seed+(1000000),
             **extra_kwargs
         )
         
