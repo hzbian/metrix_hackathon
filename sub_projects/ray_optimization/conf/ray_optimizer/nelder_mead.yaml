@@ -1,4 +1,0 @@
-defaults:
-  - basinhopping
-optimizer_backend:
-  _target_: "ray_optim.optimizer_backend.basinhopping.OptimizerBackendNelderMead"

@@ -1,5 +1,0 @@
-defaults:
-  - base
-optimizer_backend:
-  _target_: "ray_optim.optimizer_backend.turbo.OptimizerBackendTurbo"
-normalize_parameters: True

@@ -1,7 +1,0 @@
-defaults:
-  - base
-optimizer_backend:
-  _target_: "testing.test_ray_optimization.OptimizerBackendTest"
-normalize_parameters: True
-plot_interval: 5
-iterations: 11

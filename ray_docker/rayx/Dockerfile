@@ -1,34 +1,41 @@
-FROM nvidia/cuda:11.8.0-base-ubuntu22.04
+# Use Ubuntu 24.04 as base image
+FROM ubuntu:24.04
 
-# Setup the required capabilities for the container runtime
-ENV NVIDIA_DRIVER_CAPABILITIES compute,graphics,utility
+# Prevent interactive dialogs
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install vulkan
-RUN apt update
-RUN apt install -y wget
-RUN wget -qO - http://packages.lunarg.com/lunarg-signing-key-pub.asc | apt-key add -
-RUN wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list http://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
-RUN apt update
-RUN apt install -y vulkan-sdk
+# ---------- Build arguments for versioning ----------
+# RAYX version number and deb package filename
+ARG RAYX_VERSION="1.1.0"
+ARG RAYX_DEB="RAYX-${RAYX_VERSION}-Linux.deb"
 
-# Install RAY-X dependencies
-RUN apt install -y cmake git gcc gdb libblas-dev liblapack-dev libhdf5-dev mc ninja-build build-essential
-RUN apt clean all
+# ---------- System dependencies ----------
+RUN apt-get update && apt-get install -y \
+    wget \
+    ca-certificates \
+    libgomp1 \
+    libhdf5-dev \
+    apt-transport-https \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install python3.10
-RUN apt install -y python3.10 python3-pip
-RUN pip install virtualenv
-RUN virtualenv --python="/usr/bin/python3.10" "/venv/"
-ENV PATH="/venv/bin:$PATH"
+# Set working directory
+WORKDIR /opt
 
-# Build RAY-X
-RUN mkdir -p /opt/ray-x
-RUN git clone --recurse-submodules https://github.com/hz-b/RAY-X.git -b development /opt/ray-x
-RUN pip install -U numpy
-RUN cd /opt/ray-x && sh compile.sh
+# ---------- Download selected RAYX release ----------
+RUN wget "https://github.com/hz-b/rayx/releases/download/v${RAYX_VERSION}/${RAYX_DEB}"
 
-# Create RAY-X workdir
-RUN mkdir -p /opt/ray-x-workdir
+# ---------- Install the package ----------
+RUN apt-get update && apt-get install -y ./${RAYX_DEB} \
+    && rm ${RAYX_DEB} \
+    && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["tail", "-f", "/dev/null"]
+# ---------- Volume for data ----------
+RUN mkdir -p /opt/rayx-data
+VOLUME ["/opt/rayx-data"]
+
+# Optional environment variable
+ENV RAYX_DATA_DIR=/opt/ray-workdir
+
+# ---------- Default command: automatically run RAYX ----------
+# Adjust the binary path if needed.
+WORKDIR /opt/ray-workdir
