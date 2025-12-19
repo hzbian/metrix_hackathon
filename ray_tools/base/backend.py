@@ -297,46 +297,88 @@ class RayBackendDockerRAYUI(RayBackend):
 
 
 class RayBackendDockerRAYX(RayBackendDockerRAYUI):
-    """
-    Creates a Ray-X backend within a docker container.
-    Currently only a single image plane can be exported.
-    This backend is still experimental and needs to be revised.
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-
     def extract_ray_output(self, _, exported_planes, rml_workfile):
         ray_output_file = os.path.splitext(rml_workfile)[0] + '.h5'
+        ray_output = {}
 
         with h5py.File(ray_output_file, 'r') as h5f:
-            object_names = list(h5f['rayx']['object_names'])
-            object_names = [name.decode('utf-8') for name in object_names]
-            events_object_id = torch.tensor(h5f['rayx']['events']['object_id'][:])
+            rayx = h5f['rayx']
+            # decode object names once
+            object_names = [n.decode('utf-8') for n in rayx['object_names'][:]]
+            name_to_index = {name: i for i, name in enumerate(object_names)}
 
-            x_dir = torch.tensor(h5f['rayx']['events']['direction_x'])
-            y_dir = torch.tensor(h5f['rayx']['events']['direction_y'])
-            z_dir = torch.tensor(h5f['rayx']['events']['direction_z'])
-            x_loc = torch.tensor(h5f['rayx']['events']['position_x'])
-            y_loc = torch.tensor(h5f['rayx']['events']['position_y'])
-            z_loc = torch.tensor(h5f['rayx']['events']['position_z'])
-            energy = torch.tensor(h5f['rayx']['events']['energy'])
-            ray_output = {}
-            for exported_plane in exported_planes:
-                index = object_names.index(exported_plane) 
-                current_index_mask = events_object_id == index
-                ray_output[exported_plane] = RayOutput(
-                    x_loc=x_loc[current_index_mask],
-                    y_loc=y_loc[current_index_mask],
-                    z_loc=z_loc[current_index_mask],
-                    x_dir=x_dir[current_index_mask],
-                    y_dir=y_dir[current_index_mask],
-                    z_dir=z_dir[current_index_mask],
-                    energy=energy[current_index_mask],
+            # read object_id (small) as numpy to compute selection
+            events = rayx['events']
+            events_object_id = events['object_id'][:]  # numpy array, likely smallish
+
+            # pre-map exported_planes -> integer indices (skip missing)
+            plane_indices = {}
+            for plane in exported_planes:
+                if plane not in name_to_index:
+                    # handle missing plane as you prefer
+                    continue
+                idx = name_to_index[plane]
+                inds = np.nonzero(events_object_id == idx)[0]
+                if inds.size == 0:
+                    plane_indices[plane] = None
+                else:
+                    plane_indices[plane] = inds
+
+            # If no plane has events, return early
+            if not any(v is not None for v in plane_indices.values()):
+                if self.verbose:
+                    print(f'No events for requested planes in {os.path.basename(rml_workfile)}')
+                return {}
+
+            # For each dataset, fetch only the rows needed per plane.
+            # We'll fetch per-plane to avoid loading full arrays into memory when not necessary.
+            # list of dataset names to fetch
+            cols = ['direction_x', 'direction_y', 'direction_z',
+                    'position_x', 'position_y', 'position_z',
+                    'energy']
+
+            for plane, inds in plane_indices.items():
+                if inds is None:
+                    ray_output[plane] = RayOutput(
+                        x_loc=torch.empty(0),
+                        y_loc=torch.empty(0),
+                        z_loc=torch.empty(0),
+                        x_dir=torch.empty(0),
+                        y_dir=torch.empty(0),
+                        z_dir=torch.empty(0),
+                        energy=torch.empty(0),
+                    )
+                    continue
+
+                # read each column for these indices (h5py fancy indexing returns numpy array)
+                # optionally cast to float32 to save memory
+                pos_x = events['position_x'][inds].astype(np.float32, copy=False)
+                pos_y = events['position_y'][inds].astype(np.float32, copy=False)
+                pos_z = events['position_z'][inds].astype(np.float32, copy=False)
+
+                dir_x = events['direction_x'][inds].astype(np.float32, copy=False)
+                dir_y = events['direction_y'][inds].astype(np.float32, copy=False)
+                dir_z = events['direction_z'][inds].astype(np.float32, copy=False)
+
+                energy = events['energy'][inds].astype(np.float32, copy=False)
+
+                # convert to torch without copying (torch.from_numpy shares memory)
+                # ensure arrays are contiguous
+                def to_torch(a):
+                    a = np.ascontiguousarray(a)
+                    return torch.from_numpy(a)
+
+                ray_output[plane] = RayOutput(
+                    x_loc=to_torch(pos_x),
+                    y_loc=to_torch(pos_y),
+                    z_loc=to_torch(pos_z),
+                    x_dir=to_torch(dir_x),
+                    y_dir=to_torch(dir_y),
+                    z_dir=to_torch(dir_z),
+                    energy=to_torch(energy),
                 )
 
         if self.verbose:
-            print(f'Ray-X output from {os.path.basename(rml_workfile)}' +
-                  f' successfully generated ')
+            print(f'Ray-X output from {os.path.basename(rml_workfile)} successfully generated')
         return ray_output
 
