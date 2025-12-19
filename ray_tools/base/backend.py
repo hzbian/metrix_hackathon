@@ -19,6 +19,7 @@ from docker.models.resource import Model
 import h5py
 import torch
 import pandas as pd
+import numpy as np
 
 from .raypyng.rml import RMLFile
 
@@ -79,6 +80,8 @@ class RayBackendDockerRAYUI(RayBackend):
                  docker_container_name: str | None = None,
                  max_retry: int = 1000,
                  verbose=True,
+                 set_export_plane_in_exec=True,
+                 executable='python3 /opt/script_rayui_bg.py',
                  additional_mount_files: list[str] | None = None, device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
         self.docker_image = docker_image
@@ -93,9 +96,11 @@ class RayBackendDockerRAYUI(RayBackend):
         self.additional_mount_files = additional_mount_files
         self.device = device
         self.container_executable = "podman"
+        self.executable = executable
+        self.set_export_plane_in_exec = set_export_plane_in_exec
 
-        # Ray-UI workdir in docker container
-        self._rayui_workdir = '/opt/ray-ui-workdir'
+        # workdir in docker container
+        self.docker_workdir = '/opt/ray-workdir'
 
         # create local Ray-UI workdir (should be done before mounting docker directory below)
         os.makedirs(self.ray_workdir, exist_ok=True)
@@ -157,7 +162,7 @@ class RayBackendDockerRAYUI(RayBackend):
 
             podman_command = f"{self.container_executable} run -d --cgroups=disabled --security-opt label=disable --name {self.docker_container_name} --mount" \
                  f"=type=bind,src={self.ray_workdir}," \
-                 f"dst={self._rayui_workdir},relabel=shared -t {self.docker_image} tail -f " \
+                 f"dst={self.docker_workdir},relabel=shared -t {self.docker_image} tail -f " \
                  f"/dev/null"
             if self.verbose:
                 print(podman_command)
@@ -174,7 +179,7 @@ class RayBackendDockerRAYUI(RayBackend):
             {
                 'type': 'bind',
                 'source': self.ray_workdir,
-                'target': self._rayui_workdir
+                'target': self.docker_workdir
             }
         ]
         if self.container_system == 'docker':
@@ -201,6 +206,25 @@ class RayBackendDockerRAYUI(RayBackend):
     def __del__(self):
         self.kill()
 
+    def extract_ray_output(self, run_workdir, exported_planes, _):
+        ray_output = {}
+        for exported_plane in exported_planes:
+            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\", "/")
+            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c', dtype='float32',
+                                usecols=[exported_plane + '_OX', exported_plane + '_OY', exported_plane + '_OZ',
+                                        exported_plane + '_DX', exported_plane + '_DY', exported_plane + '_DZ',
+                                        exported_plane + '_EN', exported_plane + '_PL'])
+        
+            ray_output[exported_plane] = RayOutput(
+            x_loc=torch.tensor(raw_output[exported_plane + '_OX'].values, dtype=torch.float, device=self.device),
+            y_loc=torch.tensor(raw_output[exported_plane + '_OY'].values, dtype=torch.float, device=self.device),
+            z_loc=torch.tensor(raw_output[exported_plane + '_OZ'].values, dtype=torch.float, device=self.device),
+            x_dir=torch.tensor(raw_output[exported_plane + '_DX'].values, dtype=torch.float, device=self.device),
+            y_dir=torch.tensor(raw_output[exported_plane + '_DY'].values, dtype=torch.float, device=self.device),
+            z_dir=torch.tensor(raw_output[exported_plane + '_DZ'].values, dtype=torch.float, device=self.device),
+            energy=torch.tensor(raw_output[exported_plane + '_EN'].values, dtype=torch.float, device=self.device))
+        return ray_output
+    
     def run(self,
             raypyng_rml: RMLFile,
             exported_planes: list[str],
@@ -227,7 +251,7 @@ class RayBackendDockerRAYUI(RayBackend):
              raise Exception("RML workfile not found in", rml_workfile)
         
         # get corresponding RML-file for in docker container
-        docker_rml_workfile = os.path.join(self._rayui_workdir, run_id, os.path.basename(rml_workfile)).replace("\\",
+        docker_rml_workfile = os.path.join(self.docker_workdir, run_id, os.path.basename(rml_workfile)).replace("\\",
                                                                                                                 "/")
 
         # argument for planes to be exported
@@ -236,13 +260,13 @@ class RayBackendDockerRAYUI(RayBackend):
         for run in range(self.max_retry + 1):
             if self.container_system == 'docker':
                 self.docker_container.exec_run(
-                    cmd=f"python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
+                    cmd=f"{self.executable} {docker_rml_workfile} -p {cmd_exported_planes}"
                 )
             else:
 
-                podman_command = f"{self.container_executable} exec {self.docker_container_name} python3 /opt/script_rayui_bg.py {docker_rml_workfile} -p {cmd_exported_planes}"
-                if not self.verbose:
-                    podman_command += " > /dev/null"
+                podman_command = f"{self.container_executable} exec {self.docker_container_name} {self.executable} {docker_rml_workfile}"
+                if self.set_export_plane_in_exec:
+                    podman_command += f" -p {cmd_exported_planes}"
                 if self.verbose:
                     print(podman_command)
                 output = subprocess.check_output(shlex.split(podman_command), stderr=self.print_device)
@@ -252,7 +276,7 @@ class RayBackendDockerRAYUI(RayBackend):
             # fail indicator: any required CSV-file is missing
             for exported_plane in exported_planes:
                 if not os.path.isfile(
-                        os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\", "/")):
+                        os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\", "/")) and not os.path.isfile(os.path.splitext(rml_workfile)[0] + '.h5'):
                     retry = True
             if not retry:
                 break
@@ -260,25 +284,9 @@ class RayBackendDockerRAYUI(RayBackend):
                 print(f"Run {run + 1} failed. Retry ...")
 
         # extract Ray-UI output from CSV-files and create RayOutput instances
-        ray_output = {}
-        for exported_plane in exported_planes:
-            ray_output_file = os.path.join(run_workdir, exported_plane + '-RawRaysBeam.csv').replace("\\", "/")
-
-            raw_output = pd.read_csv(ray_output_file, sep='\t', skiprows=1, engine='c', dtype='float32',
-                                     usecols=[exported_plane + '_OX', exported_plane + '_OY', exported_plane + '_OZ',
-                                              exported_plane + '_DX', exported_plane + '_DY', exported_plane + '_DZ',
-                                              exported_plane + '_EN', exported_plane + '_PL'])
-
-            ray_output[exported_plane] = RayOutput(
-                x_loc=torch.tensor(raw_output[exported_plane + '_OX'].values, dtype=torch.float, device=self.device),
-                y_loc=torch.tensor(raw_output[exported_plane + '_OY'].values, dtype=torch.float, device=self.device),
-                z_loc=torch.tensor(raw_output[exported_plane + '_OZ'].values, dtype=torch.float, device=self.device),
-                x_dir=torch.tensor(raw_output[exported_plane + '_DX'].values, dtype=torch.float, device=self.device),
-                y_dir=torch.tensor(raw_output[exported_plane + '_DY'].values, dtype=torch.float, device=self.device),
-                z_dir=torch.tensor(raw_output[exported_plane + '_DZ'].values, dtype=torch.float, device=self.device),
-                energy=torch.tensor(raw_output[exported_plane + '_EN'].values, dtype=torch.float, device=self.device))
+        ray_output = self.extract_ray_output(run_workdir, exported_planes, rml_workfile)
         # remove sub-workdir
-        shutil.rmtree(run_workdir)
+        #shutil.rmtree(run_workdir)
 
         toc = time.perf_counter()
         if self.verbose:
@@ -288,115 +296,47 @@ class RayBackendDockerRAYUI(RayBackend):
         return ray_output
 
 
-class RayBackendDockerRAYX(RayBackend):
+class RayBackendDockerRAYX(RayBackendDockerRAYUI):
     """
     Creates a Ray-X backend within a docker container.
     Currently only a single image plane can be exported.
     This backend is still experimental and needs to be revised.
     """
 
-    def __init__(self,
-                 docker_image: str,
-                 ray_workdir: str,
-                 docker_container_name: str | None = None,
-                 gpu_ids: list[str] | None = None,
-                 verbose=True) -> None:
-        super().__init__()
-        self.docker_image = docker_image
-        self.ray_workdir = os.path.abspath(ray_workdir)
-        self.docker_container_name = docker_container_name if docker_container_name else self.docker_image + '_backend'
-        self.gpu_ids = gpu_ids
-        self.verbose = verbose
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
-        self._rayx_workdir = '/opt/ray-x-workdir'
-        self._rayx_path = '/opt/ray-x/build/bin/debug/TerminalApp'
-
-        self.client = docker.from_env()
-        try:
-            self.docker_container = self.client.containers.get(self.docker_container_name)
-            print(f'Docker container {self.docker_container_name} already exists.\n' + 'Stopping and recreating...')
-            self.docker_container.stop()
-            try:
-                self.docker_container.remove()
-            except docker.errors.APIError:
-                pass
-        except docker.errors.NotFound:
-            pass
-
-        if self.gpu_ids:
-            _devices = [docker.types.DeviceRequest(device_ids=self.gpu_ids, capabilities=[['gpu']])]
-        else:
-            _devices = []
-
-        os.makedirs(self.ray_workdir, exist_ok=True)
-        self.docker_container = self.client.containers.run(
-            self.docker_image,
-            name=self.docker_container_name,
-            volumes={self.ray_workdir: {'bind': self._rayx_workdir, 'mode': 'rw'}},
-            detach=True,
-            auto_remove=True,
-            device_requests=_devices,
-        )
-
-    def kill(self):
-        try:
-            self.docker_container.kill()
-        except docker.errors.NotFound:
-            pass
-
-    def __del__(self):
-        self.kill()
-
-    def run(self,
-            raypyng_rml: RMLFile,
-            exported_planes: list[str],
-            run_id: str | None = None, additional_mount_files: list[str] | None = None) -> dict[str, RayOutput]:
-
-        if run_id is None:
-            run_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(16))
-
-        os.makedirs(self.ray_workdir, exist_ok=True)
-
-        tic = time.perf_counter()
-        rml_workfile = os.path.join(self.ray_workdir, run_id + '.rml').replace("\\", "/")
-        raypyng_rml.write(rml_workfile)
-
-        docker_rml_workfile = os.path.join(self._rayx_workdir, os.path.basename(rml_workfile)).replace("\\", "/")
-        self.docker_container.exec_run(
-            cmd=f"{self._rayx_path} -x -i {docker_rml_workfile}"
-        )
-
+    def extract_ray_output(self, _, exported_planes, rml_workfile):
         ray_output_file = os.path.splitext(rml_workfile)[0] + '.h5'
 
         with h5py.File(ray_output_file, 'r') as h5f:
-            # default, Columns are hard-coded, to be changed if necessary
-            _keys = [int(idx) for idx in list(h5f.keys())]
-            _keys.sort()
-            _dfs = []
-            for key in _keys:
-                dataset = h5f[str(key)]
-                _df = pd.DataFrame(dataset, columns=['Xloc', 'Yloc', 'Zloc', 'Weight', 'Xdir', 'Ydir', 'Zdir', 'Energy',
-                                                     'Stokes0', 'Stokes1', 'Stokes2', 'Stokes3', 'pathLength', 'order',
-                                                     'lastElement', 'extraParam'])
-                _dfs.append(_df)
-            # concat once done otherwise, too memory intensive
-            raw_output = pd.concat(_dfs, axis=0)
+            object_names = list(h5f['rayx']['object_names'])
+            object_names = [name.decode('utf-8') for name in object_names]
+            events_object_id = torch.tensor(h5f['rayx']['events']['object_id'][:])
 
-        os.remove(rml_workfile)
-        os.remove(ray_output_file)
+            x_dir = torch.tensor(h5f['rayx']['events']['direction_x'])
+            y_dir = torch.tensor(h5f['rayx']['events']['direction_y'])
+            z_dir = torch.tensor(h5f['rayx']['events']['direction_z'])
+            x_loc = torch.tensor(h5f['rayx']['events']['position_x'])
+            y_loc = torch.tensor(h5f['rayx']['events']['position_y'])
+            z_loc = torch.tensor(h5f['rayx']['events']['position_z'])
+            energy = torch.tensor(h5f['rayx']['events']['energy'])
+            ray_output = {}
+            for exported_plane in exported_planes:
+                index = object_names.index(exported_plane) 
+                current_index_mask = events_object_id == index
+                ray_output[exported_plane] = RayOutput(
+                    x_loc=x_loc[current_index_mask],
+                    y_loc=y_loc[current_index_mask],
+                    z_loc=z_loc[current_index_mask],
+                    x_dir=x_dir[current_index_mask],
+                    y_dir=y_dir[current_index_mask],
+                    z_dir=z_dir[current_index_mask],
+                    energy=energy[current_index_mask],
+                )
 
-        ray_output = {'ImagePlane': RayOutput(x_loc=raw_output['Xloc'].to_numpy(),
-                                              y_loc=raw_output['Yloc'].to_numpy(),
-                                              z_loc=raw_output['Zloc'].to_numpy(),
-                                              x_dir=raw_output['Xdir'].to_numpy(),
-                                              y_dir=raw_output['Ydir'].to_numpy(),
-                                              z_dir=raw_output['Zdir'].to_numpy(),
-                                              energy=raw_output['Energy'].to_numpy())
-                      }
-
-        toc = time.perf_counter()
         if self.verbose:
-            print(f'Run ID {run_id}: Ray-X output from {os.path.basename(rml_workfile)}' +
-                  f' successfully generated in {toc - tic:.2f}s')
-
+            print(f'Ray-X output from {os.path.basename(rml_workfile)}' +
+                  f' successfully generated ')
         return ray_output
+

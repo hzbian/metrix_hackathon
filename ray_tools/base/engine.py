@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import torch
 from collections.abc import Iterable 
+from collections import OrderedDict
 
 from joblib import Parallel, delayed
 
@@ -38,12 +39,11 @@ def get_exported_plane_translation(
 class Engine(abc.ABC):
     @abc.abstractmethod
     def run(self,
-            param_containers: list[RayParameterContainer],
+            parameters: torch.Tensor,
             transforms: RayTransformType | Iterable[RayTransformType] | None = None,
             ) -> list[dict]:
         pass
-
-
+        
 class RayEngine(Engine):
     """
     Creates an engine to run raytracing simulations.
@@ -59,11 +59,14 @@ class RayEngine(Engine):
 
     def __init__(self,
                  rml_basefile: str,
+                 param_list: list[str],
                  exported_planes: list[str],
                  ray_backend: RayBackend,
                  num_workers: int = 1,
                  as_generator: bool = False,
                  verbose: bool = False,
+                 manual_transform_xyz: tuple[str, str, str] | None = None,
+                 manual_transform_plane: str | None = None,
                  ) -> None:
         super().__init__()
         self.rml_basefile = rml_basefile
@@ -72,82 +75,100 @@ class RayEngine(Engine):
         self.num_workers = num_workers
         self.as_generator = as_generator
         self.verbose = verbose
+        self.param_list = param_list
+        print(self.param_list)
+        self.manual_transform_plane = manual_transform_plane
+        self.manual_transform_xyz = manual_transform_xyz
+        
+        self.indices = None
+        if self.manual_transform_xyz is not None:
+            missing = [p for p in self.manual_transform_xyz if p not in self.param_list]
+
+            if missing:
+                raise ValueError(
+                    f"Missing required parameters in param_list: {missing}"
+                )
+
+            self.indices = tuple(self.param_list.index(p) for p in self.manual_transform_xyz)
 
         # internal RMLFile object
         self._raypyng_rml = RMLFile(self.rml_basefile)
         self.template = self._raypyng_rml.beamline
 
     def run(self,
-            param_containers: list[RayParameterContainer],
+            parameters: torch.Tensor,
             transforms: RayTransformType | Iterable[RayTransformType] | None = None,
             ) -> list[dict]:
         """
         Runs simulation for given (Iterable of) parameter containers.
-        :param param_containers: (Iterable of) :class:`ray_tools.base.parameter.RayParameterContainer` to be processed.
+        :param parameters: Min-Max normalized input within the param_lim_dict to be processed.
         :param transforms: :class:`ray_tools.base.transform.RayTransform` to be used.
             If a singleton, the same transform is applied everywhere.
-            If Iterable of RayTransform (same length a param_containers), individual transforms are applied to each
+            If Iterable of RayTransform (same length a parameters), individual transforms are applied to each
             parameter container. Transform can be also dicts of RayTransform specifying with transform to apply to
             which exported planes (keys must be same as ``RayEngine.exported_planes``).
         :return: (Iterable of) dict with ray outputs (field ``ray_output``,
             see also :class:`ray_tools.base.backend.RayBackend`) and used parameters for simulation
-            (field ``param_container_dict``, dict with same keys as in ``param_containers``).
+            (field ``param_container_dict``, dict with same keys as in ``parameters``).
         """
 
         # convert transforms into list if it was a singleton
         if transforms is None or isinstance(transforms, (RayTransform, dict)):
-            transforms_list = len(param_containers) * [transforms]
+            transforms_list = parameters.shape[0] * [transforms]
         else:
             transforms_list = transforms
-
+            
         # Iterable of arguments used for RayEngine._run_func
         _iter = ((run_params, transform) for (run_params, transform) in
-                 zip(param_containers, transforms_list))
+                 zip(list(parameters), transforms_list))
         # multi-threading (if self.num_workers > 1)
         worker = Parallel(n_jobs=self.num_workers, verbose=self.verbose, backend='threading')
         jobs = (delayed(self._run_func)(*item) for item in _iter)
         result = worker(jobs)
         if not isinstance(result, list):
             raise Exception("The result must be a list if we input a list.")
-        # extract only element if param_containers was a singleton
+        # extract only element if parameters was a singleton
         return result
-
+    
     def _run_func(self,
-                  param_container: RayParameterContainer,
+                  parameters: torch.Tensor,
                   transform: RayTransformType | None = None,
                   ) -> dict:
         """
         This method performs the actual simulation run.
         """
-        result = {'param_container_dict': dict(), 'ray_output': None}
+        result = {'param_container': dict(), 'ray_output': None}
 
         # create a copy of RML template to avoid problems with multi-threading
         raypyng_rml_work = RMLFile(self.rml_basefile)
         template_work = raypyng_rml_work.beamline
-        # write values in param_container to RML template and param_container_dict
-        for key, param in param_container.items():
-            value = param.get_value()
-            if not isinstance(param, OutputParameter):
+        # write values in param_container to RML template and param_container
+        for i, (key) in enumerate(self.param_list):
+            if key not in self.manual_transform_xyz:
+                value = parameters[i].item()
+                #print(key, value)
                 element = self._key_to_element(key, template=template_work)
                 element.cdata = str(value)
-            result['param_container_dict'][key] = value
+                result['param_container'][key] = value
 
         # call the backend to perform the run
         ray_output_all_planes = self.ray_backend.run(raypyng_rml=raypyng_rml_work,
                                                     exported_planes=self.exported_planes)
         for key, ray_output in ray_output_all_planes.items():
-            # compute x and y direction for normalized z direction (zz_dir would be 1)
-            xz_dir = ray_output.x_dir / ray_output.z_dir
-            yz_dir = ray_output.y_dir / ray_output.z_dir
-            trans_x, trans_y, trans_z = get_exported_plane_translation(key, param_container=param_container)
+            if key == self.manual_transform_plane:
+                # compute x and y direction for normalized z direction (zz_dir would be 1)
+                xz_dir = ray_output.x_dir / ray_output.z_dir
+                yz_dir = ray_output.y_dir / ray_output.z_dir
+                idx = torch.tensor(self.indices, device=parameters.device)
+                trans_x, trans_y, trans_z = parameters[idx]
 
-            x_cur = ray_output.x_loc + xz_dir * trans_z + trans_x
-            y_cur = ray_output.y_loc + yz_dir * trans_z + trans_y
-            z_cur = ray_output.z_loc + trans_z
+                x_cur = ray_output.x_loc + xz_dir * trans_z + trans_x
+                y_cur = ray_output.y_loc + yz_dir * trans_z + trans_y
+                z_cur = ray_output.z_loc + trans_z
 
-            ray_output_all_planes[key].x_loc = x_cur
-            ray_output_all_planes[key].y_loc = y_cur
-            ray_output_all_planes[key].z_loc = z_cur
+                ray_output_all_planes[key].x_loc = x_cur
+                ray_output_all_planes[key].y_loc = y_cur
+                ray_output_all_planes[key].z_loc = z_cur
 
         result['ray_output'] = ray_output_all_planes
         # apply transform (to each exported plane)
@@ -171,6 +192,13 @@ class RayEngine(Engine):
             raise Exception("Element must be XmlElement.")
         return element.__getattr__(param)
 
+class NormalizedRayEngine(RayEngine):
+    def __init__(self, *args, param_limit_dict: OrderedDict, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+    @staticmethod
+    def denormalize(value, param):
+        min_val, max_val = param
+        return value * (max_val - min_val) + min_val
 
 class GaussEngine(Engine):
     def __init__(self, device: torch.device | None = None) -> None:
