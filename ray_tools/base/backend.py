@@ -60,8 +60,7 @@ class RayBackend(metaclass=ABCMeta):
     """
 
     pass
-
-
+        
 class RayBackendDockerRAYUI(RayBackend):
     """
     Creates a Ray-UI backend within a docker container.
@@ -75,14 +74,14 @@ class RayBackendDockerRAYUI(RayBackend):
 
     def __init__(self,
                  docker_image: str,
-                 ray_workdir: str,
+                 ray_workdir: str='/dev/shm/ray-workdir',
                  dockerfile_path: str | None = None,
                  docker_container_name: str | None = None,
                  max_retry: int = 1000,
-                 verbose=True,
+                 verbose=False,
                  set_export_plane_in_exec=True,
                  executable='python3 /opt/script_rayui_bg.py',
-                 additional_mount_files: list[str] | None = None, device: torch.device = torch.device('cpu')) -> None:
+                 additional_mount_files: list[str] | None = None, device: torch.device = torch.device('cpu'), seed: int | None = None) -> None:
         super().__init__()
         self.docker_image = docker_image
         self.ray_workdir = os.path.abspath(ray_workdir)
@@ -98,6 +97,7 @@ class RayBackendDockerRAYUI(RayBackend):
         self.container_executable = "podman"
         self.executable = executable
         self.set_export_plane_in_exec = set_export_plane_in_exec
+        self.seed = seed
 
         # workdir in docker container
         self.docker_workdir = '/opt/ray-workdir'
@@ -267,6 +267,8 @@ class RayBackendDockerRAYUI(RayBackend):
                 podman_command = f"{self.container_executable} exec {self.docker_container_name} {self.executable} {docker_rml_workfile}"
                 if self.set_export_plane_in_exec:
                     podman_command += f" -p {cmd_exported_planes}"
+                if self.seed is not None:
+                    podman_command += f" -s {self.seed}"
                 if self.verbose:
                     print(podman_command)
                 output = subprocess.check_output(shlex.split(podman_command), stderr=self.print_device)
@@ -294,9 +296,16 @@ class RayBackendDockerRAYUI(RayBackend):
                   f' successfully generated in {toc - tic:.2f}s')
 
         return ray_output
-
-
+        
 class RayBackendDockerRAYX(RayBackendDockerRAYUI):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("executable", "rayx")
+        kwargs.setdefault("set_export_plane_in_exec", False)
+        kwargs.setdefault("docker_image", 'ray-x')
+        kwargs.setdefault("docker_container_name", 'ray-x')
+                                                                  
+        super().__init__(*args, **kwargs)
+
     def extract_ray_output(self, _, exported_planes, rml_workfile):
         ray_output_file = os.path.splitext(rml_workfile)[0] + '.h5'
         ray_output = {}
