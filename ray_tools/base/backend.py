@@ -8,7 +8,6 @@ import random
 import subprocess
 from dataclasses import dataclass
 from abc import ABCMeta, abstractmethod
-from typing import Sequence
 
 import h5py
 import torch
@@ -83,22 +82,10 @@ class LocalBackendBase(RayBackend):
             raise FileNotFoundError(f"RML workfile not found: {rml_path}")
         return rml_path
 
-    def _run_cmd(self, cmd: Sequence[str], cwd: str) -> int:
-        if self.verbose:
-            print("EXEC:", " ".join(cmd))
-
+    def _merged_env(self) -> dict[str, str]:
         env = os.environ.copy()
         env.update(self.env)
-
-        proc = subprocess.run(
-            list(cmd),
-            cwd=cwd,
-            env=env,
-            stdout=None if self.verbose else subprocess.DEVNULL,
-            stderr=None if self.verbose else subprocess.STDOUT,
-            check=False,
-        )
-        return int(proc.returncode)
+        return env
 
     @abstractmethod
     def _exec_once(self, rml_path: str, exported_planes: list[str], run_dir: str) -> int:
@@ -145,30 +132,65 @@ class LocalBackendBase(RayBackend):
 
 class RayBackendLocalRayUI(LocalBackendBase):
     """
-    RayUI syntax:
-      python3 /opt/script_rayui_bg.py <rml_file> -p <exported_plane>
-    Repeat -p for each plane.
+    Runs Ray-UI in background mode and exports CSVs.
+
+    Equivalent to:
+      rayui -b
+        load <rml>
+        trace noanalyze
+        export "<plane>" "RawRaysBeam" <workdir>
+        quit
     """
 
-    def __init__(
-        self,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.executable = ("python3", "/opt/script_rayui_bg.py"),
-        # often needed for Qt in containers:
-        self.env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        # For headless usage in containers (safe on desktop too):
+        #self.env.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    @staticmethod
+    def _send(proc: subprocess.Popen, command: str) -> None:
+        assert proc.stdin is not None
+        proc.stdin.write((command + "\n").encode("utf-8"))
+        proc.stdin.flush()
 
     def _exec_once(self, rml_path: str, exported_planes: list[str], run_dir: str) -> int:
-        cmd = self.executable + [rml_path]
-        # repeat "-p plane" for each plane (matches your syntax)
-        for plane in exported_planes:
-            cmd += ["-p", plane]
-        # if your script also supports seed, you can add it here (you didn't mention it, so not adding)
-        return self._run_cmd(cmd, cwd=run_dir)
+        env = self._merged_env()
+        workdir = os.path.dirname(rml_path)
+        print(workdir)
+        print(os.getcwd())
+
+
+        # Use list form, not shell=True
+        proc = subprocess.Popen(
+            ["xvfb-run", "-a", "-s", "-screen 0 1280x1024x24", "rayui", "-b"],
+            cwd=run_dir,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=None if self.verbose else subprocess.DEVNULL,
+            stderr=None if self.verbose else subprocess.STDOUT,
+        )
+
+        try:
+            self._send(proc, f"load {rml_path}")
+            self._send(proc, "trace noanalyze")
+            for plane in exported_planes:
+                # export "<plane>" "RawRaysBeam" <workdir>
+                self._send(proc, f'export "{plane}" "RawRaysBeam" {workdir}')
+            self._send(proc, "quit")
+
+            if proc.stdin:
+                proc.stdin.close()
+            return int(proc.wait())
+
+        finally:
+            # if something goes wrong, ensure the process is not left behind
+            try:
+                if proc.poll() is None:
+                    proc.kill()
+            except Exception:
+                pass
 
     def _outputs_ready(self, rml_path: str, exported_planes: list[str], run_dir: str) -> bool:
-        # CSV per plane
         for plane in exported_planes:
             csv_path = os.path.join(run_dir, f"{plane}-RawRaysBeam.csv")
             if not os.path.isfile(csv_path):
@@ -177,6 +199,7 @@ class RayBackendLocalRayUI(LocalBackendBase):
 
     def _extract(self, rml_path: str, exported_planes: list[str], run_dir: str) -> dict[str, RayOutput]:
         ray_output: dict[str, RayOutput] = {}
+
         for plane in exported_planes:
             csv_path = os.path.join(run_dir, f"{plane}-RawRaysBeam.csv")
 
@@ -205,6 +228,7 @@ class RayBackendLocalRayUI(LocalBackendBase):
                 z_dir=t(f"{plane}_DZ"),
                 energy=t(f"{plane}_EN"),
             )
+
         return ray_output
 
 
@@ -215,23 +239,33 @@ class RayBackendLocalRayX(LocalBackendBase):
     Produces: <rml_file_base>.h5
     """
 
-    def __init__(
-        self,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.executable = ("rayx",),
 
     def _exec_once(self, rml_path: str, exported_planes: list[str], run_dir: str) -> int:
-        cmd = self.executable[:]
+        env = self._merged_env()
+
+        cmd = ["rayx"]
         if self.seed is not None:
+            # IMPORTANT: correct order per your syntax
             cmd += ["-s", str(self.seed)]
         cmd += [rml_path]
-        return self._run_cmd(cmd, cwd=run_dir)
+
+        if self.verbose:
+            print("EXEC:", " ".join(cmd))
+
+        proc = subprocess.run(
+            cmd,
+            cwd=run_dir,
+            env=env,
+            stdout=None if self.verbose else subprocess.DEVNULL,
+            stderr=None if self.verbose else subprocess.STDOUT,
+            check=False,
+        )
+        return int(proc.returncode)
 
     def _outputs_ready(self, rml_path: str, exported_planes: list[str], run_dir: str) -> bool:
-        h5_path = os.path.splitext(rml_path)[0] + ".h5"
-        return os.path.isfile(h5_path)
+        return os.path.isfile(os.path.splitext(rml_path)[0] + ".h5")
 
     def _extract(self, rml_path: str, exported_planes: list[str], run_dir: str) -> dict[str, RayOutput]:
         h5_path = os.path.splitext(rml_path)[0] + ".h5"
@@ -246,6 +280,7 @@ class RayBackendLocalRayX(LocalBackendBase):
             obj_id = events["object_id"][:]  # numpy
 
             for plane in exported_planes:
+                # Missing plane -> empty output
                 if plane not in name_to_index:
                     ray_output[plane] = RayOutput(
                         x_loc=torch.empty(0, device=self.device),

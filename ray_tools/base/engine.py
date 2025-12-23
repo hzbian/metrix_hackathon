@@ -109,7 +109,7 @@ class RayEngine(Engine):
             ) -> list[dict]:
         """
         Runs simulation for given (Iterable of) parameter containers.
-        :param parameters: Min-Max normalized input within the param_lim_dict to be processed.
+        :param parameters: input parameters to be processed.
         :param transforms: :class:`ray_tools.base.transform.RayTransform` to be used.
             If a singleton, the same transform is applied everywhere.
             If Iterable of RayTransform (same length a parameters), individual transforms are applied to each
@@ -199,13 +199,71 @@ class RayEngine(Engine):
             raise Exception("Element must be XmlElement.")
         return element.__getattr__(param)
 
-class NormalizedRayEngine(RayEngine):
-    def __init__(self, *args, param_limit_dict: OrderedDict, **kwargs) -> None:
+class MinMaxRayEngine(RayEngine):
+    def __init__(
+        self,
+        *args,
+        param_limit_dict: OrderedDict[str, tuple[float, float]],
+        **kwargs
+    ) -> None:
         super().__init__(*args, **kwargs)
-    @staticmethod
-    def denormalize(value, param):
-        min_val, max_val = param
-        return value * (max_val - min_val) + min_val
+
+        if not isinstance(param_limit_dict, OrderedDict):
+            raise TypeError("param_limit_dict must be an OrderedDict")
+
+        self.param_limit_dict = param_limit_dict
+
+        # Pre-build tensors for fast vectorized denormalization
+        mins = []
+        maxs = []
+
+        for name, (min_val, max_val) in param_limit_dict.items():
+            if max_val <= min_val:
+                raise ValueError(f"Invalid limits for '{name}': {min_val}, {max_val}")
+            mins.append(min_val)
+            maxs.append(max_val)
+
+        # Shape: [n]
+        self._mins = torch.tensor(mins, dtype=torch.float32)
+        self._ranges = torch.tensor(maxs, dtype=torch.float32) - self._mins
+
+    def denormalize(self, parameters: torch.Tensor) -> torch.Tensor:
+        """
+        parameters: Tensor of shape [batch, n], values in [0, 1]
+        returns: Tensor of shape [batch, n] in physical parameter ranges
+        """
+        if parameters.ndim != 2:
+            raise ValueError("parameters must have shape [batch, n]")
+
+        if parameters.shape[1] != len(self.param_limit_dict):
+            raise ValueError(
+                f"Expected {len(self.param_limit_dict)} parameters, "
+                f"got {parameters.shape[1]}"
+            )
+
+        if torch.any(parameters < 0) or torch.any(parameters > 1):
+            raise ValueError("Normalized parameters must be in [0, 1]")
+
+        # Move limits to same device
+        mins = self._mins.to(parameters.device)
+        ranges = self._ranges.to(parameters.device)
+
+        # Vectorized denormalization:
+        # physical = min + normalized * (max - min)
+        return mins + parameters * ranges
+
+    def run(
+        self,
+        parameters: torch.Tensor,
+        transforms: RayTransformType | Iterable[RayTransformType] | None = None,
+    ) -> list[dict]:
+
+        denorm_params = self.denormalize(parameters)
+
+        return super().run(
+            denorm_params,
+            transforms=transforms,
+        )
 
 class GaussEngine(Engine):
     def __init__(self, device: torch.device | None = None) -> None:
