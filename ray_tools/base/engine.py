@@ -14,6 +14,8 @@ from . import RayTransformType
 from .backend import RayBackend, RayOutput
 from .parameter import NumericalParameter, RandomParameter, RayParameterContainer, OutputParameter
 from .transform import RayTransform
+import threading
+
 
 def get_exported_plane_translation(
     exported_plane: str, param_container: RayParameterContainer
@@ -76,9 +78,9 @@ class RayEngine(Engine):
         self.as_generator = as_generator
         self.verbose = verbose
         self.param_list = param_list
-        print(self.param_list)
         self.manual_transform_plane = manual_transform_plane
         self.manual_transform_xyz = manual_transform_xyz
+        self._thread_local = threading.local()
         
         self.indices = None
         if self.manual_transform_xyz is not None:
@@ -95,6 +97,12 @@ class RayEngine(Engine):
         self._raypyng_rml = RMLFile(self.rml_basefile)
         self.template = self._raypyng_rml.beamline
 
+    def _get_thread_rml(self):
+        if not hasattr(self._thread_local, "rml"):
+            self._thread_local.rml = RMLFile(self.rml_basefile)   # parse once per thread
+            self._thread_local.template = self._thread_local.rml.beamline
+        return self._thread_local.rml, self._thread_local.template
+    
     def run(self,
             parameters: torch.Tensor,
             transforms: RayTransformType | Iterable[RayTransformType] | None = None,
@@ -140,13 +148,12 @@ class RayEngine(Engine):
         result = {'param_container': dict(), 'ray_output': None}
 
         # create a copy of RML template to avoid problems with multi-threading
-        raypyng_rml_work = RMLFile(self.rml_basefile)
-        template_work = raypyng_rml_work.beamline
+        raypyng_rml_work, template_work = self._get_thread_rml()
+
         # write values in param_container to RML template and param_container
         for i, (key) in enumerate(self.param_list):
             if key not in self.manual_transform_xyz:
                 value = parameters[i].item()
-                #print(key, value)
                 element = self._key_to_element(key, template=template_work)
                 element.cdata = str(value)
                 result['param_container'][key] = value
